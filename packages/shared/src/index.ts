@@ -45,6 +45,28 @@ export {
   withOpenRouterAttributionHeaders,
 } from './openrouter-attribution.js';
 export {
+  ALWAYS_DENIED_HOSTS,
+  EgressBlockedError,
+  MANAGED_MODEL_API_HOSTS,
+  MANAGED_SERVICE_HOSTS,
+  REPORTING_HOSTS,
+  installEgressGuard,
+  isEgressBlocked,
+  isEgressBlockedError,
+  parseAllowedOriginList,
+  parseHostList,
+  resolveEgressMode,
+  resolveEgressPolicy,
+} from './egress-guard.js';
+export type {
+  EgressAttempt,
+  EgressDecisionInput,
+  EgressGuard,
+  EgressMode,
+  EgressPolicy,
+  InstallEgressGuardOptions,
+} from './egress-guard.js';
+export {
   retryWindowsFileSystemOperation,
   type WindowsFileSystemRetryOptions,
 } from './windows-file-system.js';
