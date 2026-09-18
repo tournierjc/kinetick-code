@@ -17,6 +17,7 @@
     "test:policy": "node scripts/run-vitest-suite.mjs policy",
     "test:byok": "node --test test/byok.test.mjs",
     "check:standalone": "node scripts/check-standalone-boundary.mjs",
+    "check:egress": "node scripts/check-egress-guard.mjs",
     "check:tsconfig": "node scripts/gen-tsconfig-paths.mjs",
     "gen:tsconfig": "node scripts/gen-tsconfig-paths.mjs --write",
     "typecheck": "tsc -p tsconfig.standalone.json",

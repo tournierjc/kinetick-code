@@ -41,18 +41,6 @@ export interface MetricsBatchReporter {
   reportBatch(req: ReportMetricsBatchRequest): Promise<ReportMetricsBatchResponse>;
 }
 
-export interface MetricsReporterOptions {
-  endpoint?: string;
-  batchPath?: string;
-  headers?: Record<string, string>;
-  requestTimeoutMs?: number;
-  fetch?: typeof fetch;
-  reportMetric?: (
-    metric: MetricPoint,
-    context: { service: string; timestamp?: number },
-  ) => Promise<void> | void;
-}
-
 export interface MetricsClientRetryOptions {
   maxAttempts?: number;
   baseDelayMs?: number;
@@ -81,19 +69,10 @@ export interface MetricsClientOptions {
 }
 
 export interface CreateMetricsClientOptions
-  extends Omit<MetricsClientOptions, 'reporter' | 'serviceName'>, MetricsReporterOptions {
+  extends Omit<MetricsClientOptions, 'reporter' | 'serviceName'> {
   serviceName: string;
-}
-
-export interface CreateDesktopReporterOptions extends Omit<
-  MetricsReporterOptions,
-  'endpoint' | 'batchPath' | 'reportMetric'
-> {
-  configuredDomainUrl?: string;
-  isEn: boolean;
-  isProd: boolean;
-  isStaging?: boolean;
-  isDev?: boolean;
+  /** Caller-supplied transport. This build ships none, so it must be explicit. */
+  reportBatch?: MetricsBatchReporter['reportBatch'];
 }
 
 interface MetricStorePoint {
@@ -137,93 +116,6 @@ const DEFAULT_RETRY = {
 };
 
 const METRIC_NAME_RE = /^[a-zA-Z_:][a-zA-Z0-9_:]*$/;
-const DEFAULT_METRICS_BATCH_PATH = '/matrix/api/v1/metrics/batch';
-export const DESKTOP_METRICS_BATCH_PATH = '/matrix/api/v1/metrics/batch';
-
-export class MetricsReportError extends Error {
-  readonly status?: number;
-  readonly retryable: boolean;
-
-  constructor(message: string, options: { status?: number; retryable: boolean }) {
-    super(message);
-    this.name = 'MetricsReportError';
-    this.status = options.status;
-    this.retryable = options.retryable;
-  }
-}
-
-export class MetricsReporter implements MetricsBatchReporter {
-  private readonly options: MetricsReporterOptions;
-
-  constructor(options: MetricsReporterOptions) {
-    this.options = {
-      ...options,
-      ...(options.endpoint
-        ? {
-            endpoint: options.endpoint.replace(/\/+$/, ''),
-            batchPath: normalizeBatchPath(options.batchPath ?? DEFAULT_METRICS_BATCH_PATH),
-          }
-        : {}),
-    };
-  }
-
-  async reportBatch(req: ReportMetricsBatchRequest): Promise<ReportMetricsBatchResponse> {
-    if (!this.options.endpoint) {
-      if (!this.options.reportMetric) {
-        throw new MetricsReportError('Metrics reporter requires either endpoint or reportMetric', {
-          retryable: false,
-        });
-      }
-
-      for (const metric of req.metrics) {
-        await this.options.reportMetric(metric, {
-          service: req.service,
-          timestamp: req.timestamp,
-        });
-      }
-
-      return { accepted: req.metrics.length };
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.options.requestTimeoutMs ?? 3_000);
-
-    try {
-      const response = await (this.options.fetch ?? fetch)(
-        `${this.options.endpoint}${this.options.batchPath}`,
-        {
-          method: 'POST',
-          headers: {
-            ...(this.options.headers ?? {}),
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(toReportBody(req)),
-          signal: controller.signal,
-        },
-      );
-
-      if (!response.ok) {
-        throw new MetricsReportError(`Metrics report failed with HTTP ${response.status}`, {
-          status: response.status,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-      }
-
-      return (await response.json().catch(() => ({}))) as ReportMetricsBatchResponse;
-    } catch (error) {
-      if (error instanceof MetricsReportError) {
-        throw error;
-      }
-
-      throw new MetricsReportError('Metrics report failed before a response was received', {
-        retryable: true,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-}
-
 export class MetricsClient {
   private readonly reporter: MetricsBatchReporter;
   private readonly serviceName: string;
@@ -409,9 +301,7 @@ export class MetricsClient {
       const dropped = this.retryBuffer.shift();
       if (!dropped) break;
       this.onError?.(
-        new MetricsReportError('Metrics retry buffer exceeded its limit; dropped oldest batch', {
-          retryable: false,
-        }),
+        new Error('Metrics retry buffer exceeded its limit; dropped oldest batch'),
       );
     }
   }
@@ -533,20 +423,17 @@ export class MetricsClient {
 }
 
 export function createMetricsClient(options: CreateMetricsClientOptions): MetricsClient {
-  const reporter = new MetricsReporter(options);
+  const reportBatch = options.reportBatch;
+  if (!reportBatch) {
+    throw new Error(
+      'Metrics reporting is unavailable: this build ships no metrics transport.',
+    );
+  }
 
   return new MetricsClient({
     ...options,
-    reporter,
+    reporter: { reportBatch },
     serviceName: options.serviceName,
-  });
-}
-
-export function createDesktopReporter(options: CreateDesktopReporterOptions): MetricsReporter {
-  return new MetricsReporter({
-    ...options,
-    endpoint: resolveDesktopDomainUrl(options),
-    batchPath: DESKTOP_METRICS_BATCH_PATH,
   });
 }
 
@@ -571,31 +458,11 @@ function normalizeBuckets(buckets: number[]): number[] {
   return [...new Set(buckets.filter((bucket) => Number.isFinite(bucket)))].sort((a, b) => a - b);
 }
 
-function normalizeBatchPath(path: string): string {
-  const trimmed = path.trim();
-  if (!trimmed) return DEFAULT_METRICS_BATCH_PATH;
-  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-}
-
-function resolveDesktopDomainUrl(options: CreateDesktopReporterOptions): string {
-  const configuredDomainUrl = options.configuredDomainUrl?.trim();
-  if (configuredDomainUrl) return configuredDomainUrl;
-
-  if (options.isEn) {
-    if (options.isProd) return 'https://agent.minimax.io';
-    if (options.isStaging) return 'https://matrix-overseas-pre.example.invalid';
-    if (options.isDev) return 'https://matrix-overseas-test.example.invalid';
-    return 'https://matrix-overseas-test.example.invalid';
-  }
-
-  if (options.isProd) return 'https://agent.minimax.cn';
-  if (options.isStaging) return 'https://matrix-pre.example.invalid';
-  if (options.isDev) return 'https://matrix-test.example.invalid';
-  return 'https://matrix-test.example.invalid';
-}
-
-function isRetryableError(error: unknown): boolean {
-  return error instanceof MetricsReportError ? error.retryable : true;
+function isRetryableError(_error: unknown): boolean {
+  // The reporter is caller-supplied, so a failed batch is retried until the
+  // client's own attempt budget is exhausted; the callback decides whether it
+  // can make progress.
+  return true;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -604,32 +471,4 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
-}
-
-function toReportBody(req: ReportMetricsBatchRequest): unknown {
-  return {
-    service: req.service,
-    timestamp: req.timestamp,
-    metrics: req.metrics.map((metric) => {
-      if (metric.type === 'histogram') {
-        return {
-          metrics_type: metric.type,
-          name: metric.name,
-          labels: metric.labels,
-          count: metric.count,
-          sum: metric.sum,
-          buckets: metric.buckets,
-          updated_at: metric.updatedAt,
-        };
-      }
-
-      return {
-        metrics_type: metric.type,
-        name: metric.name,
-        labels: metric.labels,
-        value: metric.value,
-        updated_at: metric.updatedAt,
-      };
-    }),
-  };
 }

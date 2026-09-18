@@ -4,7 +4,6 @@
     "capability": [
       "packages/local-runtime-v2/test/unit/agent/agent-import.test.ts",
       "packages/tui/test/unit/auth-application.test.ts",
-      "packages/tui/test/unit/business-telemetry-privacy.test.ts",
       "packages/tui/test/unit/auth-session.test.ts",
       "packages/tui/test/unit/cli-auth-command.test.ts",
       "packages/tui/test/unit/application-login-gate.test.ts",
@@ -14,8 +13,6 @@
       "packages/tui/test/unit/tui-plugin-manager.test.ts",
       "packages/tui/test/unit/daily-checkin-application.test.ts",
       "packages/tui/test/unit/daily-checkin-http-gateway.test.ts",
-      "packages/local-runtime/test/unit/error-reporting-privacy.test.ts",
-      "packages/local-runtime/test/unit/metrics-telemetry-privacy.test.ts",
       "packages/tui/test/unit/runtime-feedback-service.test.ts",
       "packages/tui/test/unit/runtime-feedback-diagnostic-upload.test.ts",
       "packages/tui/test/unit/update-service.test.ts",
@@ -133,7 +130,6 @@
       "packages/tui/test/unit/tui/controller/product/command-flow.test.ts",
       "packages/tui/test/unit/tui/controller/product/feature-flow.test.ts",
       "packages/tui/test/unit/tui/features/settings/hotkeys-picker.test.ts",
-      "packages/tui/test/unit/incident-reporter-privacy.test.ts",
       "packages/tui/test/unit/egress-guard.test.ts"
     ],
     "status-contract": [

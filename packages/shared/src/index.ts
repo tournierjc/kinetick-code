@@ -154,12 +154,8 @@ export {
 } from './cron-purpose.js';
 
 export {
-  DESKTOP_METRICS_BATCH_PATH,
   MetricsClient,
-  MetricsReporter,
-  MetricsReportError,
   buildMetricKey,
-  createDesktopReporter,
   createMetricsClient,
 } from './metrics-proxy.js';
 
@@ -174,7 +170,6 @@ export {
   type DiskLogTransportOptions,
 } from './logging/index.js';
 export type {
-  CreateDesktopReporterOptions,
   CreateMetricsClientOptions,
   MetricsBatchReporter,
   MetricLabels,
@@ -182,7 +177,6 @@ export type {
   MetricType,
   MetricsClientOptions,
   MetricsClientRetryOptions,
-  MetricsReporterOptions,
   ReportMetricsBatchRequest,
   ReportMetricsBatchResponse,
 } from './metrics-proxy.js';
