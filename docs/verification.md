@@ -34,6 +34,16 @@ The expanded regressions cover model effort, headless preparation cancellation a
 
 Windows/Linux execution, fresh managed-account login, real provider calls, and live content-safety V2 endpoints were not run locally. Offline BYOK fixtures do not establish live-model acceptance. This synchronization does not publish an npm release or change repository visibility.
 
+### GitHub Copilot connector, 2026-09-19
+
+Verification results for the provider connector added in PR #2, at code revision `e7d12152` (the documentation commit that follows changes no code).
+
+Individual gates were run on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,163 files), generated paths (121 exports), typecheck, build, standalone boundary, egress boundary, capabilities (3,399 tests), CLI/ACP smoke (7 tests) and offline BYOK (1 test). All pass except `test:capabilities`, which reports 8 failures in `packages/tui/test/unit/update-service.test.ts` with `Unsupported MCode update host: linux-arm64`; that suite fails identically on an unmodified `origin/main` worktree in the same environment and does not fail on any CI platform.
+
+GitHub Actions passed Source verification on ubuntu-latest, macos-latest and windows-latest (Node.js 24), the `verification` aggregate, and the Release audit.
+
+The connector adds 44 tests. The discovery tests run against a captured `/models` response; their values are the API's, but they are not live-service acceptance. Live calls were made outside CI with a real account: completions on `openai-responses`, `anthropic-messages` and `openai-completions`, and `mcode exec` end to end on all three protocols and in all four egress modes (`managed-deny`, explicit `managed-deny`, `allowlist`, `off`). Interactive TUI sign-in, enterprise-account hosts, and credential removal through provider management were not run.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.
