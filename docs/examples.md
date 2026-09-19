@@ -50,7 +50,21 @@ pnpm mcode provider test <provider-id> --model <model-id>
 pnpm mcode exec "Explain this project's test entry points" --model <provider-id>/<model-id>
 ```
 
-Replace the example URL, model name, and IDs with your configuration and the IDs returned by the list command. `--use` sets the default model; `exec --model` overrides only the current run. Backslash line continuations are for POSIX shells; use a single line in PowerShell.
+Replace the example URL, model name, and IDs with your configuration and the IDs returned by the list command. `--use` tests the first listed model, then saves the provider and selects that model as the default. A failed connection test exits nonzero without saving or changing the default; correct the URL, key, or first model ID and retry. Omit `--use` to save without a connection test or default-model change. `exec --model` overrides only the current run. Backslash line continuations are for POSIX shells; use a single line in PowerShell.
+
+For a local server, configure its actual token limits explicitly:
+
+```bash
+pnpm mcode provider add --name local-models --base-url http://localhost:8080/v1 \
+  --api-format openai-completions --model local-model --model another-model \
+  --api-key-env MCODE_PROVIDER_API_KEY \
+  --context-limit 32768 --output-limit 4096 --use
+pnpm mcode provider list --json
+```
+
+`--context-limit` and `--output-limit` each accept a positive safe integer (at most `9007199254740991`). Either flag can be used independently. The same limits apply to every repeated `--model`; only the first model is tested and selected by `--use`. The JSON list shows the configured values as `contextLimit` and `maxOutputTokens`. Without these flags, the existing defaults remain unchanged (unknown custom models currently fall back to 200,000 context tokens and 16,384 output tokens). Model discovery does not infer your local server's context size.
+
+`--api-key-env` reads the current environment variable value and stores that value in the active profile's `config.yaml`; it does not save an environment-variable reference. The file still contains plaintext credentials. On POSIX systems, config writes and temporary copies use `0600`. When loading existing files, MCode removes group/other access while preserving the owner's permissions; already-private files such as `0400` or `0600` do not require a permission change. Loading fails if an unsafe main config cannot be restricted. Older migration backups are also checked, but inspection or repair failures produce a warning identifying the directory or backup that needs manual attention rather than preventing the main config from loading. Windows file modes do not provide equivalent ACL protection; restrict access to the profile directory using Windows permissions.
 
 [Live acceptance](verification.md) separately verified MiniMax Token Plan and one configured BYOK provider. This is not a guarantee for every compatible service.
 
@@ -71,4 +85,45 @@ pnpm mcode exec "Describe this UI screenshot's layout and suggest three improvem
 
 The image is sent as input to the selected model service. Use content suitable for sending and a model that supports images. This is an executable usage example, not a live-service acceptance result from this review. Search, image understanding, and media generation are separate capabilities; mcode-tools generation also requires the relevant account permissions and credits.
 
-Use `/plugins` to manage extensions. See [capability coverage](tui-capabilities.md) for custom MCP, managed connectors, and media tools.
+See [capability coverage](tui-capabilities.md) for custom MCP, managed connectors, and media tools.
+
+## 4. Manage plugins
+
+Open `/plugins` inside the TUI, or run `mcode plugin` from a shell to open that panel. For a source build, use `pnpm mcode plugin` from the source root instead; the commands below use the installed `mcode` executable.
+
+The panel combines the **official** catalog and **local** plugin directories. Use `Tab` / `Shift+Tab` to switch between All Plugins, Installed, Official, and Local; type to search and use the arrow keys to select a row.
+
+| Action | Key | Scope |
+| --- | --- | --- |
+| Install an available plugin | `Enter` | Official catalog; requires MiniMax login |
+| Enable or disable an installed plugin | `Space` | Official and local |
+| Remove an installed plugin | `Delete` or `Ctrl+D` | Official and local; clear the search first with `Esc`, then reselect the plugin |
+| Refresh the catalogs | `Ctrl+R` | Official and local |
+
+With a nonempty search, `Delete` / `Ctrl+D` edit the search instead of removing a plugin. `Esc` clears the search, or closes the panel when the search is already empty. Removing a local plugin deletes its installed directory; keep a separate source copy if you need to restore it.
+
+The same operations are available from the shell:
+
+```bash
+mcode plugin --help
+mcode plugin marketplace list
+mcode plugin list --available --marketplace official
+mcode plugin add <name>@official
+mcode plugin disable <name>@official
+mcode plugin enable <name>@official
+mcode plugin remove <name>@official
+mcode plugin marketplace upgrade
+```
+
+Replace `<name>` with a plugin name returned by `list`. Use `@official` or `@local` to disambiguate names shared by both sources; `--marketplace official` / `--marketplace local` are equivalent source selectors. The list and mutation commands support `--json`. `marketplace upgrade` refreshes source snapshots; it does not register a new marketplace.
+
+For a local plugin, run `mcode plugin marketplace list` to find the active profile's local directory. Place a supported plugin package in a direct child directory there, with its manifest at the package's expected location, then refresh `/plugins`. Copy the individual plugin package, not an entire marketplace repository. Discovered local packages already count as installed:
+
+```bash
+mcode plugin list --available --marketplace local
+mcode plugin disable <name>@local
+mcode plugin enable <name>@local
+mcode plugin remove <name>@local
+```
+
+`mcode plugin add <name>@local` is not a local import command and is unsupported. Neither `plugin add` nor `/plugins` currently accepts a GitHub URL, local path, or arbitrary third-party marketplace registration. Compatible package readers and a GitHub importer exist in the runtime, but the CLI/TUI do not expose that importer. Managing arbitrary marketplaces from the panel remains a separate feature request; the current source selectors are only `official` and `local`.

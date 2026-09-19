@@ -46,6 +46,8 @@ export interface McodeProviderModel {
   readonly modelId: string;
   readonly displayName?: string;
   readonly selected?: boolean;
+  readonly contextLimit?: number;
+  readonly maxOutputTokens?: number;
   readonly status?: McodeProviderStatus;
 }
 
