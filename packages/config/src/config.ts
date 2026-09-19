@@ -502,6 +502,14 @@ export interface BetaConfig {
    * stay in `<dataDir>/codex-auth.json`.
    */
   codexOAuth: boolean;
+  /**
+   * GitHub Copilot OAuth settings entry. Enabled by default in online builds, so a
+   * distribution that ships this connector can sign in and use the account's
+   * Copilot models; disable with `beta.copilotOAuth: false`. Provider
+   * configuration stays in `config.yaml` under `custom_provider.github-copilot`
+   * and OAuth credentials stay in the provider credential store in `<dataDir>`.
+   */
+  copilotOAuth: boolean;
 }
 
 export type FeatureVisibility = "none" | "test" | "internal" | "online";
@@ -651,6 +659,10 @@ export const BETA_FEATURE_DEFS = {
     defaultVisibility: "none",
     defaultBuildEnvironments: ["dev"],
     defaultBuildVariants: ["internal"],
+    configurableVisibility: "online",
+  },
+  copilotOAuth: {
+    defaultVisibility: "online",
     configurableVisibility: "online",
   },
 } satisfies Record<keyof BetaConfig, BetaFeatureDef>;
