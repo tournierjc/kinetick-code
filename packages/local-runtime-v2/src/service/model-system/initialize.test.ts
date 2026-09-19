@@ -26,6 +26,16 @@ function createConfigPort(config: LocalRuntimeConfig) {
 }
 
 describe('initializeModelSystem', () => {
+  it('enables the connector without any explicit configuration', () => {
+    const config = createConfig(true);
+    delete config.beta;
+    const owner = initializeModelSystem({ config: createConfigPort(config) });
+
+    // A distribution that ships this connector can use it without editing config
+    // first: only an explicit `beta.copilotOAuth: false` hides it.
+    expect(owner.copilotOAuth.getStatus().state).not.toBe('hidden');
+  });
+
   it('composes the Copilot connector on the owner, wired to the profile config', () => {
     const owner = initializeModelSystem({ config: createConfigPort(createConfig(true)) });
 
