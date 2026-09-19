@@ -1,3 +1,5 @@
+import { join } from 'node:path';
+
 import { AuthStorage } from '@earendil-works/pi-coding-agent';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -459,9 +461,10 @@ describe('CopilotOAuthManager', () => {
 
     await manager.connectWithToken('gho_supplied_token');
 
-    // The credential store the runtime's providerAuthGetter reads back from.
+    // The credential store the runtime's providerAuthGetter reads back from. Built
+    // with `join` so the assertion holds on Windows separators too.
     expect(authPath).toHaveBeenCalledWith(
-      '/tmp/model-system-copilot-oauth-test/codex-auth.json',
+      join('/tmp/model-system-copilot-oauth-test', 'codex-auth.json'),
     );
   });
 
