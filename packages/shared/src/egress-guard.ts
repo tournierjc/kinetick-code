@@ -29,6 +29,16 @@
  * that resolves a name itself and dials the address directly, or that routes
  * through a SOCKS/TUN proxy, is not covered. Unix-domain sockets are local IPC
  * and are allowed. IP literals are matched only against the loopback test.
+ *
+ * A refused `Socket.connect` is reported the way `undici`, `node:http` and
+ * `node:tls` expect — the socket emits `error` on a microtask and never connects
+ * — but the socket object itself is left untouched: it is not marked
+ * `connecting` and not destroyed. A caller that inspects socket state, or that
+ * attaches its `error` listener after `connect()` returns, therefore learns
+ * nothing from the socket. With no `error` listener the throw surfaces as an
+ * uncaught exception, exactly as a real failed connect does. Refusals are
+ * recorded on the guard (`denials`, `onBlocked`), which is where a caller should
+ * read them from; the socket is only how the failure reaches the client above it.
  */
 
 import { Socket } from 'node:net';
@@ -44,7 +54,19 @@ export const REPORTING_HOSTS = [
   'bigdata-test.xingyeai.com',
 ] as const;
 
-/** MiniMax managed-service hosts: login, managed models, cloud tools, hub. */
+/**
+ * MiniMax managed-service hosts: login, managed models, cloud tools, hub, plus
+ * the Aliyun Shanghai bucket the managed file service writes through.
+ *
+ * Membership test: a host belongs here only when it is a MiniMax-managed
+ * endpoint this fork refuses to contact. A third-party service does not, however
+ * central it looks. The `models.dev` provider catalog is the example that
+ * matters: it serves the model-preset catalog from a public community project,
+ * so it is an ordinary endpoint and the mode governs it like any other —
+ * reachable in `managed-deny`, refused in `allowlist` unless listed in
+ * `MCODE_ALLOWED_ORIGINS`. It was listed here while the preset catalog was
+ * disabled, which made a community service look like a MiniMax one to readers.
+ */
 export const MANAGED_SERVICE_HOSTS = [
   'agent.minimax.io',
   'agent.minimax.cn',
@@ -54,7 +76,6 @@ export const MANAGED_SERVICE_HOSTS = [
   'platform.minimax.io',
   'www.minimaxi.com',
   'filecdn.minimax.chat',
-  'models.dev',
   'algeng-ali-shanghai-agent-02.oss-cn-shanghai.aliyuncs.com',
 ] as const;
 

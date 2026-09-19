@@ -49,12 +49,23 @@ Always refused, in every mode except `off`:
 - Managed services: `agent.minimax.io`, `agent.minimax.cn`,
   `agent.minimaxi.com`, `account.minimax.io`, `account.minimax.cn`,
   `platform.minimax.io`, `www.minimaxi.com`, `filecdn.minimax.chat`,
-  `models.dev`,
   `algeng-ali-shanghai-agent-02.oss-cn-shanghai.aliyuncs.com`
+
+Every host in that list is a MiniMax-managed endpoint (login, managed models,
+cloud tools, hub) or the Aliyun Shanghai bucket the managed file service writes
+through. A third-party service does not belong there, however central it looks:
+the policy is about what this fork refuses to contact, not about what it offers.
 
 Refused unless the user declared a provider on that origin: `api.minimax.io`,
 `api.minimaxi.com` — the MiniMax model API is treated as an ordinary BYOK
 endpoint. Declaring it never re-opens a managed-service host.
+
+The community provider catalog `models.dev` is an ordinary third-party endpoint,
+governed by the mode like any other: reachable under the default `managed-deny`,
+and refused under `allowlist` unless listed in `MCODE_ALLOWED_ORIGINS`. The
+provider-preset catalog refreshes from it, and a refused refresh is isolated —
+the offline snapshot shipped in `packages/local-runtime-v2/assets` keeps the
+presets usable, so strict mode costs freshness, not function.
 
 ## Boundaries
 
