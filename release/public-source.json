@@ -889,6 +889,8 @@
     "packages/local-runtime-v2/src/service/model-system/catalog/model-cache.ts",
     "packages/local-runtime-v2/src/service/model-system/catalog/model-selection.test.ts",
     "packages/local-runtime-v2/src/service/model-system/catalog/model-selection.ts",
+    "packages/local-runtime-v2/src/service/model-system/catalog/provider-families.test.ts",
+    "packages/local-runtime-v2/src/service/model-system/catalog/provider-families.ts",
     "packages/local-runtime-v2/src/service/model-system/catalog/provider-presets/provider-presets.client.ts",
     "packages/local-runtime-v2/src/service/model-system/catalog/provider-presets/provider-presets.repository.ts",
     "packages/local-runtime-v2/src/service/model-system/catalog/provider-presets/provider-presets.service.test.ts",
