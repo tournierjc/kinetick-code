@@ -346,3 +346,52 @@ describe('custom BYOK compat overrides', () => {
     ).toBeUndefined();
   });
 });
+
+describe('custom BYOK thinking shape', () => {
+  const plan = (
+    providerKey: string,
+    baseUrl: string,
+    compat?: Record<string, unknown>,
+    modelId = 'deepseek-v4-flash',
+  ) =>
+    planCustomProviderResolution({
+      provider: `custom_provider:${providerKey}`,
+      providerKey,
+      modelId,
+      byok: {
+        custom_provider: {
+          [providerKey]: {
+            api: 'openai-completions',
+            options: { apiKey: 'sk-test', baseURL: baseUrl },
+            models: {
+              [modelId]: { ...(compat ? { compat } : {}) },
+            },
+          },
+        },
+      },
+    });
+
+  it('applies the thinking shape the endpoint family declares', () => {
+    expect(plan('deepseek', 'https://api.deepseek.com')?.modelCompat).toMatchObject({
+      thinkingFormat: 'deepseek',
+      supportsReasoningEffort: true,
+    });
+  });
+
+  it('keeps a thinking format the model declares, and leaves strangers alone', () => {
+    expect(
+      plan('deepseek', 'https://api.deepseek.com', { thinkingFormat: 'openai' })?.modelCompat,
+    ).toMatchObject({ thinkingFormat: 'openai' });
+
+    // The model id identifies the family when the endpoint does not: a gateway
+    // that fronts `deepseek-v4-*` still needs DeepSeek's thinking shape.
+    expect(plan('work', 'https://gateway.example/v1')?.modelCompat).toMatchObject({
+      thinkingFormat: 'deepseek',
+    });
+
+    // A model that belongs to nobody gets no shape at all.
+    expect(
+      plan('work', 'https://api.openai.com/v1', undefined, 'gpt-5-mini')?.modelCompat,
+    ).toBeUndefined();
+  });
+});
