@@ -119,6 +119,10 @@ Use `mcode init .` to generate or update project guidance in `AGENTS.md`. Descri
 | Headless | `mcode exec [prompt]` | Shell scripts, CI, batch work, and evaluations. |
 | ACP | `mcode acp` | Editors and clients supporting Agent Client Protocol. |
 
+See [harness integration](docs/harness-integration.md) for the `exec` and ACP
+contracts a script, CI job, or client depends on: output formats, exit codes,
+session continuation, and how approvals are answered.
+
 ### Continue your work
 
 ```bash

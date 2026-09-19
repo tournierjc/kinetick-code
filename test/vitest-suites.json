@@ -62,6 +62,7 @@
       "packages/mcode-tools-host/test/unit/resource-manifest.test.ts",
       "packages/tui/test/unit/headless-config.test.ts",
       "packages/tui/test/unit/headless-contract.test.ts",
+      "packages/tui/test/unit/headless-exit-policy.test.ts",
       "packages/tui/test/unit/headless-invocation.test.ts",
       "packages/tui/test/unit/headless-model-selection.test.ts",
       "packages/tui/test/unit/headless-preparation-cancellation.test.ts",
