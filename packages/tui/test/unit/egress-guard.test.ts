@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ALWAYS_DENIED_HOSTS,
   EgressBlockedError,
+  MANAGED_SERVICE_HOSTS,
   REPORTING_HOSTS,
   installEgressGuard,
   isEgressBlocked,
@@ -61,6 +62,29 @@ describe('egress policy', () => {
       expect(isEgressBlocked(policy, { protocol: 'http', hostname, port: 8080 })).toBe(false);
     }
     expect(isEgressBlocked(policy, { protocol: 'https', hostname: 'api.openai.com' })).toBe(false);
+  });
+
+  it('keeps the community provider catalog out of the managed-service lists', () => {
+    // `models.dev` serves the provider-preset catalog from a public community
+    // project. It is not a MiniMax endpoint, so listing it as one both
+    // misdescribes it and refuses it in every mode.
+    expect(MANAGED_SERVICE_HOSTS as readonly string[]).not.toContain('models.dev');
+    expect(ALWAYS_DENIED_HOSTS as readonly string[]).not.toContain('models.dev');
+
+    const byDefault = resolveEgressPolicy({});
+    expect(isEgressBlocked(byDefault, { protocol: 'https', hostname: 'models.dev' })).toBe(false);
+    // The managed hosts keep their refusal in the same mode.
+    expect(isEgressBlocked(byDefault, { protocol: 'https', hostname: 'agent.minimax.io' })).toBe(true);
+
+    // Strict mode governs it like any other third-party endpoint.
+    const strict = resolveEgressPolicy({ MCODE_EGRESS_MODE: 'allowlist' });
+    expect(isEgressBlocked(strict, { protocol: 'https', hostname: 'models.dev' })).toBe(true);
+
+    const allowed = resolveEgressPolicy({
+      MCODE_EGRESS_MODE: 'allowlist',
+      MCODE_ALLOWED_ORIGINS: 'models.dev',
+    });
+    expect(isEgressBlocked(allowed, { protocol: 'https', hostname: 'models.dev' })).toBe(false);
   });
 
   it('refuses the MiniMax model API unless the user declared that provider', () => {

@@ -66,6 +66,21 @@ export interface CopilotModelCatalog {
  * `context`/`output` limits and the `thinking.effortOptions` reported for that
  * account, and the wire protocol each model advertises.
  */
+/**
+ * A discovery request the service answered with a non-OK status.
+ *
+ * A dedicated class rather than a shaped message: the caller recognises its own
+ * failure, and a reader of the catch block sees which failure survives instead of
+ * inferring it from a regular expression over `error.message`. It carries the
+ * status and nothing else — a response body may echo the bearer token.
+ */
+export class CopilotModelDiscoveryHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`Copilot model discovery failed (HTTP ${status}).`);
+    this.name = 'CopilotModelDiscoveryHttpError';
+  }
+}
+
 export class CopilotModelDiscoveryClient {
   constructor(
     private readonly fetchImpl: typeof fetch = fetch,
@@ -97,17 +112,12 @@ export class CopilotModelDiscoveryClient {
         signal: controller.signal,
       });
       if (!response.ok) {
-        throw new Error(`Copilot model discovery failed (HTTP ${response.status}).`);
+        throw new CopilotModelDiscoveryHttpError(response.status);
       }
       return await response.json();
     } catch (error) {
       // Never forward a response body or transport error: both can carry the bearer token.
-      if (
-        error instanceof Error &&
-        /^Copilot model discovery failed \(HTTP \d+\)\.$/u.test(error.message)
-      ) {
-        throw error;
-      }
+      if (error instanceof CopilotModelDiscoveryHttpError) throw error;
       throw new Error('Copilot model discovery failed. Retry connecting or reopen model settings.');
     } finally {
       clearTimeout(timer);

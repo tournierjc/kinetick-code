@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   CopilotModelDiscoveryClient,
+  CopilotModelDiscoveryHttpError,
   copilotBaseUrlFromToken,
 } from './copilot-model-discovery.js';
 
@@ -501,6 +502,27 @@ describe('CopilotModelDiscoveryClient', () => {
 
     await expect(client.discover(CREDENTIALS)).rejects.toThrow(
       'Copilot model discovery failed (HTTP 401).',
+    );
+  });
+
+  it('reports its own failure as a typed error that carries the status', async () => {
+    const { client } = createClient({ message: 'bad credentials copilot-token' }, 401);
+
+    await expect(client.discover(CREDENTIALS)).rejects.toBeInstanceOf(
+      CopilotModelDiscoveryHttpError,
+    );
+    await expect(client.discover(CREDENTIALS)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('replaces a transport error with the generic message', async () => {
+    // A transport error can quote the request, so it must not reach the caller.
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('socket hang up while sending Bearer copilot-token');
+    });
+    const client = new CopilotModelDiscoveryClient(fetchImpl as unknown as typeof fetch);
+
+    await expect(client.discover(CREDENTIALS)).rejects.toThrow(
+      'Copilot model discovery failed. Retry connecting or reopen model settings.',
     );
   });
 
