@@ -930,6 +930,7 @@
     "packages/local-runtime-v2/src/service/model-system/copilot-oauth.ts",
     "packages/local-runtime-v2/src/service/model-system/identity.ts",
     "packages/local-runtime-v2/src/service/model-system/index.ts",
+    "packages/local-runtime-v2/src/service/model-system/initialize.test.ts",
     "packages/local-runtime-v2/src/service/model-system/initialize.ts",
     "packages/local-runtime-v2/src/service/model-system/management/provider-key.ts",
     "packages/local-runtime-v2/src/service/model-system/management/service-candidate-operations.ts",
