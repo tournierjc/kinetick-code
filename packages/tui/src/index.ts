@@ -30,6 +30,10 @@ async function main(): Promise<void> {
   });
   const prefixProcess = await prepareMcodePrefixProcess();
   try {
+    // Default-deny egress: installed before any product module is imported, so
+    // no request can be issued before the policy is in place.
+    const { installTuiEgressGuard } = await import('./runtime/egress-guard.js');
+    await installTuiEgressGuard();
     const { runTuiCli } = await import('./cli/main.js');
     await runTuiCli({ allowStartupEnvironmentSelection: internalPackage });
   } finally {

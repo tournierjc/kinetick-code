@@ -914,15 +914,6 @@ export interface ReviewConfig {
   modeSource?: "default" | "explicit";
 }
 
-export interface TelemetryConfig {
-  /** Send anonymous TUI usage events. Disabled until the user opts in. */
-  enabled: boolean;
-  /** Send runtime performance metrics. Separate opt-in, disabled by default. */
-  metrics?: boolean;
-  /** Send minimized, account-linked automatic error reports. Separate opt-in, disabled by default. */
-  diagnostics?: boolean;
-}
-
 export interface Config {
   logLevel: string;
   devPort: number;
@@ -992,8 +983,6 @@ export interface Config {
   browser: BrowserConfig;
   /** TUI presentation options, such as the status line item order. */
   tui: TuiConfig;
-  /** Anonymous TUI business telemetry. */
-  telemetry: TelemetryConfig;
   /** Legacy OpenCode framework adapter tunables. */
   opencode: OpenCodeAdapterConfig;
   /** Per-model context management overrides (e.g. disable SR for low-context models). */
@@ -1769,7 +1758,6 @@ const DEFAULTS: Omit<
   // No status line items by default: the TUI picks its build-specific default
   // when `tui.statusLine` is absent.
   tui: {},
-  telemetry: { enabled: false, metrics: false, diagnostics: false },
   opencode: {
     xdg: {
       dataIsolation: false,
@@ -2073,7 +2061,6 @@ export function resolveConfigFromRaw(
     cli: parseCliConfig(raw),
     browser: parseBrowserConfig(raw.browser),
     tui: parseTuiConfig(raw),
-    telemetry: parseTelemetryConfig(raw.telemetry),
     opencode: parseOpenCodeAdapterConfig(raw, DEFAULTS.opencode),
     contextManagement: parseContextManagementConfig(raw),
     runawayGuard: resolveRunawayGuardConfig(raw.runawayGuard),
@@ -2094,18 +2081,6 @@ export function resolveConfigFromRaw(
 }
 
 // ── Memory config parsing ──────────────────────────────────────
-
-function parseTelemetryConfig(raw: unknown): TelemetryConfig {
-  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-    return { ...DEFAULTS.telemetry };
-  }
-  const enabled = Reflect.get(raw, "enabled");
-  return {
-    enabled: typeof enabled === "boolean" ? enabled : DEFAULTS.telemetry.enabled,
-    metrics: Reflect.get(raw, "metrics") === true,
-    diagnostics: Reflect.get(raw, "diagnostics") === true,
-  };
-}
 
 function parseMemoryConfig(raw: Record<string, unknown>): MemoryConfig {
   const memoryRaw = raw.memory;

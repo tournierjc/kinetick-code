@@ -141,6 +141,15 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 | Switch permission modes | `Alt+M` |
 | Close a panel or interrupt a running task | `Esc` |
 
+## Network egress
+
+This fork ships no telemetry and no managed-service client, and it decides every
+outbound connection before opening a socket. By default the MiniMax
+managed-service and reporting hosts are refused; loopback and the model
+endpoints you configured stay reachable. Use `MCODE_EGRESS_MODE=allowlist` to
+reach only loopback, your providers, and `MCODE_ALLOWED_ORIGINS`. See
+[docs/egress-policy.md](docs/egress-policy.md).
+
 ## What you can do
 
 | Task | Capabilities |

@@ -11,7 +11,8 @@ Include the affected version, operating system and Node.js version, a minimal re
 ## Data and service boundaries
 
 - The default data directory, `~/.minimax-code`, stores login state, provider configuration, and sessions. It is not shareable project configuration. Restrict local access and keep it out of Git.
-- Models, official plugins, connectors, search, media, feedback, and telemetry may contact external services. Those services continue to control authorization and credits; source access does not grant access to accounts or third-party resources.
+- The process installs a default-deny egress guard (see [Network egress policy](docs/egress-policy.md)): model endpoints the user configured, loopback, and `MCODE_ALLOWED_ORIGINS` stay reachable, while the MiniMax managed-service and reporting hosts are refused. `MCODE_EGRESS_MODE=allowlist` is stricter; `MCODE_EGRESS_MODE=off` disables the guard and should be treated as a data-boundary change.
+- Plugins, MCP servers, search, and media tools the user configures may contact external services within that policy. Those services continue to control authorization and credits; source access does not grant access to accounts or third-party resources.
 - mcode-tools obtains short-lived access tokens through the host's lease broker. Never pass refresh tokens to tool processes.
 - Permissions and sandboxing do not replace review of untrusted plugins, MCP servers, and shell commands. If automatic permission classification is unavailable, retain user confirmation rather than allowing operations by default.
 - If credentials leak, revoke or rotate them with the service first, then remediate files and Git history. Deleting the current file does not remove historical copies.

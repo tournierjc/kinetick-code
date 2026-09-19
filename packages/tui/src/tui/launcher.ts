@@ -25,21 +25,14 @@ import type { TuiWorkspaceRoot } from '../runtime/port.js';
 import { createDeferredTuiRuntime } from '../runtime/deferred.js';
 import {
   captureTuiIncidentBestEffort,
-  createTuiIncidentReporter,
   createTuiObservability,
-  noopTuiIncidentReporter,
-  type CreateTuiIncidentReporterOptions,
+  noopTuiIncidentSink,
   type TuiIncidentReporter,
+  type TuiIncidentSink,
   type TuiObservability,
 } from '../observability/index.js';
 import { resolveMcodeAuthEnvironment } from '../auth/environment.js';
 import { TuiMatrixAccountClient } from '../account/matrix-account-client.js';
-import {
-  createMcodeBusinessTelemetry,
-  resolveMcodeBusinessTelemetryPolicy,
-  type CreateMcodeBusinessTelemetryOptions,
-  type McodeBusinessTelemetry,
-} from '../analytics/business-telemetry.js';
 import { createDefaultMcodeAuthApplication } from '../auth/factory.js';
 import { createMcodeSharedAuthSession } from '../runtime/auth-session.js';
 import {
@@ -123,27 +116,11 @@ export interface LaunchTuiDependencies {
     region?: MavisRegion,
     initialPrompt?: string,
   ) => Promise<void>;
-  createBusinessTelemetry?: typeof createMcodeBusinessTelemetry;
-  readTelemetryEnabled?: () => boolean;
-  createIncidentReporter?: typeof createTuiIncidentReporter;
+  createIncidentReporter?: () => TuiIncidentReporter;
   readTuiMode?: typeof readTuiModeSetting;
   writeTuiMode?: typeof writeTuiModeSetting;
   createSharedAuthSession?: typeof createMcodeSharedAuthSession;
   createAuthApplication?: typeof createDefaultMcodeAuthApplication;
-}
-
-export function createConfiguredTuiBusinessTelemetry(options: {
-  readonly configEnabled: boolean;
-  readonly environment: NodeJS.ProcessEnv;
-  readonly telemetryOptions: CreateMcodeBusinessTelemetryOptions;
-  readonly createTelemetry?: typeof createMcodeBusinessTelemetry;
-}): McodeBusinessTelemetry | undefined {
-  const policy = resolveMcodeBusinessTelemetryPolicy({
-    configEnabled: options.configEnabled,
-    environment: options.environment,
-  });
-  if (!policy.enabled) return undefined;
-  return (options.createTelemetry ?? createMcodeBusinessTelemetry)(options.telemetryOptions);
 }
 
 export async function launchTui(
@@ -193,33 +170,8 @@ export async function launchTui(
       return undefined;
     }
   };
-  const resolveIdentityForToken = createTokenScopedAsyncResolver(async () => {
-    const accessToken = accountAuthContext?.accessToken;
-    if (!accessToken) return undefined;
-    const realUserID = await accountIdentityClient.getRealUserID();
-    if (realUserID && accountAuthContext?.accessToken === accessToken) {
-      accountAuthContext = { ...accountAuthContext, realUserID };
-    }
-    return realUserID;
-  });
-  const incidentReporterOptions = {
-    dataDir,
-    appVersion: options.version,
-    ...authEnvironment,
-    terminal: terminalCapabilities.terminalId,
-    tuiMode,
-    resolveAuthContext: async () => {
-      const auth = await resolveAccessTokenLease();
-      if (!auth) return undefined;
-      const realUserID = await resolveIdentityForToken(auth.accessToken.trim());
-      return realUserID ? { accessToken: auth.accessToken, realUserID } : undefined;
-    },
-  } satisfies CreateTuiIncidentReporterOptions;
-  const incidentReporter: TuiIncidentReporter = dependencies.createIncidentReporter
-    ? dependencies.createIncidentReporter(incidentReporterOptions)
-    : isVitestRuntime()
-      ? noopTuiIncidentReporter
-      : createTuiIncidentReporter(incidentReporterOptions);
+  const incidentReporter: TuiIncidentReporter =
+    dependencies.createIncidentReporter?.() ?? noopTuiIncidentSink;
   const onUncaughtExceptionMonitor = (error: Error, origin: string): void => {
     const operation = origin === 'unhandledRejection' ? 'unhandledRejection' : 'uncaughtException';
     captureTuiIncidentBestEffort(incidentReporter, {
@@ -232,31 +184,6 @@ export async function launchTui(
       impact: 'exit',
       handled: false,
     });
-  };
-  const businessTelemetry = createConfiguredTuiBusinessTelemetry({
-    configEnabled: (dependencies.readTelemetryEnabled ?? (() => getConfig().telemetry.enabled))(),
-    environment: process.env,
-    telemetryOptions: {
-      ...authEnvironment,
-      version: options.version,
-    },
-    ...(dependencies.createBusinessTelemetry
-      ? { createTelemetry: dependencies.createBusinessTelemetry }
-      : isVitestRuntime()
-        ? {
-            createTelemetry: () => ({
-              track: () => undefined,
-              flush: async () => undefined,
-            }),
-          }
-        : {}),
-  });
-  const trackTuiLaunch = (launchType: 'cold' | 'hot'): void => {
-    try {
-      businessTelemetry?.track('tui_launch', { launch_type: launchType });
-    } catch {
-      // Business telemetry must not affect TUI lifecycle.
-    }
   };
   const observability: TuiObservability = (
     dependencies.createObservability ?? createTuiObservability
@@ -393,13 +320,10 @@ export async function launchTui(
         externalEditorCommand: options.externalEditorCommand,
         observability,
         incidentReporter,
-        ...(businessTelemetry ? { businessTelemetry } : {}),
         auth: (dependencies.createAuthApplication ?? createDefaultMcodeAuthApplication)({
           dataDir,
           ...authEnvironment,
           sharedAuthCore,
-          ...(businessTelemetry ? { telemetry: businessTelemetry } : {}),
-          telemetrySource: 'mcode_tui',
         }),
         notifyAuthContextChanged: async (authState: 'authenticated' | 'logged_out') => {
           const activeRuntime = await initializingRuntime;
@@ -478,7 +402,6 @@ export async function launchTui(
               suspend: () => app?.suspend?.(),
               resume: async () => {
                 await app?.resume?.();
-                trackTuiLaunch('hot');
               },
               suspendProcess: () => process.kill(process.pid, 'SIGTSTP'),
             }),
@@ -544,7 +467,6 @@ export async function launchTui(
       return;
     }
     tuiRunning = true;
-    trackTuiLaunch('cold');
     incidentReporter.setPhase('runtime');
     incidentReporter.breadcrumb('cli.first-frame.rendered');
 
@@ -616,9 +538,9 @@ export async function launchTui(
       });
     }
     try {
-      await businessTelemetry?.flush();
+      await incidentReporter.drain();
     } catch {
-      // Business telemetry must not affect TUI shutdown.
+      // Incident reporting must not affect TUI shutdown.
     }
     incidentReporter.completeRun();
     await incidentReporter.flush();
