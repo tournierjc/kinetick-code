@@ -16,6 +16,18 @@ function createPort() {
       providerId: 'openai-codex' as const,
       authUrl: 'https://auth.openai.example/authorize',
     })),
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: 'hidden' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: 'pending' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: 'disconnected' as const,
+      providerId: 'github-copilot' as const,
+    })),
     listUserModelProviders: vi.fn(async () => [
       {
         providerId: 'custom_provider:openai',

@@ -369,6 +369,18 @@ function createRuntime(): TuiRuntime {
       state: "hidden" as const,
       providerId: "openai-codex" as const,
     })),
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: "hidden" as const,
+      providerId: "github-copilot" as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: "disconnected" as const,
+      providerId: "github-copilot" as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: "pending" as const,
+      providerId: "github-copilot" as const,
+    })),
     getPermissionMode: vi.fn(async () => "auto" as const),
     setPermissionMode: vi.fn(async (mode) => mode),
     getPlanModeCapabilities: vi.fn(async () => ({ entryEnabled: true })),
