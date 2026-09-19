@@ -19,6 +19,22 @@ describe('provider families', () => {
     expect(deepseek?.thinkingFormat).not.toBe('openai');
   });
 
+  it('declares the OpenRouter aggregator contract', () => {
+    const openrouter = PROVIDER_FAMILIES.find((family) => family.providerId === 'openrouter');
+
+    expect(openrouter).toMatchObject({
+      displayName: 'OpenRouter',
+      hosts: ['openrouter.ai'],
+      npm: ['@openrouter/ai-sdk-provider'],
+      apiFormat: 'openai-completions',
+      thinkingFormat: 'openrouter',
+      pinned: true,
+    });
+    // OpenRouter advertises per-model `supported_efforts`, so the family offers no
+    // vocabulary of its own: a level invented here could be one the route rejects.
+    expect(openrouter?.effortOptions).toBeUndefined();
+  });
+
   it('resolves a family from the provider key, the endpoint, or the model id', () => {
     expect(providerFamilyForLookup({ providerId: 'deepseek' })?.providerId).toBe('deepseek');
     // A provider named anything at all still belongs to DeepSeek's endpoint.
@@ -39,6 +55,10 @@ describe('provider families', () => {
     expect(providerFamilyForLookup({ providerId: 'work', modelId: 'deepseek-v4-pro' })?.providerId).toBe(
       'deepseek',
     );
+    expect(
+      providerFamilyForLookup({ providerId: 'work', baseUrl: 'https://openrouter.ai/api/v1' })
+        ?.providerId,
+    ).toBe('openrouter');
   });
 
   it('leaves providers and generations it does not know alone', () => {

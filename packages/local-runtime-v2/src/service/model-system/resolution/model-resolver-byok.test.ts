@@ -394,4 +394,10 @@ describe('custom BYOK thinking shape', () => {
       plan('work', 'https://api.openai.com/v1', undefined, 'gpt-5-mini')?.modelCompat,
     ).toBeUndefined();
   });
+
+  it('applies the aggregator shape for OpenRouter', () => {
+    expect(
+      plan('openrouter', 'https://openrouter.ai/api/v1', undefined, 'gpt-5-mini')?.modelCompat,
+    ).toMatchObject({ thinkingFormat: 'openrouter', supportsReasoningEffort: true });
+  });
 });

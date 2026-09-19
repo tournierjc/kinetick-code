@@ -52,7 +52,25 @@ const DEEPSEEK: ProviderFamily = {
   pinned: true,
 };
 
-export const PROVIDER_FAMILIES: readonly ProviderFamily[] = [DEEPSEEK];
+/**
+ * OpenRouter is an aggregator: one endpoint, many upstream providers, and its
+ * own `reasoning` object carrying the level, rather than a bare
+ * `reasoning_effort`. Its catalog advertises per-model `supported_efforts`, so
+ * this family deliberately declares no level vocabulary — clamping a level to
+ * what the route publishes is a separate concern from sending the right shape,
+ * and inventing levels here would be worse than offering none.
+ */
+const OPENROUTER: ProviderFamily = {
+  providerId: 'openrouter',
+  displayName: 'OpenRouter',
+  hosts: ['openrouter.ai'],
+  npm: ['@openrouter/ai-sdk-provider'],
+  apiFormat: 'openai-completions',
+  thinkingFormat: 'openrouter',
+  pinned: true,
+};
+
+export const PROVIDER_FAMILIES: readonly ProviderFamily[] = [DEEPSEEK, OPENROUTER];
 
 export interface ProviderFamilyLookup {
   /** Provider key from the configuration, e.g. `deepseek`. */
