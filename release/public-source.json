@@ -921,6 +921,7 @@
     "packages/local-runtime-v2/src/service/model-system/management/service-minimax-operations.ts",
     "packages/local-runtime-v2/src/service/model-system/management/service.test.ts",
     "packages/local-runtime-v2/src/service/model-system/management/service.ts",
+    "packages/local-runtime-v2/src/service/model-system/provider-credentials.ts",
     "packages/local-runtime-v2/src/service/model-system/resolution/byok-error-attribution.ts",
     "packages/local-runtime-v2/src/service/model-system/resolution/dynamic-max-tokens.ts",
     "packages/local-runtime-v2/src/service/model-system/resolution/file-api-capabilities.ts",

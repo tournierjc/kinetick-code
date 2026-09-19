@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { CopilotModelDiscoveryClient } from './copilot-model-discovery.js';
+import {
+  CopilotModelDiscoveryClient,
+  copilotBaseUrlFromToken,
+} from './copilot-model-discovery.js';
 
 /**
- * Verbatim excerpt of a real `GET https://api.githubcopilot.com/models` response
- * (account: tournierjc, captured 2026-09-19). Field values — context limits and
- * reasoning-effort lists in particular — are the ones the API returned, not
- * expectations written from documentation; unused fields are dropped so the
- * fixture stays readable.
+ * Excerpt of a `GET https://api.githubcopilot.com/models` response (2026-09-19):
+ * the context limits, reasoning-effort lists and policy states are the values the
+ * API returned, not expectations written from documentation. Unused fields are
+ * dropped so the fixture stays readable. Entries the filters drop are kept on
+ * purpose, so the filters stay covered.
  */
 const ACCOUNT_CATALOG = {
   data:   [
@@ -505,5 +508,115 @@ describe('CopilotModelDiscoveryClient', () => {
     const { client } = createClient({ data: [{ id: 'text-embedding-3-small', capabilities: { type: 'embeddings' } }] });
 
     await expect(client.discover(CREDENTIALS)).rejects.toThrow('Empty Copilot model catalog.');
+  });
+
+  it('rejects a payload that is not a model catalog', async () => {
+    for (const payload of [null, {}, { data: 'nope' }, { data: [] }]) {
+      await expect(createClient(payload).client.discover(CREDENTIALS)).rejects.toThrow(
+        /Invalid|Empty/u,
+      );
+    }
+  });
+
+  it('reads the account proxy endpoint out of a token', () => {
+    expect(
+      copilotBaseUrlFromToken('tid=1;exp=2;proxy-ep=proxy.individual.githubcopilot.com;'),
+    ).toBe('https://api.individual.githubcopilot.com');
+    expect(copilotBaseUrlFromToken('tid=1;exp=2;proxy-ep=proxy.business.githubcopilot.com;')).toBe(
+      'https://api.business.githubcopilot.com',
+    );
+    expect(copilotBaseUrlFromToken('tid=1;exp=2')).toBeUndefined();
+    expect(copilotBaseUrlFromToken('proxy-ep=not a host;')).toBeUndefined();
+  });
+
+  it('trims a base URL that already ends in a slash', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(ACCOUNT_CATALOG));
+    const client = new CopilotModelDiscoveryClient(fetchImpl as unknown as typeof fetch);
+
+    await client.discover({ token: 'copilot-token', baseUrl: 'https://api.githubcopilot.com/' });
+
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string];
+    expect(url).toBe('https://api.githubcopilot.com/models');
+  });
+
+  // Synthetic entries: the live catalog does not currently contain these shapes,
+  // and the filters have to hold when it does.
+  it('requires an HTTP chat endpoint and ignores the streaming transport', async () => {
+    const { client } = createClient({
+      data: [
+        {
+          id: 'no-endpoint',
+          model_picker_enabled: true,
+          capabilities: { type: 'chat', limits: { max_prompt_tokens: 1000 } },
+        },
+        {
+          id: 'stream-only',
+          model_picker_enabled: true,
+          supported_endpoints: ['ws:/responses'],
+          capabilities: { type: 'chat', limits: { max_prompt_tokens: 1000 } },
+        },
+        {
+          id: 'messages-only',
+          model_picker_enabled: true,
+          supported_endpoints: ['/v1/messages'],
+          capabilities: { type: 'chat', limits: { max_prompt_tokens: 1000, max_output_tokens: 500 } },
+        },
+      ],
+    });
+
+    const { provider } = await client.discover(CREDENTIALS);
+
+    expect(Object.keys(provider.models)).toEqual(['messages-only']);
+    expect(provider.models['messages-only']).toMatchObject({
+      provider: { api: 'anthropic-messages' },
+      limit: { context: 1000, output: 500 },
+      reasoning: false,
+    });
+  });
+
+  it('falls back to the full window when only it is reported, and keeps output absent', async () => {
+    const { client } = createClient({
+      data: [
+        {
+          id: 'window-only',
+          model_picker_enabled: true,
+          supported_endpoints: ['/chat/completions'],
+          capabilities: {
+            type: 'chat',
+            limits: { max_context_window_tokens: 64000 },
+            supports: { tool_calls: false },
+          },
+        },
+      ],
+    });
+
+    const { provider } = await client.discover(CREDENTIALS);
+
+    expect(provider.models['window-only']).toMatchObject({
+      // No prompt budget is reported, so the window is what this runtime admits.
+      limit: { context: 64000 },
+      tool_call: false,
+      attachment: false,
+      modalities: { input: ['text'], output: ['text'] },
+      reasoning: false,
+    });
+    expect(provider.models['window-only']?.limit?.output).toBeUndefined();
+  });
+
+  it('normalizes effort casing and duplicates', async () => {
+    const { client } = createClient({
+      data: [
+        {
+          id: 'model',
+          model_picker_enabled: true,
+          supported_endpoints: ['/chat/completions'],
+          capabilities: { type: 'chat', supports: { reasoning_effort: ['HIGH', ' high ', 'low'] } },
+        },
+      ],
+    });
+
+    const { provider } = await client.discover(CREDENTIALS);
+
+    expect(provider.models['model']?.thinking?.effortOptions).toEqual(['high', 'low']);
   });
 });

@@ -19,16 +19,9 @@ import {
   type CopilotModelCredentials,
 } from './connectivity/copilot-model-discovery.js';
 import { GITHUB_COPILOT_PROVIDER_ID } from './identity.js';
+import { PROVIDER_CREDENTIALS_FILE } from './provider-credentials.js';
 
 export { GITHUB_COPILOT_PROVIDER_ID } from './identity.js';
-
-/**
- * Pi keeps every provider's credentials — OAuth and plain keys — in one
- * profile-scoped AuthStorage file, and the runtime's `providerAuthGetter` reads
- * that file by provider id. Copilot therefore shares the existing store rather
- * than adding a second one.
- */
-export const PROVIDER_CREDENTIALS_FILE = 'codex-auth.json';
 
 /** Environment tokens accepted as a Copilot credential when no sign-in is stored. */
 const COPILOT_TOKEN_ENV_VARS = ['COPILOT_GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN'] as const;
