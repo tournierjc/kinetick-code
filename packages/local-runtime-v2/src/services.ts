@@ -530,6 +530,7 @@ export async function createRuntimeServices(
       providers: modelSystem.providers,
       listProviderPresets: modelSystem.listProviderPresets,
       oauth: modelSystem.oauth,
+      copilotOAuth: modelSystem.copilotOAuth,
     },
   });
   if (owners.cron)

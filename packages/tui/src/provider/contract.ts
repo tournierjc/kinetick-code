@@ -113,6 +113,26 @@ export interface McodeCodexOAuthStartResult extends McodeCodexOAuthStatus {
   readonly authUrl?: string;
 }
 
+export type McodeCopilotOAuthState = 'hidden' | 'disconnected' | 'pending' | 'connected' | 'failed';
+
+/**
+ * GitHub Copilot sign-in is device-code only, so the status carries the code the
+ * account has to enter and nothing to redirect a browser callback to.
+ */
+export interface McodeCopilotOAuthStatus {
+  readonly state: McodeCopilotOAuthState;
+  readonly providerId: 'github-copilot';
+  readonly error?: string;
+  readonly loginId?: string;
+  readonly deviceCode?: {
+    readonly userCode: string;
+    readonly verificationUri: string;
+    readonly expiresAt: number;
+  };
+  /** Models GitHub refuses until the account accepts their terms. */
+  readonly policyOptInRequired?: readonly string[];
+}
+
 export interface McodeCreateProviderInput {
   readonly name?: string;
   readonly baseUrl: string;
@@ -171,6 +191,9 @@ export interface McodeProviderRuntimePort {
   getCodexOAuthStatus(): Promise<McodeCodexOAuthStatus>;
   startCodexOAuthLogin(options?: McodeCodexOAuthLoginOptions): Promise<McodeCodexOAuthStartResult>;
   cancelCodexOAuthLogin(loginId: string): Promise<McodeCodexOAuthStatus>;
+  getCopilotOAuthStatus(): Promise<McodeCopilotOAuthStatus>;
+  startCopilotOAuthLogin(): Promise<McodeCopilotOAuthStatus>;
+  cancelCopilotOAuthLogin(loginId: string): Promise<McodeCopilotOAuthStatus>;
   listUserModelProviders(): Promise<readonly McodeRuntimeProviderView[]>;
   getMiniMaxApiKeyStatus(): Promise<{
     readonly hasApiKey: boolean;

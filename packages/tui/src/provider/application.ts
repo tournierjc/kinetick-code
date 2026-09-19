@@ -1,4 +1,5 @@
 import type {
+  McodeCopilotOAuthStatus,
   McodeCodexOAuthStartResult,
   McodeCodexOAuthLoginOptions,
   McodeCodexOAuthStatus,
@@ -75,6 +76,18 @@ export class McodeProviderApplication {
 
   cancelCodexOAuthLogin(loginId: string): Promise<McodeCodexOAuthStatus> {
     return this.port.cancelCodexOAuthLogin(loginId);
+  }
+
+  connectCopilotOAuth(): Promise<McodeCopilotOAuthStatus> {
+    return this.port.startCopilotOAuthLogin();
+  }
+
+  getCopilotOAuthStatus(): Promise<McodeCopilotOAuthStatus> {
+    return this.port.getCopilotOAuthStatus();
+  }
+
+  cancelCopilotOAuthLogin(loginId: string): Promise<McodeCopilotOAuthStatus> {
+    return this.port.cancelCopilotOAuthLogin(loginId);
   }
 
   async setMiniMaxApiKey(apiKey: string, saveAndUse = true): Promise<void> {

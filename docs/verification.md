@@ -42,7 +42,7 @@ Individual gates were run on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: so
 
 GitHub Actions passed Source verification on ubuntu-latest, macos-latest and windows-latest (Node.js 24), the `verification` aggregate, and the Release audit.
 
-The connector adds 44 tests. The discovery tests run against a captured `/models` response; their values are the API's, but they are not live-service acceptance. Live calls were made outside CI with a real account: completions on `openai-responses`, `anthropic-messages` and `openai-completions`, and `mcode exec` end to end on all three protocols and in all four egress modes (`managed-deny`, explicit `managed-deny`, `allowlist`, `off`). Interactive TUI sign-in, enterprise-account hosts, and credential removal through provider management were not run.
+The connector adds 54 tests: 23 for the sign-in manager, 18 for the catalog reader, 3 for the composition, 9 for the TUI sign-in panel and 1 for the `/model` entry in the existing feature-flow suite. The discovery tests run against a captured `/models` response; their values are the API's, but they are not live-service acceptance. Live calls were made outside CI with a real account: completions on `openai-responses`, `anthropic-messages` and `openai-completions`, and `mcode exec` end to end on all three protocols and in all four egress modes (`managed-deny`, explicit `managed-deny`, `allowlist`, `off`). The TUI panel is covered by unit tests only: an interactive device-flow sign-in in a real terminal, enterprise-account hosts, and credential removal through provider management were not run.
 
 ### Release-preparation verification, 2026-09-12
 

@@ -3,6 +3,7 @@ import { isLegacyManagedMinimaxProvider } from '@mavis/config';
 
 import type {
   CodexOAuthManager,
+  CopilotOAuthManager,
   LocalModelProviderService,
   ModelSystemOwner,
   ModelProviderView,
@@ -35,6 +36,7 @@ export interface ProcessLocalApplicationOptions {
     readonly providers: LocalModelProviderService;
     readonly listProviderPresets: ModelSystemOwner['listProviderPresets'];
     readonly oauth: Pick<CodexOAuthManager, 'getStatus' | 'startLogin' | 'cancelLogin'>;
+    readonly copilotOAuth: Pick<CopilotOAuthManager, 'getStatus' | 'startLogin' | 'cancelLogin'>;
   };
   readonly peripherals: Required<
     Pick<
@@ -133,6 +135,10 @@ export function createProcessLocalApplication(
       getCodexOAuthStatus: async () => options.modelProvider.oauth.getStatus(),
       startCodexOAuthLogin: (input) => options.modelProvider.oauth.startLogin(input),
       cancelCodexOAuthLogin: async (loginId) => options.modelProvider.oauth.cancelLogin(loginId),
+      getCopilotOAuthStatus: async () => options.modelProvider.copilotOAuth.getStatus(),
+      startCopilotOAuthLogin: () => options.modelProvider.copilotOAuth.startLogin(),
+      cancelCopilotOAuthLogin: async (loginId) =>
+        options.modelProvider.copilotOAuth.cancelLogin(loginId),
       listUser: async () =>
         options.modelProvider.providers.listUserProviders().map(toProviderRecord),
       getMiniMaxApiKeyStatus: async () => options.modelProvider.providers.getMinimaxApiKeyStatus(),

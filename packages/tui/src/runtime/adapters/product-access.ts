@@ -22,6 +22,7 @@ import type {
 import type { TuiRuntimeAccessContext } from "./access-context.js";
 import type {
   McodeCreateProviderInput,
+  McodeCopilotOAuthStatus,
   McodeCodexOAuthStartResult,
   McodeCodexOAuthLoginOptions,
   McodeCodexOAuthStatus,
@@ -153,6 +154,24 @@ export class TuiProductAccess {
     return (await this.context
       .service("provider.codex-oauth.cancel")
       .cancelCodexOAuthLogin(loginId)) as McodeCodexOAuthStatus;
+  }
+
+  async getCopilotOAuthStatus(): Promise<McodeCopilotOAuthStatus> {
+    return (await this.context
+      .service("provider.copilot-oauth.status")
+      .getCopilotOAuthStatus()) as McodeCopilotOAuthStatus;
+  }
+
+  async startCopilotOAuthLogin(): Promise<McodeCopilotOAuthStatus> {
+    return (await this.context
+      .service("provider.copilot-oauth.start")
+      .startCopilotOAuthLogin()) as McodeCopilotOAuthStatus;
+  }
+
+  async cancelCopilotOAuthLogin(loginId: string): Promise<McodeCopilotOAuthStatus> {
+    return (await this.context
+      .service("provider.copilot-oauth.cancel")
+      .cancelCopilotOAuthLogin(loginId)) as McodeCopilotOAuthStatus;
   }
 
   async getMiniMaxApiKeyStatus(): Promise<{
