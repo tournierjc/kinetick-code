@@ -930,7 +930,7 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.providerLoadSequence;
     let snapshot;
     try {
-      snapshot = await this.providerApplication.snapshot({ includeCodexOAuth: true });
+      snapshot = await this.providerApplication.snapshot({ includeCodexOAuth: true, includeCopilotOAuth: true });
     } catch (error) {
       if (!this.isStopped() && loadSequence === this.providerLoadSequence) {
         this.options.append(
@@ -945,7 +945,7 @@ export class TuiFeatureFlow {
     }
     if (this.isStopped() || loadSequence !== this.providerLoadSequence) return;
     const refresh = async () => {
-      const next = await this.providerApplication.snapshot({ includeCodexOAuth: true });
+      const next = await this.providerApplication.snapshot({ includeCodexOAuth: true, includeCopilotOAuth: true });
       // Await the roster before repainting: disabling a provider drops its
       // models, and a stale status line would keep advertising a model the
       // Runtime no longer resolves.
@@ -960,6 +960,10 @@ export class TuiFeatureFlow {
       onConnectCodex: () => {
         this.closeProviderManager();
         this.showCodexLogin('provider');
+      },
+      onConnectCopilot: () => {
+        this.closeProviderManager();
+        this.showCopilotLogin('provider');
       },
       onRefreshModels: (provider) => this.providerApplication.refreshModels(provider),
       onSaveCustom: (input) => this.providerApplication.saveCandidate(input),

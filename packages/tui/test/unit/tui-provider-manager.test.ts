@@ -81,6 +81,24 @@ function withSource(
   };
 }
 
+const snapshotWithCopilot: McodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    {
+      providerId: "github-copilot",
+      name: "GitHub Copilot",
+      kind: "copilot-oauth",
+      active: false,
+      enabled: true,
+      readOnly: true,
+      hasApiKey: false,
+      status: { state: "disconnected" },
+      models: [],
+    },
+    ...snapshot.providers,
+  ],
+};
+
 function createManager(
   overrides: Partial<ConstructorParameters<typeof TuiProviderManager>[0]> = {},
 ) {
@@ -143,6 +161,75 @@ describe("TuiProviderManager", () => {
     manager.handleInput("\r");
 
     await vi.waitFor(() => expect(onConnectCodex).toHaveBeenCalledOnce());
+  });
+
+
+  it("starts the independent Copilot OAuth flow from its provider row", async () => {
+    const onConnectCopilot = vi.fn();
+    const manager = createManager({
+      snapshot: snapshotWithCopilot,
+      onConnectCopilot,
+    });
+
+    manager.handleInput("\u001b[A");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Not connected · Enter or Space to connect",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onConnectCopilot).toHaveBeenCalledOnce());
+  });
+
+  it("reports the Copilot row as connected without restarting sign-in", async () => {
+    const onConnectCopilot = vi.fn();
+    const connected: McodeProviderSnapshot = {
+      ...snapshotWithCopilot,
+      providers: snapshotWithCopilot.providers.map((provider) =>
+        provider.kind === "copilot-oauth"
+          ? {
+              ...provider,
+              status: { state: "connected" },
+              models: [{ modelId: "claude-opus-4.8", displayName: "Claude Opus 4.8" }],
+            }
+          : provider,
+      ),
+    };
+    const manager = createManager({ snapshot: connected, onConnectCopilot });
+
+    manager.handleInput("\u001b[A");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Connected with GitHub OAuth · 1 model",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+        "GitHub Copilot is already connected.",
+      ),
+    );
+    expect(onConnectCopilot).not.toHaveBeenCalled();
+  });
+
+  it("routes Copilot connectivity and editing through its sign-in flow", async () => {
+    const onConnectCopilot = vi.fn();
+    const manager = createManager({
+      snapshot: snapshotWithCopilot,
+      onConnectCopilot,
+    });
+
+    manager.handleInput("\u001b[A");
+    manager.handleInput("t");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+        "Copilot OAuth connectivity is managed by its sign-in flow.",
+      ),
+    );
+
+    manager.handleInput("e");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Use Enter or Space on the GitHub Copilot row to start sign-in.",
+    );
   });
 
   it("uses the Pi cancel binding to close the provider list", () => {

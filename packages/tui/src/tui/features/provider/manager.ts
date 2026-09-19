@@ -34,6 +34,7 @@ export interface TuiProviderManagerOptions {
   onRefreshModels?(provider: McodeProviderView): Promise<number>;
   onTest(providerId: string, modelId?: string): Promise<McodeProviderTestResult>;
   onConnectCodex?(): void;
+  onConnectCopilot?(): void;
   onSaveCustom?(input: McodeSaveProviderCandidateInput): Promise<McodeSaveProviderCandidateResult>;
   onSetMiniMaxApiKey(apiKey: string): Promise<void>;
   onSetMiniMaxSource(source: 'token_plan' | 'minimax_api_key'): Promise<void>;
@@ -163,8 +164,8 @@ export class TuiProviderManager implements Component, Focusable {
     if (provider) {
       lines.push(frameDivider(width));
       lines.push(frameRow(renderTuiActionHint(providerDetail(provider)), width));
-      if (provider.kind === 'custom') {
-        if (provider.baseUrl) {
+      if (provider.kind === 'custom' || provider.kind === 'copilot-oauth') {
+        if (provider.kind === 'custom' && provider.baseUrl) {
           lines.push(frameRow(chalk.hex(colors.dim)(sanitizeTuiUrl(provider.baseUrl)), width));
         }
         const models = providerModelList(provider);
@@ -277,6 +278,10 @@ export class TuiProviderManager implements Component, Focusable {
       await this.connectCodex(provider);
       return;
     }
+    if (provider.kind === 'copilot-oauth') {
+      await this.connectCopilot(provider);
+      return;
+    }
     if (provider.kind === 'minimax-oauth') {
       await this.setMiniMaxSource('token_plan');
       return;
@@ -314,6 +319,10 @@ export class TuiProviderManager implements Component, Focusable {
     }
     if (provider.kind === 'codex-oauth') {
       this.setStatus('Use Enter or Space on the Codex row to start sign-in.', 'info');
+      return;
+    }
+    if (provider.kind === 'copilot-oauth') {
+      this.setStatus('Use Enter or Space on the GitHub Copilot row to start sign-in.', 'info');
       return;
     }
     if (provider.readOnly || !this.options.onSaveCustom) {
@@ -369,6 +378,19 @@ export class TuiProviderManager implements Component, Focusable {
     this.options.onConnectCodex();
   }
 
+  private async connectCopilot(provider: McodeProviderView): Promise<void> {
+    const state = provider.status?.state;
+    if (state === 'connected') {
+      this.setStatus('GitHub Copilot is already connected.', 'info');
+      return;
+    }
+    if (!this.options.onConnectCopilot) {
+      this.setStatus('Copilot sign-in is unavailable in this host.', 'error');
+      return;
+    }
+    this.options.onConnectCopilot();
+  }
+
   private startMiniMaxKey(replacing = false): void {
     this.mode = { kind: 'minimax-key', replacing };
     this.status = undefined;
@@ -403,6 +425,10 @@ export class TuiProviderManager implements Component, Focusable {
     if (!provider) return;
     if (provider.kind === 'codex-oauth') {
       this.setStatus('Codex OAuth connectivity is managed by its sign-in flow.', 'info');
+      return;
+    }
+    if (provider.kind === 'copilot-oauth') {
+      this.setStatus('Copilot OAuth connectivity is managed by its sign-in flow.', 'info');
       return;
     }
     if (provider.kind === 'minimax-oauth') {
@@ -507,7 +533,7 @@ function isSelectedSource(provider: McodeProviderView): boolean {
 }
 
 function markerFor(provider: McodeProviderView): string {
-  if (provider.kind === 'codex-oauth') {
+  if (provider.kind === 'codex-oauth' || provider.kind === 'copilot-oauth') {
     return provider.status?.state === 'connected' ? '✓' : '○';
   }
   if (provider.kind === 'custom') return provider.enabled ? '○' : '–';
@@ -532,6 +558,20 @@ function providerDetail(provider: McodeProviderView): string {
     }
     return 'Not connected · Enter or Space to connect';
   }
+  if (provider.kind === 'copilot-oauth') {
+    // The connected row is the connector's own entry, so it also carries the
+    // model roster the sign-in unlocked.
+    const models = provider.models.length;
+    const roster = models > 0 ? ` · ${models} model${models === 1 ? '' : 's'}` : '';
+    if (provider.status?.state === 'connected') return `Connected with GitHub OAuth${roster}`;
+    if (provider.status?.state === 'pending') {
+      return `Sign-in pending · Enter or Space to continue${roster}`;
+    }
+    if (provider.status?.state === 'failed') {
+      return `${provider.status.lastErrorMessage ?? 'Sign-in failed'} · Enter or Space to retry${roster}`;
+    }
+    return `Not connected · Enter or Space to connect${roster}`;
+  }
   if (provider.kind === 'minimax-oauth') {
     return 'Sign-in managed by /login · Space to use · e to sign in again';
   }
@@ -550,6 +590,12 @@ function providerDetail(provider: McodeProviderView): string {
 
 function providerSummary(provider: McodeProviderView): string {
   if (provider.kind === 'codex-oauth') {
+    if (provider.status?.state === 'connected') return 'Connected';
+    if (provider.status?.state === 'pending') return 'Waiting for sign-in';
+    if (provider.status?.state === 'failed') return 'Sign-in failed';
+    return 'Not connected';
+  }
+  if (provider.kind === 'copilot-oauth') {
     if (provider.status?.state === 'connected') return 'Connected';
     if (provider.status?.state === 'pending') return 'Waiting for sign-in';
     if (provider.status?.state === 'failed') return 'Sign-in failed';
