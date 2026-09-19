@@ -14,6 +14,7 @@ import {
   type ModelConnectionTestTarget,
   type UserModelProviderCandidateView,
 } from '../contracts.js';
+import { providerFamilyForLookup } from '../catalog/provider-families.js';
 import type { ModelDiscoveryTarget } from '../connectivity/discover-models.js';
 import { modelConnectionTestFingerprint } from '../catalog/config-fingerprint.js';
 import { minimaxApiBaseUrl, minimaxApiModels } from '../catalog/list-models.js';
@@ -128,7 +129,14 @@ function candidateModelFields(
 ): Pick<LocalCustomProviderConfig, 'models'> | Record<string, never> {
   if (input.models !== undefined) {
     return {
-      models: mergeModelsFromInputs(current?.models, input.models, implicitCustomProviderThinking),
+      models: mergeModelsFromInputs(
+        current?.models,
+        input.models,
+        implicitCustomProviderThinking,
+        providerFamilyForLookup({
+          baseUrl: input.baseUrl ?? current?.options?.baseURL,
+        }),
+      ),
     };
   }
   return current?.models ? { models: current.models } : {};

@@ -26,6 +26,7 @@ import type {
   CodexOAuthStartResult,
   CodexOAuthLoginOptions,
   CodexOAuthStatus,
+  CopilotOAuthStatus,
 } from "../../service/model-system/index.js";
 
 export interface ProcessLocalMiniAppLaunch {
@@ -247,6 +248,9 @@ export interface LocalRuntimeApplication {
       options?: CodexOAuthLoginOptions,
     ): Promise<CodexOAuthStartResult>;
     cancelCodexOAuthLogin(loginId: string): Promise<CodexOAuthStatus>;
+    getCopilotOAuthStatus(): Promise<CopilotOAuthStatus>;
+    startCopilotOAuthLogin(): Promise<CopilotOAuthStatus>;
+    cancelCopilotOAuthLogin(loginId: string): Promise<CopilotOAuthStatus>;
     listUser(): Promise<readonly Record<string, unknown>[]>;
     getMiniMaxApiKeyStatus(): Promise<Record<string, unknown>>;
     getMiniMaxModelSource(): Promise<"token_plan" | "minimax_api_key">;

@@ -3,6 +3,7 @@ import { getRuntimeRegion } from '@mavis/config';
 import type { ByokProviderPresetView, UserModelInputView } from '../../contracts.js';
 import { normalizeProviderBaseUrl } from '../../connectivity/provider-request.js';
 import type { ModelProviderApi } from '../../identity.js';
+import { PROVIDER_FAMILIES } from '../provider-families.js';
 import {
   fetchModelsDevCatalog,
   fetchPinnedProviderIdsConfig,
@@ -24,8 +25,8 @@ const DISABLED_PROVIDER_IDS = new Set([
   'minimax-cn-coding-plan',
 ]);
 const REGION_PINNED_PROVIDER_IDS = {
-  cn: ['zhipuai', 'deepseek', 'moonshotai-cn', 'openai', 'anthropic'],
-  en: ['zai', 'deepseek', 'moonshotai', 'openai', 'anthropic'],
+  cn: ['zhipuai', 'deepseek', 'moonshotai-cn', 'openai', 'anthropic', 'openrouter'],
+  en: ['zai', 'deepseek', 'moonshotai', 'openai', 'anthropic', 'openrouter'],
 } as const;
 const refreshInFlight = new Map<string, Promise<void>>();
 
@@ -157,7 +158,14 @@ function resolveTransport(
         ? MESSAGES_API_BASE_URL
         : stringValue(provider.api);
   } else {
-    return undefined;
+    // A package the fork does not name above may still be an endpoint family it
+    // knows: OpenRouter ships its own AI-SDK provider (`@openrouter/ai-sdk-provider`)
+    // and speaks the completions API, so the family supplies both the protocol and
+    // the shape its requests need.
+    const family = PROVIDER_FAMILIES.find((entry) => entry.npm.includes(npm ?? ''));
+    if (!family) return undefined;
+    apiFormat = family.apiFormat;
+    baseUrl = stringValue(provider.api);
   }
   if (!baseUrl || !isHttpUrl(baseUrl)) return undefined;
   return { baseUrl: normalizeProviderBaseUrl(apiFormat, baseUrl), apiFormat };

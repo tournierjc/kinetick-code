@@ -463,6 +463,15 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   cancelCodexOAuthLogin(loginId: string) {
     return this.productAccess.cancelCodexOAuthLogin(loginId);
   }
+  getCopilotOAuthStatus() {
+    return this.productAccess.getCopilotOAuthStatus();
+  }
+  startCopilotOAuthLogin() {
+    return this.productAccess.startCopilotOAuthLogin();
+  }
+  cancelCopilotOAuthLogin(loginId: string) {
+    return this.productAccess.cancelCopilotOAuthLogin(loginId);
+  }
   getMiniMaxApiKeyStatus() {
     return this.productAccess.getMiniMaxApiKeyStatus();
   }
