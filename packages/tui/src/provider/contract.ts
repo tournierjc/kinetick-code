@@ -23,6 +23,20 @@ export type McodeProviderKind =
 /** Provider key the GitHub Copilot connector writes into `custom_provider`. */
 export const MCODE_COPILOT_PROVIDER_ID = 'github-copilot';
 
+/**
+ * Runtime prefixes the id of every configured provider, so the id a snapshot
+ * receives is not the key the connector writes. Mirrors `CUSTOM_PROVIDER_ID_PREFIX`
+ * in the model system's `resolution/model-key.ts`.
+ */
+const MCODE_CUSTOM_PROVIDER_ID_PREFIX = 'custom_provider:';
+
+/** Reduces a runtime provider id to the key the connector keeps credentials under. */
+export function mcodeCustomProviderKey(providerId: string): string {
+  return providerId.startsWith(MCODE_CUSTOM_PROVIDER_ID_PREFIX)
+    ? providerId.slice(MCODE_CUSTOM_PROVIDER_ID_PREFIX.length)
+    : providerId;
+}
+
 export interface McodeProviderStatus {
   readonly state: string;
   readonly lastTestedAt?: number;

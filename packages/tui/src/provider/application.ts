@@ -14,7 +14,11 @@ import type {
   McodeRuntimeProviderView,
   McodeUpdateProviderInput,
 } from './contract.js';
-import { MCODE_COPILOT_PROVIDER_ID, isModelProviderApiFormat } from './contract.js';
+import {
+  MCODE_COPILOT_PROVIDER_ID,
+  isModelProviderApiFormat,
+  mcodeCustomProviderKey,
+} from './contract.js';
 
 export class McodeProviderApplication {
   constructor(private readonly port: McodeProviderRuntimePort) {}
@@ -43,7 +47,7 @@ export class McodeProviderApplication {
     // the model roster and the removal path, so showing both would render one
     // connection twice.
     const copilotConfigured = customProviders.some(
-      (provider) => provider.providerId === MCODE_COPILOT_PROVIDER_ID,
+      (provider) => mcodeCustomProviderKey(provider.providerId) === MCODE_COPILOT_PROVIDER_ID,
     );
     return {
       minimaxModelSource,
@@ -221,7 +225,7 @@ function normalizeCustomProvider(
   const apiFormat = isModelProviderApiFormat(provider.apiFormat) ? provider.apiFormat : undefined;
   // The connector's own entry keeps the Copilot identity, so its row reports and
   // starts the sign-in instead of offering the generic custom-row actions.
-  const copilot = provider.providerId === MCODE_COPILOT_PROVIDER_ID;
+  const copilot = mcodeCustomProviderKey(provider.providerId) === MCODE_COPILOT_PROVIDER_ID;
   return {
     providerId: provider.providerId,
     name: provider.name?.trim() || provider.providerId,

@@ -140,9 +140,10 @@ describe('McodeProviderApplication', () => {
       state: 'connected',
       providerId: 'github-copilot',
     });
+    // Runtime hands back the prefixed id, not the bare key the connector writes.
     port.listUserModelProviders.mockResolvedValueOnce([
       {
-        providerId: 'github-copilot',
+        providerId: 'custom_provider:github-copilot',
         name: 'GitHub Copilot',
         kind: 'oauth' as const,
         enabled: true,
@@ -159,7 +160,7 @@ describe('McodeProviderApplication', () => {
     const rows = snapshot.providers.filter((provider) => provider.kind === 'copilot-oauth');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      providerId: 'github-copilot',
+      providerId: 'custom_provider:github-copilot',
       readOnly: true,
       configRevision: 'rev-2',
       status: { state: 'connected' },
