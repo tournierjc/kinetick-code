@@ -14,27 +14,46 @@ import type {
   McodeRuntimeProviderView,
   McodeUpdateProviderInput,
 } from './contract.js';
-import { isModelProviderApiFormat } from './contract.js';
+import { MCODE_COPILOT_PROVIDER_ID, isModelProviderApiFormat } from './contract.js';
 
 export class McodeProviderApplication {
   constructor(private readonly port: McodeProviderRuntimePort) {}
 
   async snapshot(
-    options: { readonly includeCodexOAuth?: boolean } = {},
+    options: {
+      readonly includeCodexOAuth?: boolean;
+      readonly includeCopilotOAuth?: boolean;
+    } = {},
   ): Promise<McodeProviderSnapshot> {
-    const [customProviders, minimaxStatus, minimaxModelSource, codexOAuthStatus] =
-      await Promise.all([
-        this.port.listUserModelProviders(),
-        this.port.getMiniMaxApiKeyStatus(),
-        this.port.getMiniMaxModelSource(),
-        options.includeCodexOAuth ? this.port.getCodexOAuthStatus() : undefined,
-      ]);
+    const [
+      customProviders,
+      minimaxStatus,
+      minimaxModelSource,
+      codexOAuthStatus,
+      copilotOAuthStatus,
+    ] = await Promise.all([
+      this.port.listUserModelProviders(),
+      this.port.getMiniMaxApiKeyStatus(),
+      this.port.getMiniMaxModelSource(),
+      options.includeCodexOAuth ? this.port.getCodexOAuthStatus() : undefined,
+      options.includeCopilotOAuth ? this.port.getCopilotOAuthStatus() : undefined,
+    ]);
+    // The sign-in row exists so a provider with no entry yet can be reached at
+    // all. Once the connector has written one, that entry carries the revision,
+    // the model roster and the removal path, so showing both would render one
+    // connection twice.
+    const copilotConfigured = customProviders.some(
+      (provider) => provider.providerId === MCODE_COPILOT_PROVIDER_ID,
+    );
     return {
       minimaxModelSource,
       providers: [
         ...(!codexOAuthStatus || codexOAuthStatus.state === 'hidden'
           ? []
           : [normalizeCodexOAuthProvider(codexOAuthStatus)]),
+        ...(!copilotConfigured && copilotOAuthStatus && copilotOAuthStatus.state !== 'hidden'
+          ? [normalizeCopilotOAuthProvider(copilotOAuthStatus)]
+          : []),
         {
           providerId: 'minimax_oauth',
           name: 'MiniMax OAuth',
@@ -57,7 +76,7 @@ export class McodeProviderApplication {
           ...(minimaxStatus.cachedStatus ? { status: minimaxStatus.cachedStatus } : {}),
           models: [],
         },
-        ...customProviders.map(normalizeCustomProvider),
+        ...customProviders.map((provider) => normalizeCustomProvider(provider, copilotOAuthStatus)),
       ],
     };
   }
@@ -178,12 +197,35 @@ function normalizeCodexOAuthProvider(status: McodeCodexOAuthStatus): McodeProvid
   };
 }
 
-function normalizeCustomProvider(provider: McodeRuntimeProviderView): McodeProviderView {
+function normalizeCopilotOAuthProvider(status: McodeCopilotOAuthStatus): McodeProviderView {
+  return {
+    providerId: status.providerId,
+    name: 'GitHub Copilot',
+    kind: 'copilot-oauth',
+    active: false,
+    enabled: true,
+    readOnly: true,
+    hasApiKey: false,
+    models: [],
+    status: {
+      state: status.state,
+      ...(status.error ? { lastErrorMessage: status.error } : {}),
+    },
+  };
+}
+
+function normalizeCustomProvider(
+  provider: McodeRuntimeProviderView,
+  copilotOAuthStatus?: McodeCopilotOAuthStatus,
+): McodeProviderView {
   const apiFormat = isModelProviderApiFormat(provider.apiFormat) ? provider.apiFormat : undefined;
+  // The connector's own entry keeps the Copilot identity, so its row reports and
+  // starts the sign-in instead of offering the generic custom-row actions.
+  const copilot = provider.providerId === MCODE_COPILOT_PROVIDER_ID;
   return {
     providerId: provider.providerId,
     name: provider.name?.trim() || provider.providerId,
-    kind: 'custom',
+    kind: copilot ? 'copilot-oauth' : 'custom',
     // A disabled provider is never "in use": Runtime drops it from the model
     // roster (`enabledCustomProviders`) and BYOK resolution refuses it, so a
     // leftover `selected` model must not render as the active source.
@@ -204,7 +246,16 @@ function normalizeCustomProvider(provider: McodeRuntimeProviderView): McodeProvi
       ...(model.selected !== undefined ? { selected: model.selected } : {}),
       ...(model.status ? { status: model.status } : {}),
     })),
-    ...(provider.status ? { status: provider.status } : {}),
+    ...(copilot && copilotOAuthStatus
+      ? {
+          status: {
+            state: copilotOAuthStatus.state,
+            ...(copilotOAuthStatus.error ? { lastErrorMessage: copilotOAuthStatus.error } : {}),
+          },
+        }
+      : provider.status
+        ? { status: provider.status }
+        : {}),
   };
 }
 

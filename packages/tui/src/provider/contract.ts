@@ -11,7 +11,15 @@ export function isModelProviderApiFormat(value: unknown): value is McodeProvider
   return typeof value === 'string' && MCODE_PROVIDER_API_FORMAT_SET.has(value);
 }
 export type McodeMiniMaxModelSource = 'token_plan' | 'minimax_api_key';
-export type McodeProviderKind = 'codex-oauth' | 'minimax-oauth' | 'minimax-api-key' | 'custom';
+export type McodeProviderKind =
+  | 'codex-oauth'
+  | 'copilot-oauth'
+  | 'minimax-oauth'
+  | 'minimax-api-key'
+  | 'custom';
+
+/** Provider key the GitHub Copilot connector writes into `custom_provider`. */
+export const MCODE_COPILOT_PROVIDER_ID = 'github-copilot';
 
 export interface McodeProviderStatus {
   readonly state: string;
