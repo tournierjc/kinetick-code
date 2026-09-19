@@ -32,11 +32,27 @@ describe("TuiRuntimeAdapter product access", () => {
       state: "disconnected",
       providerId: "openai-codex",
     }));
+    const getCopilotOAuthStatus = vi.fn(async () => ({
+      state: "disconnected",
+      providerId: "github-copilot",
+    }));
+    const startCopilotOAuthLogin = vi.fn(async () => ({
+      state: "pending",
+      providerId: "github-copilot",
+      loginId: "attempt-1",
+    }));
+    const cancelCopilotOAuthLogin = vi.fn(async () => ({
+      state: "disconnected",
+      providerId: "github-copilot",
+    }));
     const adapter = new TuiRuntimeAdapter({
       cancelCodexOAuthLogin,
       listProviderPresets,
       getCodexOAuthStatus,
       startCodexOAuthLogin,
+      getCopilotOAuthStatus,
+      startCopilotOAuthLogin,
+      cancelCopilotOAuthLogin,
     } as never);
 
     await expect(adapter.listProviderPresets()).resolves.toEqual([
@@ -61,6 +77,15 @@ describe("TuiRuntimeAdapter product access", () => {
     });
     await adapter.cancelCodexOAuthLogin("attempt-1");
     expect(cancelCodexOAuthLogin).toHaveBeenCalledWith("attempt-1");
+    await expect(adapter.getCopilotOAuthStatus()).resolves.toMatchObject({
+      state: "disconnected",
+    });
+    await expect(adapter.startCopilotOAuthLogin()).resolves.toMatchObject({
+      state: "pending",
+      loginId: "attempt-1",
+    });
+    await adapter.cancelCopilotOAuthLogin("attempt-1");
+    expect(cancelCopilotOAuthLogin).toHaveBeenCalledWith("attempt-1");
   });
 
   it("uses the Runtime startup model projection without saving a global selection", async () => {

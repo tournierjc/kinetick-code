@@ -16,6 +16,18 @@ function createPort() {
       providerId: 'openai-codex' as const,
       authUrl: 'https://auth.openai.example/authorize',
     })),
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: 'hidden' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: 'pending' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: 'disconnected' as const,
+      providerId: 'github-copilot' as const,
+    })),
     listUserModelProviders: vi.fn(async () => [
       {
         providerId: 'custom_provider:openai',
@@ -88,6 +100,72 @@ describe('McodeProviderApplication', () => {
     expect(snapshot.providers).not.toContainEqual(
       expect.objectContaining({ providerId: 'openai-codex' }),
     );
+  });
+
+  it('exposes a disconnected Copilot OAuth row when Runtime makes it visible', async () => {
+    const port = createPort();
+    port.getCopilotOAuthStatus.mockResolvedValueOnce({
+      state: 'disconnected',
+      providerId: 'github-copilot',
+    });
+    const application = new McodeProviderApplication(port);
+
+    const snapshot = await application.snapshot({ includeCopilotOAuth: true });
+
+    expect(snapshot.providers[0]).toMatchObject({
+      providerId: 'github-copilot',
+      name: 'GitHub Copilot',
+      kind: 'copilot-oauth',
+      active: false,
+      enabled: true,
+      readOnly: true,
+      hasApiKey: false,
+      status: { state: 'disconnected' },
+    });
+  });
+
+  it('omits the Copilot OAuth row when Runtime marks it hidden', async () => {
+    const application = new McodeProviderApplication(createPort());
+
+    const snapshot = await application.snapshot({ includeCopilotOAuth: true });
+
+    expect(snapshot.providers).not.toContainEqual(
+      expect.objectContaining({ providerId: 'github-copilot' }),
+    );
+  });
+
+  it('keeps a single Copilot row once the connector has written its entry', async () => {
+    const port = createPort();
+    port.getCopilotOAuthStatus.mockResolvedValueOnce({
+      state: 'connected',
+      providerId: 'github-copilot',
+    });
+    // Runtime hands back the prefixed id, not the bare key the connector writes.
+    port.listUserModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:github-copilot',
+        name: 'GitHub Copilot',
+        kind: 'oauth' as const,
+        enabled: true,
+        hasApiKey: false,
+        configRevision: 'rev-2',
+        models: [{ modelId: 'claude-opus-4.8', displayName: 'Claude Opus 4.8' }],
+      },
+    ]);
+    const application = new McodeProviderApplication(port);
+
+    const snapshot = await application.snapshot({ includeCopilotOAuth: true });
+
+    // A synthetic row here would render the connection the entry already carries.
+    const rows = snapshot.providers.filter((provider) => provider.kind === 'copilot-oauth');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      providerId: 'custom_provider:github-copilot',
+      readOnly: true,
+      configRevision: 'rev-2',
+      status: { state: 'connected' },
+      models: [{ modelId: 'claude-opus-4.8' }],
+    });
   });
 
   it('builds a CLI-owned snapshot without exposing raw API keys', async () => {

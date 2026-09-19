@@ -202,6 +202,43 @@ describe('custom BYOK planning', () => {
       maxTokens: 6,
     });
   });
+
+  it('prefers a model-level wire protocol over the provider default', () => {
+    // One provider can front models that only speak different protocols upstream
+    // (GitHub Copilot: Claude on Messages, GPT-5 on Responses, Gemini on
+    // Completions), so `models.<id>.provider.api` overrides the provider's `api`.
+    const planFor = (rawModel: string) =>
+      planCustomProviderResolution({
+        provider: 'custom_provider:github-copilot',
+        providerKey: 'github-copilot',
+        modelId: 'gpt-5.4',
+        byok: {
+          custom_provider: {
+            'github-copilot': {
+              api: 'openai-completions',
+              kind: 'oauth',
+              options: { baseURL: 'https://api.githubcopilot.com' },
+              models: { 'gpt-5.4': JSON.parse(rawModel) },
+            },
+          },
+        },
+      })?.api;
+
+    expect(planFor('{"provider":{"api":"openai-responses"}}')).toBe('openai-responses');
+    expect(planFor('{"provider":{"api":"anthropic-messages"}}')).toBe('anthropic-messages');
+    // A model that declares no protocol of its own keeps the provider default.
+    expect(planFor('{}')).toBe('openai-completions');
+    expect(planFor('{"provider":{}}')).toBe('openai-completions');
+    // The tree is restored from JSON, so the override may arrive malformed. Only a
+    // recognized protocol switches it; anything else leaves the provider's own api.
+    expect(planFor('{"provider":"openai-responses"}')).toBe('openai-completions');
+    expect(planFor('{"provider":{"api":7}}')).toBe('openai-completions');
+    expect(planFor('{"provider":null}')).toBe('openai-completions');
+    expect(planFor('{"provider":{"api":"not-a-protocol"}}')).toBe('openai-completions');
+    expect(planFor('{"provider":{"api":"openai-codex-responses"}}')).toBe(
+      'openai-codex-responses',
+    );
+  });
 });
 
 describe('BYOK config helpers', () => {

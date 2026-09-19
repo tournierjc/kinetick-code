@@ -90,12 +90,31 @@ export function planCustomProviderResolution(input: {
   const modelCompat = readModelCompat(modelConfig.compat);
   return {
     provider: input.provider,
-    api: resolveCustomProviderApi(config.api),
+    api: resolvePerModelApi(modelConfig.provider) ?? resolveCustomProviderApi(config.api),
     ...credentials,
     ...customProviderLimits(modelConfig),
     ...(configHeaders ? { configHeaders } : {}),
     ...(modelCompat ? { modelCompat } : {}),
   };
+}
+
+/**
+ * Per-model wire protocol, read from `models.<id>.provider.api`.
+ *
+ * A single custom provider can front models that only speak different protocols
+ * upstream (GitHub Copilot serves Claude over Messages and GPT-5 over
+ * Responses), so the provider-level `api` is only the default.
+ *
+ * The subtree is persisted as opaque JSON: an override is honoured only when it
+ * names a protocol this runtime drives. Any other value — absent, wrong type, or
+ * unrecognized — leaves the provider's own `api` in place rather than switching
+ * the model onto a protocol nobody declared.
+ */
+function resolvePerModelApi(provider: unknown): Api | undefined {
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return undefined;
+  const value = (provider as Record<string, unknown>).api;
+  if (typeof value !== 'string') return undefined;
+  return isModelProviderApi(value) || value === 'openai-codex-responses' ? value : undefined;
 }
 
 function resolveCustomProviderCredentials(
