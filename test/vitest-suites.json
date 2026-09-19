@@ -30,6 +30,8 @@
       "packages/tui/test/unit/tui-provider-onboarding.test.ts",
       "packages/tui/test/unit/tui-capability-inspection.test.ts",
       "packages/local-runtime-v2/src/service/model-system/codex-oauth.test.ts",
+      "packages/local-runtime-v2/src/service/model-system/copilot-oauth.test.ts",
+      "packages/local-runtime-v2/src/service/model-system/connectivity/copilot-model-discovery.test.ts",
       "packages/local-runtime-v2/src/service/mcp/project-config.test.ts",
       "packages/local-runtime-v2/test/integration/mcp/local-mcp-public-facade.integration.test.ts",
       "packages/agent-core/test/unit/event-bridge/converters.test.ts",

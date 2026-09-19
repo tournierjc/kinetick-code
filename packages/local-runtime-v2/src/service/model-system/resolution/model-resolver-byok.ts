@@ -90,12 +90,25 @@ export function planCustomProviderResolution(input: {
   const modelCompat = readModelCompat(modelConfig.compat);
   return {
     provider: input.provider,
-    api: resolveCustomProviderApi(config.api),
+    api: resolveCustomProviderApi(readModelApi(modelConfig.provider) ?? config.api),
     ...credentials,
     ...customProviderLimits(modelConfig),
     ...(configHeaders ? { configHeaders } : {}),
     ...(modelCompat ? { modelCompat } : {}),
   };
+}
+
+/**
+ * Per-model wire protocol, read from `models.<id>.provider.api`.
+ *
+ * A single custom provider can front models that only speak different
+ * protocols upstream (GitHub Copilot serves Claude models over Messages and
+ * GPT-5 models over Responses), so the provider-level `api` is only the
+ * default for models that do not declare their own.
+ */
+function readModelApi(provider: unknown): unknown {
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return undefined;
+  return (provider as Record<string, unknown>).api;
 }
 
 function resolveCustomProviderCredentials(
