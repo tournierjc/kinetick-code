@@ -20,6 +20,7 @@ import {
 import { TuiReportInspectionPanel } from '../../features/inspection/report-panel.js';
 import { TuiModelPicker } from '../../features/model/picker.js';
 import { TuiCodexLogin } from '../../features/auth/codex-login.js';
+import { TuiCopilotLogin } from '../../features/auth/copilot-login.js';
 import { TuiProviderManager } from '../../features/provider/manager.js';
 import {
   TuiProviderOnboarding,
@@ -69,7 +70,11 @@ import { TuiModelState } from './model-state.js';
 import { isRuntimeErrorCode, isRuntimeMethodNotImplemented } from '../support.js';
 import { resolveTuiThinkingChoice } from '../../features/model/thinking.js';
 import { McodeProviderApplication } from '../../../provider/application.js';
-import type { McodeCodexOAuthStatus, McodeProviderTemplate } from '../../../provider/contract.js';
+import type {
+  McodeCodexOAuthStatus,
+  McodeCopilotOAuthStatus,
+  McodeProviderTemplate,
+} from '../../../provider/contract.js';
 import { McodePluginApplication } from '../../../plugin/application.js';
 import type { McodePluginRuntimeAccess, McodePluginView } from '../../../plugin/contract.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -156,6 +161,7 @@ export class TuiFeatureFlow {
   private modelPicker: Component | undefined;
   private providerManager: Component | undefined;
   private codexLogin: TuiCodexLogin | undefined;
+  private copilotLogin: TuiCopilotLogin | undefined;
   private providerOnboarding: Component | undefined;
   private transcriptScreen: TuiFeatureScreenHandle | undefined;
   private pluginScreen: TuiFeatureScreenHandle | undefined;
@@ -258,6 +264,7 @@ export class TuiFeatureFlow {
   stop(): void {
     this.stopped = true;
     void this.codexLogin?.cancel();
+    void this.copilotLogin?.cancel();
     this.invalidateFeatureLoads({ includeSkillRefresh: true });
     this.modelState.stop();
     this.setCompacting(false);
@@ -586,8 +593,9 @@ export class TuiFeatureFlow {
     let models: TuiModel[];
     let managedTokenPresent = false;
     let codexOAuthStatus: McodeCodexOAuthStatus;
+    let copilotOAuthStatus: McodeCopilotOAuthStatus;
     try {
-      const [modelCatalog, account, codexStatus] = await Promise.all([
+      const [modelCatalog, account, codexStatus, copilotStatus] = await Promise.all([
         this.options.runtime.listModels(sessionId),
         this.options.runtime.getAccountStatus(sessionId),
         this.options.runtime.getCodexOAuthStatus().catch(
@@ -596,10 +604,17 @@ export class TuiFeatureFlow {
             providerId: 'openai-codex',
           }),
         ),
+        this.options.runtime.getCopilotOAuthStatus().catch(
+          (): McodeCopilotOAuthStatus => ({
+            state: 'hidden',
+            providerId: 'github-copilot',
+          }),
+        ),
       ]);
       models = modelCatalog;
       managedTokenPresent = account.managedTokenPresent === true;
       codexOAuthStatus = codexStatus;
+      copilotOAuthStatus = copilotStatus;
     } catch (error) {
       if (this.isCurrentSessionRequest(sessionId, sessionGeneration, loadSequence)) {
         this.options.append(
@@ -714,6 +729,23 @@ export class TuiFeatureFlow {
                   }
                   this.closeModelPicker();
                   this.showCodexLogin('model');
+                },
+              },
+            }),
+        ...(copilotOAuthStatus.state === 'hidden'
+          ? {}
+          : {
+              copilotOAuth: {
+                state: copilotOAuthStatus.state,
+                onConnect: () => {
+                  if (
+                    this.modelPicker !== picker ||
+                    !this.isCurrentSessionRequest(sessionId, sessionGeneration, loadSequence)
+                  ) {
+                    return;
+                  }
+                  this.closeModelPicker();
+                  this.showCopilotLogin('model');
                 },
               },
             }),
@@ -898,7 +930,7 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.providerLoadSequence;
     let snapshot;
     try {
-      snapshot = await this.providerApplication.snapshot({ includeCodexOAuth: true });
+      snapshot = await this.providerApplication.snapshot({ includeCodexOAuth: true, includeCopilotOAuth: true });
     } catch (error) {
       if (!this.isStopped() && loadSequence === this.providerLoadSequence) {
         this.options.append(
@@ -913,7 +945,7 @@ export class TuiFeatureFlow {
     }
     if (this.isStopped() || loadSequence !== this.providerLoadSequence) return;
     const refresh = async () => {
-      const next = await this.providerApplication.snapshot({ includeCodexOAuth: true });
+      const next = await this.providerApplication.snapshot({ includeCodexOAuth: true, includeCopilotOAuth: true });
       // Await the roster before repainting: disabling a provider drops its
       // models, and a stale status line would keep advertising a model the
       // Runtime no longer resolves.
@@ -928,6 +960,10 @@ export class TuiFeatureFlow {
       onConnectCodex: () => {
         this.closeProviderManager();
         this.showCodexLogin('provider');
+      },
+      onConnectCopilot: () => {
+        this.closeProviderManager();
+        this.showCopilotLogin('provider');
       },
       onRefreshModels: (provider) => this.providerApplication.refreshModels(provider),
       onSaveCustom: (input) => this.providerApplication.saveCandidate(input),
@@ -991,6 +1027,51 @@ export class TuiFeatureFlow {
           'error',
         );
     }
+  }
+
+  private showCopilotLogin(returnTo: 'provider' | 'model'): void {
+    if (this.isStopped()) return;
+    const panel = new TuiCopilotLogin({
+      application: this.providerApplication,
+      openExternalTarget:
+        this.options.openExternalTarget ?? createTuiExternalTargetOpener(this.options.workspaceDir),
+      onConnected: () => {
+        if (this.copilotLogin !== panel || this.isStopped()) return;
+        this.closeCopilotLogin();
+        void this.finishCopilotLogin(returnTo);
+      },
+      onClose: () => this.closeCopilotLogin(),
+      requestRender: this.options.onChanged,
+    });
+    this.copilotLogin = panel;
+    this.options.surface.show(panel);
+    void panel.resume();
+  }
+
+  private async finishCopilotLogin(returnTo: 'provider' | 'model'): Promise<void> {
+    try {
+      await this.modelState.refresh();
+      if (this.isStopped()) return;
+      this.options.controller.refreshStatusMetricsNow();
+      this.options.append('GitHub Copilot connected.');
+      if (returnTo === 'model') await this.showModelPicker('');
+      else await this.showProviderManager();
+    } catch (error) {
+      if (!this.isStopped())
+        this.options.append(
+          formatTuiActionFailure(error, {
+            summary: "Couldn't refresh Copilot models.",
+            nextStep: 'Reopen /model to retry.',
+          }),
+          'error',
+        );
+    }
+  }
+
+  private closeCopilotLogin(): void {
+    const panel = this.copilotLogin;
+    this.copilotLogin = undefined;
+    if (panel) this.options.surface.close(panel);
   }
 
   async showPlugins(initialQuery = ''): Promise<void> {
@@ -1435,6 +1516,7 @@ export class TuiFeatureFlow {
     if (panel === this.modelPicker) this.modelPicker = undefined;
     if (panel === this.providerManager) this.providerManager = undefined;
     if (panel === this.codexLogin) this.codexLogin = undefined;
+    if (panel === this.copilotLogin) this.copilotLogin = undefined;
     if (panel === this.providerOnboarding) this.providerOnboarding = undefined;
   }
 

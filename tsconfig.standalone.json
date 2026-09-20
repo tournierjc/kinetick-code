@@ -232,6 +232,9 @@
       "@mavis/shared/daily-signin": [
         "./packages/shared/src/daily-signin.ts"
       ],
+      "@mavis/shared/egress-guard": [
+        "./packages/shared/src/egress-guard.ts"
+      ],
       "@mavis/shared/eval-meta-info": [
         "./packages/shared/src/eval-meta-info.ts"
       ],

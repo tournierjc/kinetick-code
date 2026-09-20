@@ -125,6 +125,10 @@ Use `mcode init .` to generate or update project guidance in `AGENTS.md`. Descri
 | Headless | `mcode exec [prompt]` | Shell scripts, CI, batch work, and evaluations. |
 | ACP | `mcode acp` | Editors and clients supporting Agent Client Protocol. |
 
+See [harness integration](docs/harness-integration.md) for the `exec` and ACP
+contracts a script, CI job, or client depends on: output formats, exit codes,
+session continuation, and how approvals are answered.
+
 ### Continue your work
 
 ```bash
@@ -150,8 +154,6 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 ## Uninstall
 
 Close running MCode sessions, including editor integrations, before uninstalling. First locate the command with `command -v mcode` (macOS / Linux / WSL) or `Get-Command mcode -All` (PowerShell), then follow the matching installation method below. The current official install scripts do **not** provide an uninstall flag.
-
-### Installed with the script
 
 The commands below remove the default installation directory, including both launchers, downloaded releases, and any installer-managed Node.js runtime. If you used `MCODE_INSTALL_DIR`, substitute the actual installation directory. Inspect it first: earlier source builds used `~/.minimax-code` for user data, and a custom data directory can overlap the installation. Back up any configuration or sessions you want to keep before deleting it.
 
@@ -198,6 +200,15 @@ Remove-Item -LiteralPath "$env:USERPROFILE\.minimax" -Recurse -Force
 ```
 
 A profile uses `~/.minimax-<profile>`; `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can select a different location. Remove only the specific directories you intend to discard, without wildcard deletion. Remove any MCode-specific environment variable assignments you added to shell profiles or user environment settings if you no longer need them.
+
+## Network egress
+
+This fork ships no telemetry and no managed-service client, and it decides every
+outbound connection before opening a socket. By default the MiniMax
+managed-service and reporting hosts are refused; loopback and the model
+endpoints you configured stay reachable. Use `MCODE_EGRESS_MODE=allowlist` to
+reach only loopback, your providers, and `MCODE_ALLOWED_ORIGINS`. See
+[docs/egress-policy.md](docs/egress-policy.md).
 
 ## What you can do
 

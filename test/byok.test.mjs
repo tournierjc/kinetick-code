@@ -275,17 +275,15 @@ test(
       for (const name of proxyNames) assert.equal(isolated[name], "");
       assert.equal(isolated.PATH, environment.PATH);
       const beforeRequests = requests.length;
-      const managedAudit = `${networkAudit}.managed`;
-      const beforeManaged = readFileSync(managedAudit, "utf8").length;
       await run([
         "provider", "test", selected.providerId, "--model", "fixture-model",
       ], environment);
       assert.ok(requests.length > beforeRequests, "The local provider must receive the request");
       assert.equal(requests[beforeRequests].body.model, "fixture-model");
-      assert.match(
-        readFileSync(managedAudit, "utf8").slice(beforeManaged),
-        /https:\/\/models\.dev\/api\.json|\/mavis\/api\/v1\/models-dev\/catalog/,
-      );
+      // Fork adaptation: the default-deny egress guard refuses managed-service
+      // hosts before the offline fixture can log a managed catalog attempt, and
+      // that catalog request is optional (upstream ec38e13). Only the strict
+      // deny-log assertion remains meaningful here.
       assert.equal(existsSync(networkAudit), false, "No outbound network attempt is allowed");
       for (const [name, value] of Object.entries(proxies)) assert.equal(environment[name], value);
     }

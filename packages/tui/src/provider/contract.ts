@@ -13,7 +13,29 @@ export function isModelProviderApiFormat(value: unknown): value is McodeProvider
   return typeof value === 'string' && MCODE_PROVIDER_API_FORMAT_SET.has(value);
 }
 export type McodeMiniMaxModelSource = 'token_plan' | 'minimax_api_key';
-export type McodeProviderKind = 'codex-oauth' | 'minimax-oauth' | 'minimax-api-key' | 'custom';
+export type McodeProviderKind =
+  | 'codex-oauth'
+  | 'copilot-oauth'
+  | 'minimax-oauth'
+  | 'minimax-api-key'
+  | 'custom';
+
+/** Provider key the GitHub Copilot connector writes into `custom_provider`. */
+export const MCODE_COPILOT_PROVIDER_ID = 'github-copilot';
+
+/**
+ * Runtime prefixes the id of every configured provider, so the id a snapshot
+ * receives is not the key the connector writes. Mirrors `CUSTOM_PROVIDER_ID_PREFIX`
+ * in the model system's `resolution/model-key.ts`.
+ */
+const MCODE_CUSTOM_PROVIDER_ID_PREFIX = 'custom_provider:';
+
+/** Reduces a runtime provider id to the key the connector keeps credentials under. */
+export function mcodeCustomProviderKey(providerId: string): string {
+  return providerId.startsWith(MCODE_CUSTOM_PROVIDER_ID_PREFIX)
+    ? providerId.slice(MCODE_CUSTOM_PROVIDER_ID_PREFIX.length)
+    : providerId;
+}
 
 export interface McodeProviderStatus {
   readonly state: string;
@@ -113,6 +135,26 @@ export interface McodeCodexOAuthStartResult extends McodeCodexOAuthStatus {
   readonly authUrl?: string;
 }
 
+export type McodeCopilotOAuthState = 'hidden' | 'disconnected' | 'pending' | 'connected' | 'failed';
+
+/**
+ * GitHub Copilot sign-in is device-code only, so the status carries the code the
+ * account has to enter and nothing to redirect a browser callback to.
+ */
+export interface McodeCopilotOAuthStatus {
+  readonly state: McodeCopilotOAuthState;
+  readonly providerId: 'github-copilot';
+  readonly error?: string;
+  readonly loginId?: string;
+  readonly deviceCode?: {
+    readonly userCode: string;
+    readonly verificationUri: string;
+    readonly expiresAt: number;
+  };
+  /** Models GitHub refuses until the account accepts their terms. */
+  readonly policyOptInRequired?: readonly string[];
+}
+
 export interface McodeCreateProviderInput {
   readonly name?: string;
   readonly baseUrl: string;
@@ -171,6 +213,9 @@ export interface McodeProviderRuntimePort {
   getCodexOAuthStatus(): Promise<McodeCodexOAuthStatus>;
   startCodexOAuthLogin(options?: McodeCodexOAuthLoginOptions): Promise<McodeCodexOAuthStartResult>;
   cancelCodexOAuthLogin(loginId: string): Promise<McodeCodexOAuthStatus>;
+  getCopilotOAuthStatus(): Promise<McodeCopilotOAuthStatus>;
+  startCopilotOAuthLogin(): Promise<McodeCopilotOAuthStatus>;
+  cancelCopilotOAuthLogin(loginId: string): Promise<McodeCopilotOAuthStatus>;
   listUserModelProviders(): Promise<readonly McodeRuntimeProviderView[]>;
   getMiniMaxApiKeyStatus(): Promise<{
     readonly hasApiKey: boolean;

@@ -8,6 +8,7 @@ import type {
   LocalModelConfig,
   LocalModelsConfig,
 } from '../contracts.js';
+import { providerFamilyForLookup, type ProviderFamily } from '../catalog/provider-families.js';
 import { mergeProviderHeaders } from '../connectivity/provider-request.js';
 import {
   isModelProviderApi,
@@ -87,15 +88,64 @@ export function planCustomProviderResolution(input: {
     readStringRecord(config.options?.headers),
     readStringRecord(modelConfig.headers),
   );
-  const modelCompat = readModelCompat(modelConfig.compat);
+  const modelCompat = withProviderFamilyCompat(
+    readModelCompat(modelConfig.compat),
+    providerFamilyForLookup({
+      providerId: input.providerKey,
+      baseUrl: config.options?.baseURL,
+      modelId: input.modelId,
+    }),
+  );
   return {
     provider: input.provider,
-    api: resolveCustomProviderApi(config.api),
+    api: resolvePerModelApi(modelConfig.provider) ?? resolveCustomProviderApi(config.api),
     ...credentials,
     ...customProviderLimits(modelConfig),
     ...(configHeaders ? { configHeaders } : {}),
     ...(modelCompat ? { modelCompat } : {}),
   };
+}
+
+/**
+ * Applies the thinking shape of the endpoint this provider belongs to.
+ *
+ * A generic `openai-completions` request carries a bare `reasoning_effort`, but
+ * an endpoint that takes a `thinking` object needs that object to express either
+ * direction. The family supplies the shape; a model that declares its own
+ * `thinkingFormat` keeps it, because configuration outranks the family, as
+ * everywhere else in this file.
+ */
+function withProviderFamilyCompat(
+  declared: LocalModelCompatOverrides | undefined,
+  family: ProviderFamily | undefined,
+): LocalModelCompatOverrides | undefined {
+  if (!family?.thinkingFormat || declared?.thinkingFormat) return declared;
+  // `supportsReasoningEffort` stays on: the family changes how the switch and the
+  // level are spelled, not whether the level is sent at all.
+  return {
+    ...(declared ?? {}),
+    thinkingFormat: family.thinkingFormat,
+    supportsReasoningEffort: true,
+  };
+}
+
+/**
+ * Per-model wire protocol, read from `models.<id>.provider.api`.
+ *
+ * A single custom provider can front models that only speak different protocols
+ * upstream (GitHub Copilot serves Claude over Messages and GPT-5 over
+ * Responses), so the provider-level `api` is only the default.
+ *
+ * The subtree is persisted as opaque JSON: an override is honoured only when it
+ * names a protocol this runtime drives. Any other value — absent, wrong type, or
+ * unrecognized — leaves the provider's own `api` in place rather than switching
+ * the model onto a protocol nobody declared.
+ */
+function resolvePerModelApi(provider: unknown): Api | undefined {
+  if (!provider || typeof provider !== 'object' || Array.isArray(provider)) return undefined;
+  const value = (provider as Record<string, unknown>).api;
+  if (typeof value !== 'string') return undefined;
+  return isModelProviderApi(value) || value === 'openai-codex-responses' ? value : undefined;
 }
 
 function resolveCustomProviderCredentials(
