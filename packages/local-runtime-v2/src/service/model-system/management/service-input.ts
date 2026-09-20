@@ -128,6 +128,9 @@ function modelFromInput(
   const nextModel: LocalModelConfig = {
     ...existing,
     ...modelMetadataFields(model),
+    ...(model.capabilities
+      ? { capabilities: { ...existing?.capabilities, ...model.capabilities } }
+      : {}),
     ...modelReasoningFields(model, effortOptions, defaultThinkingConfig),
     ...modelThinkingConfigFields(model, defaultThinkingConfig),
     ...modelEffortFields(effortOptions),
