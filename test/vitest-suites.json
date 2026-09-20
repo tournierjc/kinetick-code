@@ -7,6 +7,7 @@
       "packages/agent-tools/src/shared/replace-all-edit.test.ts",
       "packages/local-runtime-v2/test/unit/agent/agent-import.test.ts",
       "packages/tui/test/unit/auth-application.test.ts",
+      "packages/tui/test/unit/tui-assistant-content.test.ts",
       "packages/tui/test/unit/auth-session.test.ts",
       "packages/tui/test/unit/cli-auth-command.test.ts",
       "packages/tui/test/unit/network-proxy.test.ts",
@@ -143,8 +144,14 @@
       "packages/tui/test/unit/tui/controller/product/feature-flow.test.ts",
       "packages/tui/test/unit/tui/features/settings/hotkeys-picker.test.ts",
       "packages/config/test/config-file-permissions.test.ts",
+      "packages/config/test/config-update-preservation.test.ts",
       "packages/agent-modules/context-manager/test/compaction-usage.test.ts",
       "packages/local-runtime/test/unit/session-diff-fallback.test.ts",
+      "test/history-processing.test.ts",
+      "packages/tui/test/unit/tui-feature-viewport-contract.test.ts",
+      "packages/tui/test/unit/tui-session-history-flow.test.ts",
+      "packages/tui/test/unit/tui-session-mutation-panels.test.ts",
+      "packages/tui/test/unit/tui-surface-host.test.ts",
       "packages/tui/test/unit/egress-guard.test.ts"
     ],
     "status-contract": [

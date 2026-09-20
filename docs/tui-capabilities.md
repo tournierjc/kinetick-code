@@ -22,6 +22,21 @@ The evidence column summarizes the historical TUI 0.3.11 restoration record from
 | Files, shell, subagents, sessions, headless, ACP | Actual runtime retained | BYOK, file reads, session resume, ACP, sandbox, and status protocol tests |
 | Built-in skills, MCP, plugin tools | Original TUI assets and activation conditions retained | Asset build, plugin, and MCP tests; no claim that every skill has passed a real task |
 
+## ACP Skill commands
+
+ACP clients receive enabled Skills alongside built-in slash commands when a session
+is created, loaded, resumed, or forked. Discovery uses the session's Agent and
+workspace, including installed plugin Skills. Command names come from the runtime
+Skill roster (for example, `/review` or `/plugin:review`), not the installation
+package name. Select a command and append instructions to invoke it through the
+normal Agent turn. `/skills [filter]` lists the session's available Skills.
+
+Built-in command names take priority over conflicting Skill names. Disabled,
+duplicate, and invalid command names are omitted. If Skill discovery fails,
+built-in commands remain available. Reopen the session after installing or enabling
+Skills to refresh its command menu. Protocol tests cover command discovery and
+prompt forwarding; this does not establish live Zed or model acceptance.
+
 ## Desktop boundary
 
 Background workspace indexing is removed from this distribution. Runtime startup and conversation turns do not collect workspace snapshots, create workspace ZIP archives, or upload/retry them for cloud indexing. The semantic workspace search tool and its enablement policy are also removed; a saved indexing preference cannot reactivate them. Existing indexing records are left inert. User-directed file reading, search, and Git operations remain available.
@@ -65,3 +80,16 @@ the configured default. Omitting `--model` preserves existing startup behavior.
 The untargeted `--session` picker cannot be combined with `--model`; provide an ID
 or use `--continue` instead. If opening or continuing a Session fails, the override
 and initial prompt are not applied.
+
+## Feature panels and chat restoration
+
+In regular mode, independent feature panels occupy the complete visible terminal
+area, including short Rewind previews and scope pickers. Closing a panel restores
+the current conversation. When running content shrinks across the native scrolling
+boundary, the renderer reconstructs the current session to fill the viewport and
+keep its history unique. This reconstruction clears earlier shell scrollback;
+ordinary updates keep native scrolling and selection behavior.
+
+Rewind and Fork history-loading hints disappear as soon as their lists are ready.
+Returning from a cancelled operation must not leave a stale loading message in the
+Composer. Rewind displays its completed result after a successful operation.
