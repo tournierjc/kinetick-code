@@ -697,6 +697,27 @@ export class CliService {
     ).cancelCodexOAuthLogin(loginId);
   }
 
+  getCopilotOAuthStatus() {
+    return this.requireCapability(
+      "modelProviders",
+      "Model Provider",
+    ).getCopilotOAuthStatus();
+  }
+
+  startCopilotOAuthLogin() {
+    return this.requireCapability(
+      "modelProviders",
+      "Model Provider",
+    ).startCopilotOAuthLogin();
+  }
+
+  cancelCopilotOAuthLogin(loginId: string) {
+    return this.requireCapability(
+      "modelProviders",
+      "Model Provider",
+    ).cancelCopilotOAuthLogin(loginId);
+  }
+
   getMiniMaxApiKeyStatus() {
     return this.requireCapability(
       "modelProviders",

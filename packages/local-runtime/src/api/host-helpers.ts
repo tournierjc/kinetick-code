@@ -34,7 +34,6 @@ import { logger } from "../common/logger.js";
 import type { MetricsClient } from "../common/metrics.js";
 import type { LocalRuntimeConfig } from "../config/types.js";
 import type { LocalConfigUpdateResult } from "../config/update.js";
-import type { DesktopErrorReporter } from "../error-reporting/index.js";
 import type { LocalEvalReporterFactoryLike } from "../eval/types.js";
 import type { GlobalEventPublisher } from "../events/global-events.js";
 import type { LocalHookService } from "../hooks/api.js";
@@ -148,7 +147,6 @@ export interface LocalRuntimeApiHostOptions {
   /** Electron: pass `net.fetch` for VPN proxy / enterprise CA trust. */
   fetchImpl?: typeof fetch;
   /** Process-level desktop error reporter, shut down by API Host and exposed to v2 through a narrow callback. */
-  errorReporter?: DesktopErrorReporter;
   /** Failure callback shared with the v1 runner and supplied to v2. */
   llmRequestFailureHook?: PiLLMRequestFailureHook;
   bashCompletionCorrelation?: {

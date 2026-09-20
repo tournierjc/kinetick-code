@@ -267,6 +267,31 @@ describe('models.dev Provider Presets', () => {
     ]);
   });
 
+  it('resolves an aggregator package through its provider family', async () => {
+    const presets = await parsePresetsForTest({
+      openrouter: {
+        name: 'OpenRouter',
+        npm: '@openrouter/ai-sdk-provider',
+        api: 'https://openrouter.ai/api/v1',
+        models: { 'openai/gpt-5-mini': { name: 'GPT-5 mini', tool_call: true } },
+      },
+      // A package no family knows is still dropped rather than guessed at.
+      unsupported: {
+        name: 'Unsupported',
+        npm: '@ai-sdk/google',
+        api: 'https://google.example',
+        models: { model: { tool_call: true } },
+      },
+    });
+
+    expect(presets.map((preset) => preset.providerId)).toEqual(['openrouter']);
+    expect(presets[0]).toMatchObject({
+      providerId: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiFormat: 'openai-completions',
+    });
+  });
+
   it('keeps non-native transports only when they declare an API base', async () => {
     const presets = await parsePresetsForTest({
       meta: {

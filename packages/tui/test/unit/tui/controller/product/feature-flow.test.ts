@@ -91,6 +91,18 @@ function createHarness(
       providerId: "openai-codex" as const,
       authUrl: "https://auth.openai.example/authorize",
     })),
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: "hidden" as const,
+      providerId: "github-copilot" as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: "disconnected" as const,
+      providerId: "github-copilot" as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: "pending" as const,
+      providerId: "github-copilot" as const,
+    })),
     listUserModelProviders: vi.fn(async () => []),
     getMiniMaxApiKeyStatus: vi.fn(async () => ({ hasApiKey: false })),
     getMiniMaxModelSource: vi.fn(async () => "token_plan" as const),
@@ -641,6 +653,42 @@ describe("TuiFeatureFlow", () => {
     expect(rendered).toContain("DeepSeek · 1");
     expect(rendered).toContain("deepseek-v4-pro");
     expect(rendered).not.toContain("MiniMax-M3");
+  });
+
+  it("keeps the independent Copilot OAuth entry visible from /model", async () => {
+    const openExternalTarget = vi.fn(async () => undefined);
+    const harness = createHarness({ openExternalTarget });
+    harness.runtime.listModels.mockResolvedValue([
+      {
+        providerId: "custom_provider:mafia-openai",
+        providerName: "Mafia OpenAI Models",
+        modelId: "codex-auto-review",
+        displayName: "Codex Auto Review",
+      },
+    ]);
+    // Only Copilot is offered, so the provider group is [+ Add, Connect Copilot].
+    harness.runtime.getCodexOAuthStatus.mockResolvedValue({
+      state: "hidden",
+      providerId: "openai-codex",
+    });
+    harness.runtime.getCopilotOAuthStatus.mockResolvedValue({
+      state: "disconnected",
+      providerId: "github-copilot",
+    });
+
+    await harness.flow.showModelPicker("code");
+
+    const picker = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    expect(stripAnsi(picker.render(90).join("\n"))).toContain("Connect GitHub Copilot");
+    picker.handleInput("\u001b[B");
+    picker.handleInput("\u001b[B");
+    picker.handleInput("\r");
+
+    await vi.waitFor(() => expect(harness.shown).toHaveLength(2));
+    expect(harness.runtime.startCopilotOAuthLogin).toHaveBeenCalledOnce();
   });
 
   it("keeps the independent Codex OAuth entry visible from /model", async () => {

@@ -6,10 +6,6 @@ import type { LocalRuntimeConfig } from "../config/types.js";
 import { logger } from "../common/logger.js";
 import type { MetricsClient } from "../common/metrics.js";
 import { LocalEvalReporterFactory } from "../eval/reporter.js";
-import {
-  createDesktopErrorReporter,
-  createLLMFailureReportHook,
-} from "../error-reporting/index.js";
 import { LocalSkillHubStore } from "../skills/hub-api.js";
 import type { AgentReferenceResolver } from "../agent/port.js";
 import type { LocalAgentRuntimePort } from "../agent/runtime-port.js";
@@ -95,14 +91,6 @@ export function createLocalRuntimeHost(
   const evalReporterFactory = options.evalCapture
     ? new LocalEvalReporterFactory(options.evalCapture)
     : undefined;
-  const errorReporter = createDesktopErrorReporter({
-    ...(options.authContextGetter ? { authContextGetter: options.authContextGetter } : {}),
-    ...(options.routingContextGetter ? { routingContextGetter: options.routingContextGetter } : {}),
-    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-  });
-  const llmRequestFailureHook = createLLMFailureReportHook(errorReporter, {
-    ...(options.appVersion ? { appVersion: options.appVersion } : {}),
-  });
   const bashCompletionCorrelation = new LocalBashCompletionCorrelation(
     metricsClient,
   );
@@ -157,8 +145,6 @@ export function createLocalRuntimeHost(
     routingContextGetter: options.routingContextGetter,
     metricsClient,
     fetchImpl: options.fetchImpl,
-    errorReporter,
-    llmRequestFailureHook,
     observeLLMRequest: bashCompletionCorrelation.observeLLMRequest,
     ...(evalReporterFactory ? { evalReporterFactory } : {}),
     assertTurnStartAllowed: () => assertConversationUnavailable("turn-start"),
@@ -201,8 +187,6 @@ export function createLocalRuntimeHost(
     routingContextGetter: options.routingContextGetter,
     isContextWindowUsageEnabled: options.isContextWindowUsageEnabled,
     fetchImpl: options.fetchImpl,
-    errorReporter,
-    llmRequestFailureHook,
     bashCompletionCorrelation,
     configUpdater: options.configUpdater,
     hostDiagnosticsProvider: options.hostDiagnosticsProvider,

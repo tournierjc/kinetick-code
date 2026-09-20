@@ -11,7 +11,6 @@ import type {
 } from '@mavis/agent-core/pi-turn-runner';
 import type { MetricsClient } from '../common/metrics.js';
 import type { LocalEvalReporterFactoryLike } from '../eval/types.js';
-import type { DesktopErrorReporter } from '../error-reporting/index.js';
 import type { ContextUsageToolCalibration } from '../context/context-usage-calibration.js';
 import type { LocalRuntimeAuthContext } from '../runtime/model-resolver.js';
 import type { LocalRuntimeRoutingContext } from '../runtime/routing-headers.js';
@@ -208,7 +207,6 @@ export interface LocalSessionControllerOptions {
    */
   fetchImpl?: typeof fetch;
   /** Desktop error reporter shared by the default v1 runner and v2 managed runner. */
-  errorReporter?: DesktopErrorReporter;
   /** Process-level failure callback used by the default v1 runner. */
   llmRequestFailureHook?: PiLLMRequestFailureHook;
   /** Host-owned observer for each physical LLM request lifecycle. */
@@ -256,7 +254,6 @@ export class LocalSessionController {
             routingContextGetter: options.routingContextGetter,
             ...(options.metricsClient ? { metricsClient: options.metricsClient } : {}),
             fetchImpl: options.fetchImpl,
-            ...(options.errorReporter ? { errorReporter: options.errorReporter } : {}),
             ...(options.llmRequestFailureHook
               ? { llmRequestFailureHook: options.llmRequestFailureHook }
               : {}),
