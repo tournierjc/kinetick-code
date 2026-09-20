@@ -98,8 +98,6 @@ mcode
 
 Supported API formats: `openai-completions`, `openai-responses`, and `anthropic-messages`. See the [model examples](docs/examples.md#2-choose-your-own-model) for environment variable setup, connection checks, and model overrides for a single run.
 
-Providers added this way are stored under `custom_provider` in the active profile's `config.yaml`; this is the supported path for third-party or self-hosted endpoints, while `minimax_api` stays reserved for the official MiniMax API. Relays that require `Authorization: Bearer` on an Anthropic-compatible endpoint can set custom headers in `config.yaml`; see [Third-party relays and custom auth headers](docs/examples.md#third-party-relays-and-custom-auth-headers).
-
 </details>
 
 ### 3. Run your first task
@@ -155,6 +153,8 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 
 Close running MCode sessions, including editor integrations, before uninstalling. First locate the command with `command -v mcode` (macOS / Linux / WSL) or `Get-Command mcode -All` (PowerShell), then follow the matching installation method below. The current official install scripts do **not** provide an uninstall flag.
 
+### Installed with the script
+
 The commands below remove the default installation directory, including both launchers, downloaded releases, and any installer-managed Node.js runtime. If you used `MCODE_INSTALL_DIR`, substitute the actual installation directory. Inspect it first: earlier source builds used `~/.minimax-code` for user data, and a custom data directory can overlap the installation. Back up any configuration or sessions you want to keep before deleting it.
 
 **macOS / Linux / WSL**
@@ -209,7 +209,6 @@ managed-service and reporting hosts are refused; loopback and the model
 endpoints you configured stay reachable. Use `MCODE_EGRESS_MODE=allowlist` to
 reach only loopback, your providers, and `MCODE_ALLOWED_ORIGINS`. See
 [docs/egress-policy.md](docs/egress-policy.md).
-
 ## What you can do
 
 | Task | Capabilities |
