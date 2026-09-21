@@ -86,10 +86,31 @@ and initial prompt are not applied.
 In regular mode, independent feature panels occupy the complete visible terminal
 area, including short Rewind previews and scope pickers. Closing a panel restores
 the current conversation. When running content shrinks across the native scrolling
-boundary, the renderer reconstructs the current session to fill the viewport and
-keep its history unique. This reconstruction clears earlier shell scrollback;
+boundary, or history refresh changes text already in scrollback, the renderer
+reconstructs the current session to fill the viewport and keep its history unique. This reconstruction clears earlier shell scrollback;
 ordinary updates keep native scrolling and selection behavior.
 
 Rewind and Fork history-loading hints disappear as soon as their lists are ready.
 Returning from a cancelled operation must not leave a stale loading message in the
 Composer. Rewind displays its completed result after a successful operation.
+
+## Temporary side conversations
+
+Use `/btw [question]` (or `/side [question]`) to open a temporary side conversation
+while the main task continues. The side conversation inherits the latest complete
+prefix of persisted history. Completed tool calls retain all their results; an
+unfinished group of tool calls is excluded together. The selected boundary is
+fixed before creation, so later main-task output does not change that fork.
+Inherited tool calls are context and are not executed again.
+
+Press `Ctrl+/` to switch between the main and side views, or `/parent` to return
+to the main view. Press `Ctrl+C` on an empty Composer to discard the side
+conversation. Side conversations retain the main session's permission mode and
+remain hidden from `/sessions` and `/resume`.
+
+Creation and activation failures record a bounded, redacted cause chain in the
+local `session.side.failed` diagnostic event. Feedback uploads still apply the
+existing diagnostic-counts projection; raw error text, stacks and session IDs
+are not added to the uploaded ZIP. Offline tests cover persisted tool histories,
+archives, concurrent parent output, side-session cleanup and local diagnostics;
+this does not establish native-terminal or live-model acceptance.
