@@ -412,6 +412,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     onRetryRestored: (submission) => commandFlow?.restoreRecoverableSubmission(submission),
   });
   sessionFlow = new TuiSessionFlow({
+    observability: options.observability,
     runtime: options.runtime,
     controller,
     stateStore,
