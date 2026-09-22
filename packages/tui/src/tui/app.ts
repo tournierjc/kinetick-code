@@ -49,11 +49,14 @@ import { parseTuiStatusLineItems as parseStatusItems } from './shell/status-line
 import { showTuiStatusLineSetup } from './controller/product/status-line-setup.js';
 import { TuiCodexHandoffFlow } from './controller/product/codex-handoff-flow.js';
 import {
+  resolveTuiSessionTabGroupRefs,
+  resolveTuiSessionTabGroups,
   resolveTuiSessionTabStatus,
   resolveTuiSessionTabs,
   TuiSessionTabs,
 } from './shell/session-tabs.js';
 import { selectSessionView } from './state/selectors.js';
+import { applyingTuiTabGroupCollapse } from './state/tabs.js';
 
 export type { CreateTuiAppOptions, TuiApp, TuiStopOptions };
 export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
@@ -164,13 +167,27 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
   const sessionTabs = new TuiSessionTabs({
     tabs: () => {
       const state = stateStore.snapshot();
-      return resolveTuiSessionTabs({
+      const catalog = controller.snapshot().sessions;
+      const tabs = resolveTuiSessionTabs({
         order: state.tabs.order,
         activeSessionId: state.activeSessionId,
-        catalog: controller.snapshot().sessions,
-        statusOf: (sessionId) =>
-          resolveTuiSessionTabStatus(selectSessionView(state, sessionId)),
+        catalog,
+        statusOf: (sessionId) => resolveTuiSessionTabStatus(selectSessionView(state, sessionId)),
       });
+      if (!state.tabs.grouped) return { tabs };
+      const refs = resolveTuiSessionTabGroupRefs(catalog);
+      const activeGroupKey = state.activeSessionId
+        ? refs.get(state.activeSessionId)?.key
+        : undefined;
+      const groups = resolveTuiSessionTabGroups({
+        tabs,
+        groupOf: (sessionId) => refs.get(sessionId),
+        collapsedGroups: applyingTuiTabGroupCollapse(
+          state.tabs.collapsedGroups,
+          activeGroupKey,
+        ),
+      });
+      return groups ? { tabs, groups } : { tabs };
     },
   });
   const { layout, surfaceHost, fullscreenLayout, themeRendering, interactionSurface } =
@@ -637,6 +654,10 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     cycleSessionTab: (delta) => sessionFlow.cycleTab(delta),
     selectSessionTab: (slot) => sessionFlow.activateTabSlot(slot),
     closeSessionTab: () => sessionFlow.closeTab(),
+    renameSessionTab: () => sessionFlow.renameTab(),
+    toggleSessionTabGrouping: () =>
+      sessionFlow.setTabGrouping(!stateStore.snapshot().tabs.grouped),
+    toggleSessionTabCollapse: () => sessionFlow.toggleTabGroupCollapse(),
     closeSideConversation: (exitReason) => sessionFlow.closeSideConversation(exitReason),
     requestProcessSuspend: options.requestProcessSuspend,
     keybindings: options.keybindings,

@@ -1,5 +1,10 @@
 import type { TuiAction, TuiEffect } from './actions.js';
-import { closeTuiTab, openTuiTab } from './tabs.js';
+import {
+  closeTuiTab,
+  openTuiTab,
+  setTuiTabGrouping,
+  toggleTuiTabGroupCollapsed,
+} from './tabs.js';
 import {
   createTuiSessionView,
   type TuiBackgroundTaskState,
@@ -33,7 +38,7 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
       }),
       {
         activeSessionId: action.sessionId,
-        tabs: { order: openTuiTab(state.tabs.order, action.sessionId) },
+        tabs: { ...state.tabs, order: openTuiTab(state.tabs.order, action.sessionId) },
       },
     );
   }
@@ -41,7 +46,7 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
   if (action.type === 'tabs/open') {
     const order = openTuiTab(state.tabs.order, action.sessionId);
     if (order === state.tabs.order) return { state, effects: [] };
-    return { state: { ...state, tabs: { order } }, effects: [] };
+    return { state: { ...state, tabs: { ...state.tabs, order } }, effects: [] };
   }
   if (action.type === 'tabs/close') {
     // The active Session is always an open tab: the caller activates a
@@ -49,7 +54,15 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
     if (action.sessionId === state.activeSessionId) return { state, effects: [] };
     const order = closeTuiTab(state.tabs.order, action.sessionId);
     if (order === state.tabs.order) return { state, effects: [] };
-    return { state: { ...state, tabs: { order } }, effects: [] };
+    return { state: { ...state, tabs: { ...state.tabs, order } }, effects: [] };
+  }
+  if (action.type === 'tabs/toggleGrouping') {
+    const tabs = setTuiTabGrouping(state.tabs, action.grouped);
+    if (tabs === state.tabs) return { state, effects: [] };
+    return { state: { ...state, tabs }, effects: [] };
+  }
+  if (action.type === 'tabs/toggleGroup') {
+    return { state: { ...state, tabs: toggleTuiTabGroupCollapsed(state.tabs, action.groupKey) }, effects: [] };
   }
 
   if (action.type === 'interaction/permissionReceived') {
