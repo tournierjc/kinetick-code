@@ -27,13 +27,17 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    to `main`. Never push `main` directly and never move a distributed tag.
    `gh` must be authenticated as the fork owner (`gh auth status`); pushes go
    through the gh git-credential helper — no tokens embedded in remotes.
-4. **Version numbering.** Keep the upstream `X.Y.Z` core so synchronization stays
-   traceable (a fork release of upstream 0.5.x is `0.5.x` if the tree matches, or
-   the next patch). When a fork release carries fork-only changes on top of an
-   already-released core, add a fork prerelease suffix instead of stealing the
-   upstream number: `v0.5.1-fork.1` (tags like this create GitHub *prereleases*
-   and the release tooling accepts them). Never reuse an upstream version number
-   for a tree that differs from upstream at that version.
+4. **Version numbering.** Every fork release carries the `-fork.N` prerelease
+   suffix: tag `v<X.Y.Z>-fork.N`, where `X.Y.Z` is the upstream core the merged
+   tree is based on and `N` increments per fork release on that core
+   (`v0.5.1-fork.1`, then `v0.5.1-fork.2`; upstream 0.5.2 sync restarts at
+   `v0.5.2-fork.1`). The fork tree always differs from upstream at any given
+   core — the egress guard, telemetry removal, and fork docs are fork-only — so
+   a bare upstream number is never valid here. A `-fork.N` tag creates a GitHub
+   *prerelease* and the release tooling accepts it; the bare `v<X.Y.Z>` form is
+   reserved for a deliberate stable promotion without fork-only changes.
+   Never reuse an upstream version number for a tree that differs from upstream
+   at that version.
 5. **CI and publication.** The tag triggers the `CLI release` workflow: full
    `pnpm verify` + gitleaks scans, one `minimax-code-X.Y.Z.tar.gz` archive, then
    install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26). Only if
