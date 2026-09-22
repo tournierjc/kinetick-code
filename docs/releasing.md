@@ -31,11 +31,12 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    suffix: tag `v<X.Y.Z>-fork.N`, where `X.Y.Z` is the upstream core the merged
    tree is based on and `N` increments per fork release on that core
    (`v0.5.2-fork.1`, then `v0.5.2-fork.2`; upstream 0.5.3 sync restarts at
-   `v0.5.3-fork.1`). Because the release tool requires strictly increasing
-   versions, the core of a fork release is the upstream core **one patch
-   ahead** of the last released upstream number (first fork release on
-   upstream 0.5.1 is `v0.5.2-fork.1`, since plain SemVer orders
-   `0.5.1-fork.1` *below* `0.5.1`). The fork tree always differs from
+   `v0.5.3-fork.1`). `release:cli` accepts a same-core `-fork.N` version even
+   though plain SemVer orders it below the bare core (the version gate exempts
+   `X.Y.Z-fork.N` when `X.Y.Z` is the committed source version, as long as `N`
+   exceeds every existing `-fork.N` tag of that core, local and on origin). So
+   the first fork release on upstream 0.5.1 is `v0.5.1-fork.1`, cut from a tree
+   whose `package.json` reads `0.5.1`. The fork tree always differs from
    upstream at any given core — the egress guard, telemetry removal, and
    fork docs are fork-only — so a bare upstream number is never valid
    here. A `-fork.N` tag creates a GitHub
