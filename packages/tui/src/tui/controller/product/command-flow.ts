@@ -67,6 +67,7 @@ export interface TuiCommandFlowOptions {
     TuiSessionMutationFlow,
     | 'startHistory'
     | 'startFork'
+    | 'startClone'
     | 'startRewind'
     | 'startEdit'
     | 'isEditing'
@@ -1110,6 +1111,15 @@ export class TuiCommandFlow {
       },
       fork: () => {
         this.options.sessionMutationFlow.startFork();
+      },
+      clone: () => {
+        if (this.options.interactionFlow.hasPending()) {
+          this.options.setHint(sessionMutationText('sessionMutation.error.pendingInteraction'));
+          this.options.interactionFlow.showPending();
+          this.options.onChanged();
+          return 'retained';
+        }
+        this.options.sessionMutationFlow.startClone();
       },
       rewind: () => {
         if (this.options.interactionFlow.hasPending()) {

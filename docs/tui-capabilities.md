@@ -166,3 +166,24 @@ so a background tab shows `unread` but does not keep streaming. Offline tests
 cover the tab reducer, the bar rendering at narrow widths, the key bindings and
 the switch/close ordering; a background tab that keeps streaming is not
 implemented yet.
+
+## Copying a Session
+
+`/clone` copies the visible Session into a new Session that holds the same
+conversation, then opens the copy as another tab. The copy starts from the latest
+complete reply: it is a `/fork` with the boundary chosen for you, so no prompt
+picker appears. The confirmation card names the suggested title and states what
+the copy includes.
+
+The source Session and its files are untouched — the runtime writes a new
+Session, copies the display history, assets, plan and permission rules, and
+leaves the original in place with its own tab. Like `/fork`, the command needs a
+settled turn: during a run it keeps the draft and asks you to stop the turn
+first, and it is refused while a permission or question request is waiting. The
+runtime's suggested title names the copy, so repeated copies of one Session stay
+distinguishable in `/sessions`. Offline tests cover the request the command
+sends, the confirmation card in both modes, the running-turn guard and the
+unavailable reason; whether the clone keeps MCP connections and queued messages
+is not covered.
+
+
