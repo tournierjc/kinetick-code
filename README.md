@@ -6,8 +6,17 @@
   </picture>
 </p>
 
-<h1 align="center">MiniMax Code</h1>
+<h1 align="center">MiniMax Code (fork)</h1>
 <p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
+
+> [!IMPORTANT]
+> **This is a community fork of [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code)** maintained at
+> [`tournierjc/minimax-code`](https://github.com/tournierjc/minimax-code). It merges upstream regularly and enforces
+> fork-specific boundaries (no telemetry, no managed-service clients — see [Network egress](#network-egress)).
+> The official `filecdn.minimax.chat` one-command installer and the public `@minimax-ai/code` npm package deliver
+> **upstream** builds — they do not contain this fork's changes. To run this fork, install the verified archive from
+> [fork Releases](https://github.com/tournierjc/minimax-code/releases) or build from this source. See
+> [docs/fork-release-process.md](docs/fork-release-process.md) for how releases are produced.
 <p align="center">
   <a href="#quick-start">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -31,29 +40,34 @@ Understand a project, make changes, and run tests from your terminal. Use your M
 
 ### 1. Install MCode
 
-Use the official installer for your platform. It installs the latest CLI, prepares a compatible Node.js runtime when needed, and does not require `sudo` or administrator privileges. Alpine / musl Linux is not supported by the one-command installer.
-
-**macOS / Linux / WSL**
-
-```bash
-curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash
-```
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://filecdn.minimax.chat/public/install.ps1 | iex
-```
-
-The scripts install into `~/.minimax-code` on macOS / Linux / WSL and `%USERPROFILE%\.minimax-code` on Windows. The launchers are `bin/mcode` and `bin/mcode-tools` on POSIX, or `mcode.cmd` / `mcode.ps1` and `mcode-tools.cmd` / `mcode-tools.ps1` on Windows. Set `MCODE_INSTALL_DIR` before installation to choose a different location. See [Uninstall](#uninstall) to remove the CLI.
-
-**npm** — if you already have **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**:
+**This fork — GitHub Release archive (recommended).** Download the archive and checksum from the
+[latest fork release](https://github.com/tournierjc/minimax-code/releases/latest), verify the checksum, and install
+with npm. Node.js **22.19+ (22.x), 24.2+ (24.x), 25, or 26** is required; npm still needs network access to public
+npm for runtime dependencies. For example, for a `v0.5.1-fork.1` release:
 
 ```bash
-npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
+# Linux; on macOS use: shasum -a 256 -c minimax-code-0.5.1-fork.1.tar.gz.sha256
+sha256sum -c minimax-code-0.5.1-fork.1.tar.gz.sha256
+npm install --global ./minimax-code-0.5.1-fork.1.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
 ```
 
-The npm command uses the public registry, includes the optional SQLite dependency, and permits the package and SQLite installation scripts. See the [installation guide](docs/installation.md) for version pinning and Node.js compatibility.
+The archive passed the full CI verification and npm-install checks on Linux and macOS across the supported Node
+lines before publication, and its release notes carry the source commit and SHA-256. See
+[install a fork release archive](docs/installation.md#install-a-github-release-archive) and
+[fork release process](docs/fork-release-process.md).
+
+**Alternative — build from this source.** See [Build from source](#build-from-source) below.
+
+**Upstream channels (not this fork).** The official installer and public npm package track upstream only:
+
+- macOS / Linux / WSL: `curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash`
+- Windows (PowerShell): `irm https://filecdn.minimax.chat/public/install.ps1 | iex`
+- npm: `npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3`
+
+These install into `~/.minimax-code` (POSIX) or `%USERPROFILE%\.minimax-code` (Windows) with launchers `bin/mcode` /
+`bin/mcode-tools`. Use them only when you explicitly want an upstream build without this fork's changes; the
+built-in updater follows the official npm channel and will replace a fork archive, so keep it disabled or reinstall
+from a fork release after an update. See [Uninstall](#uninstall) to remove the CLI.
 
 Reopen your terminal and check the installation:
 
@@ -231,9 +245,9 @@ The [small, reproducible project](examples/clamp) is the same task used in the d
 
 ## Build from source
 
-To develop MCode or run this source checkout, you need Git, **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**, and **pnpm 9.12.0**. On Windows, keep the checkout on a local NTFS volume and outside cloud-synced folders; the preflight command below checks the volume before pnpm creates workspace links.
+To develop MCode or run this fork's source, clone **this** repository (not upstream) and use Git, **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**, and **pnpm 9.12.0**. On Windows, keep the checkout on a local NTFS volume and outside cloud-synced folders; the preflight command below checks the volume before pnpm creates workspace links.
 ```bash
-git clone https://github.com/MiniMax-AI/minimax-code.git
+git clone https://github.com/tournierjc/minimax-code.git
 cd minimax-code
 node scripts/check-windows-source-location.mjs
 pnpm install --frozen-lockfile
