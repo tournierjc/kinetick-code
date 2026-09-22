@@ -8,7 +8,7 @@ Welcome separates design assets, layout, and terminal mechanics. Designers gener
 
 Welcome and `/changelog` share the local changelog bundled with the package. `CHANGELOG.md` is the English default and fallback; `CHANGELOG.zh-CN.md` is the Chinese version. A system locale with language `zh` selects Chinese; other languages select English. For each release, keep version headings synchronized and provide at least three entries per language for Welcome.
 
-The hero always uses the same ANSI Shadow glyphs: the full `MINIMAX CODE` at 91 columns or more, the six-line `MCode` at 44–90 columns, and the same `M` glyph at 11–43 columns. Do not invent a separate pixel font or stack `MINI` / `MAX` / `CODE` on narrow screens. Compact Welcome must still render the hero and show the product name only once in the frame header.
+The hero always uses the same ANSI Shadow glyphs: the full `KINETICK CODE` at 94 columns or more, the six-line `KCODE` at 41–93 columns, and the same `K` glyph at 8–40 columns. Do not invent a separate pixel font or stack `KINETICK` / `CODE` on narrow screens. Compact Welcome must still render the hero and show the product name only once in the frame header.
 
 Shared colors live in `src/tui/theme/palettes.ts`; borders and terminal-width adaptation live in `src/tui/shell/frame.ts`. Initial theme detection and rendering gates belong to infrastructure in `src/tui/theme/render-binding.ts` and `src/tui/renderer/interactive-renderer.ts`. Do not add startup sequencing to Welcome.
 

@@ -1,7 +1,7 @@
 import type { MavisBuildEnv, MavisRegion } from '@mavis/config';
 import {
-  resolveMCodeOAuthEndpointConfig,
-  type MCodeOAuthEndpointEnvironment,
+  resolveKCodeOAuthEndpointConfig,
+  type KCodeOAuthEndpointEnvironment,
 } from '@mavis/oauth-core';
 
 import { createMcodeSharedAuthSession } from '../runtime/auth-session.js';
@@ -13,7 +13,7 @@ export interface CreateDefaultMcodeAuthApplicationOptions {
   dataDir: string;
   region?: MavisRegion;
   buildEnv?: MavisBuildEnv;
-  oauthEndpointEnvironment?: MCodeOAuthEndpointEnvironment;
+  oauthEndpointEnvironment?: KCodeOAuthEndpointEnvironment;
   createSharedSession?: typeof createMcodeSharedAuthSession;
   writeRegionPreference?: McodeAuthApplicationOptions['writeRegionPreference'];
   sharedAuthCore?: McodeAuthApplicationOptions['sharedAuthCore'];
@@ -39,7 +39,7 @@ export function createDefaultMcodeAuthApplication(
       dataDir: options.dataDir,
       region: requestedRegion,
       buildEnv,
-      oauthEndpoints: resolveMCodeOAuthEndpointConfig(
+      oauthEndpoints: resolveKCodeOAuthEndpointConfig(
         options.oauthEndpointEnvironment ?? process.env,
         { buildEnv, region: requestedRegion },
       ),

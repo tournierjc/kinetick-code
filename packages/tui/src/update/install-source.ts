@@ -137,7 +137,7 @@ export function resolveMcodeNpmDistribution(
     if (resolvedRegistry === MCODE_INTERNAL_NPM_REGISTRY) {
       return { packageName, registry: resolvedRegistry };
     }
-    throw new Error(`Unsupported MCode npm registry: ${resolvedRegistry}`);
+    throw new Error(`Unsupported KCode npm registry: ${resolvedRegistry}`);
   }
   if (packageName === mcodePackageName(MCODE_PUBLIC_SCOPE)) {
     const resolvedRegistry = registry ? new URL(registry).href : MCODE_PUBLIC_NPM_REGISTRY;
@@ -147,9 +147,9 @@ export function resolveMcodeNpmDistribution(
     ) {
       return { packageName, registry: resolvedRegistry };
     }
-    throw new Error(`Unsupported MCode npm registry: ${resolvedRegistry}`);
+    throw new Error(`Unsupported KCode npm registry: ${resolvedRegistry}`);
   }
-  throw new Error(`Unsupported MCode npm package: ${String(packageName)}`);
+  throw new Error(`Unsupported KCode npm package: ${String(packageName)}`);
 }
 
 export function resolveMcodeNpmDistTag(
@@ -206,12 +206,12 @@ export function buildMcodePackageManagerCommand(
   const npmInstallDisplay = npmInstallArgs.join(' ');
   switch (source) {
     case 'npm-prefix': {
-      if (!prefixInstall) throw new Error('MCode npm prefix ownership metadata is missing.');
+      if (!prefixInstall) throw new Error('KCode npm prefix ownership metadata is missing.');
       if (
         prefixInstall.packageName !== distribution.packageName ||
         new URL(prefixInstall.registry).href !== distribution.registry
       ) {
-        throw new Error('MCode npm prefix ownership does not match the installed package.');
+        throw new Error('KCode npm prefix ownership does not match the installed package.');
       }
       return {
         executable: prefixInstall.executable,
@@ -290,16 +290,16 @@ export async function resolveLatestMcodeRegistryVersion(
   }
   if (Array.isArray(version)) {
     if (version.length !== 1) {
-      throw new Error('MCode registry returned an invalid latest version.');
+      throw new Error('KCode registry returned an invalid latest version.');
     }
     version = version[0];
   }
   if (typeof version !== 'string') {
-    throw new Error('MCode registry returned an invalid latest version.');
+    throw new Error('KCode registry returned an invalid latest version.');
   }
   const parsed = parseMcodeVersion(version);
   if (tag === 'latest' && parsed.includes('-')) {
-    throw new Error('MCode latest must resolve to a stable semantic version.');
+    throw new Error('KCode latest must resolve to a stable semantic version.');
   }
   return parsed;
 }

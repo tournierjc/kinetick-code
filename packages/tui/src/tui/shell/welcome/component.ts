@@ -148,7 +148,7 @@ function renderCompactWelcome(
     ...renderTuiWelcomeHero(width),
     '',
     renderFrameHeader(
-      `${chalk.bold.hex(colors.brand)('MCode')} ${chalk.hex(colors.muted)(`v${state.version}`)}`,
+      `${chalk.bold.hex(colors.brand)('KCode')} ${chalk.hex(colors.muted)(`v${state.version}`)}`,
       renderActivity(state),
       width,
     ),

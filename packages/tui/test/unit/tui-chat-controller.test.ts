@@ -2247,7 +2247,7 @@ describe('TuiChatController', () => {
       id: 'local:status',
       kind: 'final-summary',
       status: 'succeeded',
-      content: 'MCode status',
+      content: 'KCode status',
       ephemeral: true,
       createdAtMs: 100,
       updatedAtMs: 100,
@@ -2269,7 +2269,7 @@ describe('TuiChatController', () => {
 
     expect(transcript.snapshot().map((cell) => cell.content)).toEqual([
       'First durable answer',
-      'MCode status',
+      'KCode status',
       'Second durable answer',
     ]);
 

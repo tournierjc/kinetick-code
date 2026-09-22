@@ -18,7 +18,7 @@ export type TuiInputFormat = 'text' | 'json';
 export type TuiPermissionPolicy = 'smart' | 'full' | 'off';
 
 export interface RawTuiExecOptions {
-  /** Internal command identity set by `mcode exec review`. */
+  /** Internal command identity set by `kcode exec review`. */
   review?: true;
   input?: string;
   inputFormat?: string;

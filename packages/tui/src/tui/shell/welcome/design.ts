@@ -9,13 +9,13 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
   tipPool: [
     'Say what you want and how to verify it.',
     `Use @ for files; ${MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT} for images.`,
-    'Run /init to teach MCode this repo.',
+    'Run /init to teach KCode this repo.',
     'Use /plan before a change that needs design or investigation.',
     'Use /context to check the current Session context budget.',
     'Use /sessions to resume earlier work.',
     'Use /history to review and branch from earlier prompts.',
     'Use /goal to keep long-running work focused on a finish line.',
-    'Use /permission to choose how MCode handles tool approvals.',
+    'Use /permission to choose how KCode handles tool approvals.',
     'Use /feedback to preview a redacted report before upload.',
     MINIMAX_CODE_WELCOME_CHECKIN_TIP,
   ],
@@ -23,11 +23,11 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
     tips: [
       'Say what you want and how to verify it.',
       `Use @ for files; ${MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT} for images.`,
-      'Run /init to teach MCode this repo.',
+      'Run /init to teach KCode this repo.',
       MINIMAX_CODE_WELCOME_CHECKIN_TIP,
     ],
     news: [
-      'Send follow-ups while MCode works.',
+      'Send follow-ups while KCode works.',
       '/context shows read-only session context.',
       '/feedback previews before upload.',
     ],
@@ -38,7 +38,7 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
       `@ files · ${MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT} images · /init guidance`,
       '/checkin daily reward',
     ],
-    news: ['Follow-ups wait while MCode works.', '/context budget · /feedback preview'],
+    news: ['Follow-ups wait while KCode works.', '/context budget · /feedback preview'],
   },
   compact: {
     tips: [
@@ -49,36 +49,36 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
     news: ['Follow-ups wait', '/context · /feedback'],
   },
   hero: {
-    fullMinWidth: 91,
-    mediumMinWidth: 44,
-    microMinWidth: 11,
-    fallbackTitle: 'M',
+    fullMinWidth: 94,
+    mediumMinWidth: 41,
+    microMinWidth: 8,
+    fallbackTitle: 'K',
   },
 } as const;
 
 export const MINIMAX_CODE_TERMINAL_WORDMARK = [
-  '███╗   ███╗██╗███╗   ██╗██╗███╗   ███╗ █████╗ ██╗  ██╗     ██████╗ ██████╗ ██████╗ ███████╗',
-  '████╗ ████║██║████╗  ██║██║████╗ ████║██╔══██╗╚██╗██╔╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝',
-  '██╔████╔██║██║██╔██╗ ██║██║██╔████╔██║███████║ ╚███╔╝     ██║     ██║   ██║██║  ██║█████╗',
-  '██║╚██╔╝██║██║██║╚██╗██║██║██║╚██╔╝██║██╔══██║ ██╔██╗     ██║     ██║   ██║██║  ██║██╔══╝',
-  '██║ ╚═╝ ██║██║██║ ╚████║██║██║ ╚═╝ ██║██║  ██║██╔╝ ██╗    ╚██████╗╚██████╔╝██████╔╝███████╗',
-  '╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
+  '██╗  ██╗██╗███╗   ██╗███████╗████████╗██╗ ██████╗██╗  ██╗     ██████╗ ██████╗ ██████╗ ███████╗',
+  '██║ ██╔╝██║████╗  ██║██╔════╝╚══██╔══╝██║██╔════╝██║ ██╔╝    ██╔════╝██╔═══██╗██╔══██╗██╔════╝',
+  '█████╔╝ ██║██╔██╗ ██║█████╗     ██║   ██║██║     █████╔╝     ██║     ██║   ██║██║  ██║█████╗',
+  '██╔═██╗ ██║██║╚██╗██║██╔══╝     ██║   ██║██║     ██╔═██╗     ██║     ██║   ██║██║  ██║██╔══╝',
+  '██║  ██╗██║██║ ╚████║███████╗   ██║   ██║╚██████╗██║  ██╗    ╚██████╗╚██████╔╝██████╔╝███████╗',
+  '╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═╝ ╚═════╝╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
 ] as const;
 
 export const MINIMAX_CODE_TERMINAL_MEDIUM_WORDMARK = [
-  '███╗   ███╗ ██████╗ ██████╗ ██████╗ ███████╗',
-  '████╗ ████║██╔════╝██╔═══██╗██╔══██╗██╔════╝',
-  '██╔████╔██║██║     ██║   ██║██║  ██║█████╗',
-  '██║╚██╔╝██║██║     ██║   ██║██║  ██║██╔══╝',
-  '██║ ╚═╝ ██║╚██████╗╚██████╔╝██████╔╝███████╗',
-  '╚═╝     ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
+  '██╗  ██╗ ██████╗ ██████╗ ██████╗ ███████╗',
+  '██║ ██╔╝██╔════╝██╔═══██╗██╔══██╗██╔════╝',
+  '█████╔╝ ██║     ██║   ██║██║  ██║█████╗',
+  '██╔═██╗ ██║     ██║   ██║██║  ██║██╔══╝',
+  '██║  ██╗╚██████╗╚██████╔╝██████╔╝███████╗',
+  '╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝',
 ] as const;
 
 export const MINIMAX_CODE_TERMINAL_MICRO_WORDMARK = [
-  '███╗   ███╗',
-  '████╗ ████║',
-  '██╔████╔██║',
-  '██║╚██╔╝██║',
-  '██║ ╚═╝ ██║',
-  '╚═╝     ╚═╝',
+  '██╗  ██╗',
+  '██║ ██╔╝',
+  '█████╔╝',
+  '██╔═██╗',
+  '██║  ██╗',
+  '╚═╝  ╚═╝',
 ] as const;

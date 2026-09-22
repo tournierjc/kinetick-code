@@ -267,7 +267,7 @@ function createRuntime(
   };
 }
 
-describe('MiniMax Code ACP agent', () => {
+describe('Kinetick Code ACP agent', () => {
   it.each(['new', 'load', 'resume', 'fork'] as const)(
     'advertises session Skills on %s and forwards Skill instructions to the Runtime',
     async (method) => {
@@ -1176,11 +1176,11 @@ describe('MiniMax Code ACP agent', () => {
           {
             type: 'terminal',
             id: 'minimax-code-login',
-            name: 'Sign in to MiniMax Code',
+            name: 'Sign in to Kinetick Code',
             args: ['login'],
           },
         ],
-        agentInfo: { name: 'minimax-code', title: 'MiniMax Code', version: '1.2.3' },
+        agentInfo: { name: 'minimax-code', title: 'Kinetick Code', version: '1.2.3' },
         _meta: {
           'minimax-code/extensions': {
             version: 1,
@@ -2256,7 +2256,7 @@ describe('MiniMax Code ACP agent', () => {
           {
             type: 'terminal',
             id: 'minimax-code-login',
-            name: 'Sign in to MiniMax Code',
+            name: 'Sign in to Kinetick Code',
             args: ['login'],
           },
         ]);
@@ -3326,7 +3326,7 @@ describe('MiniMax Code ACP agent', () => {
           cwd: '/workspace',
           mcpServers: [],
         }),
-      ).rejects.toThrow('mcode login');
+      ).rejects.toThrow('kcode login');
     });
 
     expect(createSession).not.toHaveBeenCalled();
@@ -6195,7 +6195,7 @@ describe('MiniMax Code ACP agent', () => {
           additionalDirectories: ['/other'],
           mcpServers: [],
         }),
-      ).rejects.toThrow('Additional directories are not supported by MiniMax Code ACP');
+      ).rejects.toThrow('Additional directories are not supported by Kinetick Code ACP');
     });
 
     expect(createSession).not.toHaveBeenCalled();

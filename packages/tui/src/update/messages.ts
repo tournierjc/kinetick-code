@@ -3,21 +3,21 @@ import { translateRuntimeText } from '@mavis/shared/runtime-i18n';
 export function mcodePrefixActivationScheduledMessage(
   _environment: NodeJS.ProcessEnv = process.env,
 ): string {
-  return 'A staged MCode update will activate after this process exits.';
+  return 'A staged KCode update will activate after this process exits.';
 }
 
 export function mcodePrefixJournalScheduleFailedMessage(
   _environment: NodeJS.ProcessEnv = process.env,
 ): string {
-  return 'MCode update was staged, but its activation journal could not be scheduled.';
+  return 'KCode update was staged, but its activation journal could not be scheduled.';
 }
 
 export function mcodePrefixNonPrefixPlanMessage(_environment: NodeJS.ProcessEnv): string {
-  return 'MCode npm prefix updater received a non-prefix plan.';
+  return 'KCode npm prefix updater received a non-prefix plan.';
 }
 
 export function mcodePrefixOwnershipMissingMessage(_environment: NodeJS.ProcessEnv): string {
-  return 'MCode npm prefix ownership metadata is missing.';
+  return 'KCode npm prefix ownership metadata is missing.';
 }
 
 export function mcodePrefixPendingActivationMessage(
@@ -28,13 +28,13 @@ export function mcodePrefixPendingActivationMessage(
   } = {},
 ): string {
   if (options.blockingSessionCount === undefined) {
-    return `MCode ${version} is already staged. Restarting will resume activation after running MCode sessions exit.`;
+    return `KCode ${version} is already staged. Restarting will resume activation after running KCode sessions exit.`;
   }
   const blockingSessionCount = Math.max(0, Math.trunc(options.blockingSessionCount));
   if (blockingSessionCount > 0) {
-    return `MCode ${version} is already staged. Activation will wait for ${String(blockingSessionCount)} other MCode ${blockingSessionCount === 1 ? 'session' : 'sessions'} to exit.`;
+    return `KCode ${version} is already staged. Activation will wait for ${String(blockingSessionCount)} other KCode ${blockingSessionCount === 1 ? 'session' : 'sessions'} to exit.`;
   }
-  return `MCode ${version} is already staged. It will activate after this process exits.`;
+  return `KCode ${version} is already staged. It will activate after this process exits.`;
 }
 
 export function mcodePrefixPendingCleanupMessage(
@@ -45,13 +45,13 @@ export function mcodePrefixPendingCleanupMessage(
   } = {},
 ): string {
   if (options.blockingSessionCount === undefined) {
-    return `MCode ${version} is already active. Restarting will finish update cleanup after running MCode sessions exit.`;
+    return `KCode ${version} is already active. Restarting will finish update cleanup after running KCode sessions exit.`;
   }
   const blockingSessionCount = Math.max(0, Math.trunc(options.blockingSessionCount));
   if (blockingSessionCount > 0) {
-    return `MCode ${version} is already active. Update cleanup will wait for ${String(blockingSessionCount)} other MCode ${blockingSessionCount === 1 ? 'session' : 'sessions'} to exit.`;
+    return `KCode ${version} is already active. Update cleanup will wait for ${String(blockingSessionCount)} other KCode ${blockingSessionCount === 1 ? 'session' : 'sessions'} to exit.`;
   }
-  return `MCode ${version} is already active. Restarting will finish update cleanup.`;
+  return `KCode ${version} is already active. Restarting will finish update cleanup.`;
 }
 
 export function mcodePrefixStagedVersionMismatchMessage(
@@ -59,7 +59,7 @@ export function mcodePrefixStagedVersionMismatchMessage(
   expectedVersion: string,
   _environment: NodeJS.ProcessEnv,
 ): string {
-  return `MCode update staged ${actualVersion}; expected ${expectedVersion}.`;
+  return `KCode update staged ${actualVersion}; expected ${expectedVersion}.`;
 }
 
 export function mcodePrefixStagedMessage(
@@ -70,13 +70,13 @@ export function mcodePrefixStagedMessage(
   } = {},
 ): string {
   if (options.blockingSessionCount === undefined) {
-    return `MCode ${version} is downloaded and staged safely. Waiting for running MCode sessions to exit before activation.`;
+    return `KCode ${version} is downloaded and staged safely. Waiting for running KCode sessions to exit before activation.`;
   }
   const blockingSessionCount = Math.max(0, Math.trunc(options.blockingSessionCount));
   if (blockingSessionCount > 0) {
-    return `MCode ${version} is downloaded and staged safely. Waiting for ${String(blockingSessionCount)} other MCode ${blockingSessionCount === 1 ? 'session' : 'sessions'} to exit before activation.`;
+    return `KCode ${version} is downloaded and staged safely. Waiting for ${String(blockingSessionCount)} other KCode ${blockingSessionCount === 1 ? 'session' : 'sessions'} to exit before activation.`;
   }
-  return `MCode ${version} is downloaded and staged safely. It will activate after this process exits.`;
+  return `KCode ${version} is downloaded and staged safely. It will activate after this process exits.`;
 }
 
 export function mcodePrefixVersionedInstalledMessage(
@@ -92,5 +92,5 @@ export function mcodePrefixNotStagedMessage(
   reason: string,
   _environment: NodeJS.ProcessEnv,
 ): string {
-  return `MCode ${version} was not staged; the active installation is unchanged: ${reason}`;
+  return `KCode ${version} was not staged; the active installation is unchanged: ${reason}`;
 }

@@ -240,7 +240,7 @@ export class TuiPluginManager implements TuiFeatureScreen, Component, Focusable 
         summary: `Couldn't update ${plugin.displayName}.`,
         nextStep: isPluginAuthRequired(error)
           ? 'Run /login, then retry.'
-          : 'Retry or run mcode plugin for details.',
+          : 'Retry or run kcode plugin for details.',
       });
     } finally {
       if (!this.disposed) {
@@ -264,7 +264,7 @@ export class TuiPluginManager implements TuiFeatureScreen, Component, Focusable 
       if (this.disposed) return;
       this.status = formatTuiActionFailure(error, {
         summary: "Couldn't refresh Plugins.",
-        nextStep: 'Retry or run mcode plugin marketplace upgrade.',
+        nextStep: 'Retry or run kcode plugin marketplace upgrade.',
       });
     } finally {
       if (!this.disposed) {

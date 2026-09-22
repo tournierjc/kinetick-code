@@ -38,9 +38,9 @@ import { createDefaultMcodeAuthApplication } from '../auth/factory.js';
 import { createMcodeSharedAuthSession } from '../runtime/auth-session.js';
 import {
   MCODE_OAUTH_SCOPES,
-  resolveMCodeOAuthEndpointConfig,
+  resolveKCodeOAuthEndpointConfig,
   type AccessTokenLease,
-  type MCodeOAuthCore,
+  type KCodeOAuthCore,
 } from '@mavis/oauth-core';
 import {
   resolveTuiManagedBackendLane,
@@ -137,7 +137,7 @@ export async function launchTui(
     );
   }
   if (!options.terminal && (!process.stdin.isTTY || !process.stdout.isTTY)) {
-    throw new Error('Minimax Code interactive mode requires a TTY.');
+    throw new Error('Kinetick Code interactive mode requires a TTY.');
   }
 
   const homeDirectory = options.homeDir ?? homedir();
@@ -151,12 +151,12 @@ export async function launchTui(
   });
   const bedrockLane = resolveTuiManagedBackendLane(options.lane, authEnvironment.buildEnv);
   const routingContext = bedrockLane ? { bedrockLane } : undefined;
-  const sharedAuthCore: MCodeOAuthCore = (
+  const sharedAuthCore: KCodeOAuthCore = (
     dependencies.createSharedAuthSession ?? createMcodeSharedAuthSession
   )({
     dataDir,
     ...authEnvironment,
-    oauthEndpoints: resolveMCodeOAuthEndpointConfig(process.env, authEnvironment),
+    oauthEndpoints: resolveKCodeOAuthEndpointConfig(process.env, authEnvironment),
   });
   let accountAuthContext: { accessToken: string; realUserID?: string } | undefined;
   const accountIdentityClient = new TuiMatrixAccountClient({
@@ -395,7 +395,7 @@ export async function launchTui(
         report: (error) => {
           try {
             process.stderr.write(
-              `Minimax Code TUI stopped unexpectedly: ${tuiErrorDiagnostic(error)}. Restart MCode; if it keeps happening, report it through an available support channel.\n`,
+              `Kinetick Code TUI stopped unexpectedly: ${tuiErrorDiagnostic(error)}. Restart KCode; if it keeps happening, report it through an available support channel.\n`,
             );
           } catch {
             // The terminal may already be disconnected.
@@ -775,7 +775,7 @@ export function resolveRestartArguments(
   if (!nodeExecutable) return [...environmentArgs, ...resumeArgs, ...promptArgs];
   const entryFile = argv[1];
   if (!entryFile || !isExistingFile(entryFile)) {
-    throw new Error('Unable to restart MCode because its Node.js entry file is unavailable.');
+    throw new Error('Unable to restart KCode because its Node.js entry file is unavailable.');
   }
   return [entryFile, ...environmentArgs, ...resumeArgs, ...promptArgs];
 }
@@ -808,7 +808,7 @@ export function formatTuiExitMessage(sessionId?: string): string {
 export function formatTuiSessionHint(sessionId: string): string | undefined {
   const normalized = sessionId.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(normalized)) return undefined;
-  return `\nContinue this session with:\n  mcode --session ${normalized}\n`;
+  return `\nContinue this session with:\n  kcode --session ${normalized}\n`;
 }
 
 async function prepareInitialTuiState(

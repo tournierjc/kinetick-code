@@ -118,7 +118,7 @@ export class McodeAuthApplication implements McodeAuthPort {
       logoutUrl,
       message:
         result.status === 'logout_pending'
-          ? `Signed out locally from ${formatRegion(this.scope.region)} across MCode. Server revocation is pending until the network recovers.`
+          ? `Signed out locally from ${formatRegion(this.scope.region)} across KCode. Server revocation is pending until the network recovers.`
           : `Signed out of ${formatRegion(this.scope.region)} on Desktop, CLI/TUI, and embedded mcode-tools.`,
     };
   }
@@ -145,9 +145,9 @@ function formatEnvironmentConflict(
   requested: { region: MavisRegion; buildEnv: MavisBuildEnv },
 ): string {
   if (active.region !== requested.region) {
-    return `Signed in to ${formatRegion(active.region)}. Run \`mcode logout\` before signing in to ${formatRegion(requested.region)}.`;
+    return `Signed in to ${formatRegion(active.region)}. Run \`kcode logout\` before signing in to ${formatRegion(requested.region)}.`;
   }
-  return `Signed in to another MiniMax ${active.buildEnv} environment. Run \`mcode logout\` before signing in to ${requested.buildEnv}.`;
+  return `Signed in to another MiniMax ${active.buildEnv} environment. Run \`kcode logout\` before signing in to ${requested.buildEnv}.`;
 }
 
 function formatRegion(region: MavisRegion): string {

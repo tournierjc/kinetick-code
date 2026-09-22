@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { MCodeOAuthCore } from '../../src/auth-core.js';
+import { KCodeOAuthCore } from '../../src/auth-core.js';
 import { FileStore } from '../../src/credential-store/file-store.js';
 import { createAuthNamespace } from '../../src/namespace.js';
 import { HttpOAuthClient } from '../../src/oauth-client.js';
@@ -26,7 +26,7 @@ export async function createLocalAuthFixture(options: {
     | undefined;
   const calls = { device: 0, refresh: 0 };
   const createCore = () =>
-    new MCodeOAuthCore({
+    new KCodeOAuthCore({
       namespace,
       credentialStore: new FileStore({ authHome: namespace.namespaceHome }),
       now: () => now,

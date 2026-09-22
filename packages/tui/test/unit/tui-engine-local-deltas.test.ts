@@ -47,7 +47,7 @@ class MutableLines implements Component {
   invalidate(): void {}
 }
 
-describe('MCode Pi Engine local deltas', () => {
+describe('KCode Pi Engine local deltas', () => {
   it.each([1, 8, 30])('preserves a scrolled host viewport when %i visible activity rows settle', async (activityRows) => {
     const terminal = new RecordingVirtualTerminal(60, 44);
     const tui = new TuiMainScreen(terminal);

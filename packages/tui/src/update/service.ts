@@ -108,7 +108,7 @@ export class McodeUpdateService {
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
-      controller.abort(new Error(`MCode update check timed out after ${timeoutMs}ms.`));
+      controller.abort(new Error(`KCode update check timed out after ${timeoutMs}ms.`));
     }, timeoutMs);
     timeout.unref?.();
     try {
@@ -129,12 +129,12 @@ export class McodeUpdateService {
       );
       if (!version && manifest.channel !== channel) {
         throw new Error(
-          `Signed MCode release channel mismatch: expected ${channel}, got ${manifest.channel}.`,
+          `Signed KCode release channel mismatch: expected ${channel}, got ${manifest.channel}.`,
         );
       }
       if (version && manifest.version !== version) {
         throw new Error(
-          `Signed MCode release version mismatch: expected ${version}, got ${manifest.version}.`,
+          `Signed KCode release version mismatch: expected ${version}, got ${manifest.version}.`,
         );
       }
       assertMcodeReleaseTargetAvailable(manifest, resolveMcodeReleaseTarget());
@@ -149,7 +149,7 @@ export class McodeUpdateService {
     } catch (error) {
       if (request.signal?.aborted) throw new McodeUpdateCancelledError();
       if (timedOut) {
-        throw new Error(`MCode update check timed out after ${timeoutMs}ms.`, { cause: error });
+        throw new Error(`KCode update check timed out after ${timeoutMs}ms.`, { cause: error });
       }
       throw error;
     } finally {
@@ -165,7 +165,7 @@ export class McodeUpdateService {
     }
     if (check.status === 'ahead' && !request.version) {
       throw new Error(
-        `Installed MCode ${this.currentVersion} is newer than ${check.channel} ` +
+        `Installed KCode ${this.currentVersion} is newer than ${check.channel} ` +
           `${check.latestVersion}; pass --to to downgrade explicitly.`,
       );
     }
@@ -179,7 +179,7 @@ export class McodeUpdateService {
     const artifactTimeout = setTimeout(() => {
       artifactTimedOut = true;
       artifactController.abort(
-        new Error(`MCode artifact download timed out after ${artifactTimeoutMs}ms.`),
+        new Error(`KCode artifact download timed out after ${artifactTimeoutMs}ms.`),
       );
     }, artifactTimeoutMs);
     artifactTimeout.unref?.();
@@ -192,7 +192,7 @@ export class McodeUpdateService {
     } catch (error) {
       if (request.signal?.aborted) throw new McodeUpdateCancelledError();
       if (artifactTimedOut) {
-        throw new Error(`MCode artifact download timed out after ${artifactTimeoutMs}ms.`, {
+        throw new Error(`KCode artifact download timed out after ${artifactTimeoutMs}ms.`, {
           cause: error,
         });
       }
@@ -250,7 +250,7 @@ export class McodeUpdateService {
         throw new McodeUpdateCancelledError();
       }
       throw new Error(
-        `MCode ${check.latestVersion} was not activated; the previous version is unchanged: ${errorMessage(error)}`,
+        `KCode ${check.latestVersion} was not activated; the previous version is unchanged: ${errorMessage(error)}`,
         { cause: error },
       );
     }
@@ -262,7 +262,7 @@ export function resolveMcodeInstallRoot(environment: NodeJS.ProcessEnv = process
   if (process.platform === 'win32') {
     const localAppData = environment.LOCALAPPDATA;
     if (!localAppData)
-      throw new Error('LOCALAPPDATA is required to resolve the MCode install root.');
+      throw new Error('LOCALAPPDATA is required to resolve the KCode install root.');
     return path.join(localAppData, 'MinimaxCode');
   }
   const dataHome = environment.XDG_DATA_HOME || path.join(homedir(), '.local', 'share');
@@ -276,7 +276,7 @@ export function readMcodeUpdateChannel(installRoot: string): McodeUpdateChannel 
   try {
     parsed = JSON.parse(readFileSync(file, 'utf8'));
   } catch (error) {
-    throw new Error(`MCode update channel config is invalid: ${errorMessage(error)}`);
+    throw new Error(`KCode update channel config is invalid: ${errorMessage(error)}`);
   }
   if (
     typeof parsed !== 'object' ||
@@ -284,7 +284,7 @@ export function readMcodeUpdateChannel(installRoot: string): McodeUpdateChannel 
     !('channel' in parsed) ||
     typeof parsed.channel !== 'string'
   ) {
-    throw new Error('MCode update channel config is missing channel.');
+    throw new Error('KCode update channel config is missing channel.');
   }
   return parseMcodeUpdateChannel(parsed.channel);
 }
@@ -305,12 +305,12 @@ function readInstalledPublicKey(installRoot: string, environment: NodeJS.Process
   const metadataFile = path.join(installRoot, 'install.json');
   if (!existsSync(metadataFile)) {
     throw new Error(
-      'MCode update trust root is missing. Install with the official Shell/PowerShell installer first.',
+      'KCode update trust root is missing. Install with the official Shell/PowerShell installer first.',
     );
   }
   const metadata = JSON.parse(readFileSync(metadataFile, 'utf8')) as { publicKey?: unknown };
   if (typeof metadata.publicKey !== 'string' || !metadata.publicKey.includes('BEGIN PUBLIC KEY')) {
-    throw new Error('MCode installer metadata does not contain a valid release public key.');
+    throw new Error('KCode installer metadata does not contain a valid release public key.');
   }
   return metadata.publicKey;
 }
@@ -318,7 +318,7 @@ function readInstalledPublicKey(installRoot: string, environment: NodeJS.Process
 function normalizeTimeout(value: number | undefined): number {
   if (value === undefined) return DEFAULT_TIMEOUT_MS;
   if (!Number.isSafeInteger(value) || value < 100 || value > 60_000) {
-    throw new Error('MCode update timeout must be an integer between 100 and 60000 milliseconds.');
+    throw new Error('KCode update timeout must be an integer between 100 and 60000 milliseconds.');
   }
   return value;
 }
@@ -339,7 +339,7 @@ async function defaultFetchBytes(
       redirect: 'error',
     });
     if (!response.ok) {
-      throw new Error(`MCode release server returned HTTP ${response.status} for ${url}`);
+      throw new Error(`KCode release server returned HTTP ${response.status} for ${url}`);
     }
     return Buffer.from(await response.arrayBuffer());
   } finally {
@@ -380,7 +380,7 @@ async function defaultValidateInstalledVersion(prefix: string, version: string):
       : path.join(prefix, 'bin', 'mcode');
   const output = await runMcodeUpdateCommand(executable, ['--version'], process.env, true);
   if (output.trim() !== version) {
-    throw new Error(`Installed MCode version mismatch: expected ${version}, got ${output.trim()}`);
+    throw new Error(`Installed KCode version mismatch: expected ${version}, got ${output.trim()}`);
   }
 }
 
@@ -434,13 +434,13 @@ function forwardAbort(signal: AbortSignal | undefined, controller: AbortControll
 function verifyArtifact(bytes: Buffer, manifest: McodeReleaseManifestV1): void {
   if (bytes.length !== manifest.installArtifact.size) {
     throw new Error(
-      `MCode artifact checksum/size verification failed: expected ` +
+      `KCode artifact checksum/size verification failed: expected ` +
         `${manifest.installArtifact.size} bytes, got ${bytes.length}.`,
     );
   }
   const digest = createHash('sha256').update(bytes).digest('hex');
   if (digest !== manifest.installArtifact.sha256) {
-    throw new Error('MCode artifact checksum verification failed.');
+    throw new Error('KCode artifact checksum verification failed.');
   }
 }
 

@@ -89,6 +89,8 @@ export function resolveMcodePrefixLauncherPairs(
   platform: NodeJS.Platform = process.platform,
 ): readonly McodePrefixLauncherPair[] {
   const platformPath = platformPathFor(platform);
+  // Launchers created by the official upstream installer are named `mcode`;
+  // the prefix updater must keep recognizing those installed prefixes.
   const names = platform === 'win32' ? ['mcode.cmd', 'mcode.ps1'] : ['mcode'];
   const directory = platform === 'win32' ? '' : 'bin';
   return names.map((name) => {
@@ -109,7 +111,7 @@ export function prepareMcodePrefixUpdateStaging(
   const activeModulesRoot = resolveMcodePrefixModulesRoot(activePrefix, platform);
   const stagedModulesRoot = resolveMcodePrefixModulesRoot(stagingPrefix, platform);
   if (!existsSync(activeModulesRoot)) {
-    throw new Error(`Active MCode modules directory is missing: ${activeModulesRoot}`);
+    throw new Error(`Active KCode modules directory is missing: ${activeModulesRoot}`);
   }
   cpSync(activeModulesRoot, stagedModulesRoot, { recursive: true, dereference: false });
   for (const launcher of resolveMcodePrefixLauncherPairs(activePrefix, stagingPrefix, platform)) {
@@ -139,7 +141,7 @@ export function readMcodePrefixPackageMetadata(
     !binEntry ||
     !mcodeToolsBinEntry
   ) {
-    throw new Error(`MCode package metadata is invalid at ${manifestFile}.`);
+    throw new Error(`KCode package metadata is invalid at ${manifestFile}.`);
   }
   return { packageRoot, version: manifest.version, binEntry, mcodeToolsBinEntry };
 }
@@ -154,7 +156,7 @@ export async function validateMcodePrefixPackage(
     prefix,
     runtimeExecutable,
     [path.join(metadata.packageRoot, ...metadata.binEntry.split('/')), '--version'],
-    'MCode',
+    'KCode',
     (output) => output === expectedVersion,
   );
   await validateMcodePrefixEntry(
@@ -194,7 +196,7 @@ function validateMcodePrefixEntry(
   prefix: string,
   runtimeExecutable: string,
   args: readonly string[],
-  commandName: 'MCode' | 'mcode-tools' | 'SQLite',
+  commandName: 'KCode' | 'mcode-tools' | 'SQLite',
   outputIsValid: (output: string) => boolean,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -253,7 +255,7 @@ export async function scheduleMcodePrefixUpdate(
 ): Promise<void> {
   const { contents: pendingContents, pending } = readPendingUpdateFile(pendingFile);
   if (path.resolve(pendingFile) !== path.resolve(pending.activePrefix, PENDING_UPDATE_FILE)) {
-    throw new Error(`MCode pending update file is outside its active prefix: ${pendingFile}`);
+    throw new Error(`KCode pending update file is outside its active prefix: ${pendingFile}`);
   }
   const pendingDigest = createHash('sha256').update(pendingContents).digest('hex');
   const leaseFile = path.join(pending.activePrefix, ACTIVATOR_LEASE_FILE);
@@ -333,11 +335,11 @@ export function inspectPendingMcodePrefixUpdate(
   if (!existsSync(pendingFile)) return undefined;
   const { pending } = readPendingUpdateFile(pendingFile);
   if (path.resolve(pendingFile) !== path.resolve(pending.activePrefix, PENDING_UPDATE_FILE)) {
-    throw new Error(`MCode pending update file is outside its active prefix: ${pendingFile}`);
+    throw new Error(`KCode pending update file is outside its active prefix: ${pendingFile}`);
   }
   const state = classifyRecoverableMcodePrefixUpdateArtifacts(pending);
   if (!state) {
-    throw new Error(`MCode pending update artifacts are incomplete at ${pendingFile}.`);
+    throw new Error(`KCode pending update artifacts are incomplete at ${pendingFile}.`);
   }
   return {
     pendingFile,
@@ -414,7 +416,7 @@ async function waitForProcessExit(pid: number): Promise<void> {
   const deadline = Date.now() + RESTART_PARENT_WAIT_TIMEOUT_MS;
   while (isProcessAlive(pid)) {
     if (Date.now() >= deadline) {
-      throw new Error(`MCode restart waited too long for parent process ${pid} to exit.`);
+      throw new Error(`KCode restart waited too long for parent process ${pid} to exit.`);
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
@@ -454,11 +456,11 @@ function acquireMcodePrefixActivatorLease(leaseFile: string, journalDigest: stri
     const existing = readMcodePrefixActivatorLease(leaseFile);
     if (existing && isProcessAlive(existing.pid)) {
       if (existing.journalDigest === journalDigest) return false;
-      throw new Error('Another MCode prefix activator is running for a different journal.');
+      throw new Error('Another KCode prefix activator is running for a different journal.');
     }
     rmSync(leaseFile, { force: true });
   }
-  throw new Error(`MCode prefix activator lease could not be acquired at ${leaseFile}.`);
+  throw new Error(`KCode prefix activator lease could not be acquired at ${leaseFile}.`);
 }
 
 function readMcodePrefixActivatorLease(leaseFile: string): McodePrefixActivatorLease | undefined {
@@ -642,7 +644,7 @@ function readPendingUpdateFile(file: string): {
         typeof launcher.backupPath === 'string',
     )
   ) {
-    throw new Error(`MCode pending update metadata is invalid at ${file}.`);
+    throw new Error(`KCode pending update metadata is invalid at ${file}.`);
   }
   const pending = value as McodePrefixUpdateActivation & { schemaVersion: number };
   const expectedActiveModulesRoot = resolveMcodePrefixModulesRoot(
@@ -686,7 +688,7 @@ function readPendingUpdateFile(file: string): {
         !isPathInside(pending.stagingPrefix, launcher.stagedPath),
     )
   ) {
-    throw new Error(`MCode pending update paths are invalid at ${file}.`);
+    throw new Error(`KCode pending update paths are invalid at ${file}.`);
   }
   return { contents, pending };
 }
@@ -730,7 +732,7 @@ const parentPid = Number(process.argv[4]);
 const restartCwd = process.argv[5];
 const restartArgs = process.argv.slice(6);
 const pendingContents = fs.readFileSync(pendingFile, 'utf8');
-if (crypto.createHash('sha256').update(pendingContents).digest('hex') !== pendingDigest) throw new Error('MCode pending update journal changed after scheduling.');
+if (crypto.createHash('sha256').update(pendingContents).digest('hex') !== pendingDigest) throw new Error('KCode pending update journal changed after scheduling.');
 const pending = JSON.parse(pendingContents);
 const leaseFile = path.join(pending.activePrefix, '.mcode-update-activator.json');
 const statusFile = path.join(pending.activePrefix, '.mcode-update-activation-status.json');
@@ -750,7 +752,7 @@ const writeStatus = (state, error) => {
   }
 };
 // The pending journal is durable. Keep the detached handoff alive until every process using the
-// old prefix exits; a TUI-owned Runtime or another MCode session may legitimately take over 30s.
+// old prefix exits; a TUI-owned Runtime or another KCode session may legitimately take over 30s.
 async function waitForExit(pid) {
   while (alive(pid)) await sleep(100);
 }
@@ -830,15 +832,15 @@ async function activate() {
   const installed = [];
   try {
     const stagedManifest = JSON.parse(fs.readFileSync(path.join(pending.stagedModulesRoot, ...pending.packageName.split('/'), 'package.json'), 'utf8'));
-    if (stagedManifest.name !== pending.packageName || stagedManifest.version !== pending.expectedVersion) throw new Error('Staged MCode package identity or version is invalid.');
-    if (launchers.some((launcher) => !fs.existsSync(launcher.stagedPath))) throw new Error('Staged MCode launcher is missing.');
+    if (stagedManifest.name !== pending.packageName || stagedManifest.version !== pending.expectedVersion) throw new Error('Staged KCode package identity or version is invalid.');
+    if (launchers.some((launcher) => !fs.existsSync(launcher.stagedPath))) throw new Error('Staged KCode launcher is missing.');
     fs.renameSync(pending.activeModulesRoot, pending.backupModulesRoot);
     modulesMoved = true;
     for (const launcher of launchers) { if (fs.existsSync(launcher.activePath)) { fs.renameSync(launcher.activePath, launcher.backupPath); moved.push(launcher); } }
     fs.renameSync(pending.stagedModulesRoot, pending.activeModulesRoot);
     for (const launcher of launchers) { if (fs.existsSync(launcher.stagedPath)) { fs.renameSync(launcher.stagedPath, launcher.activePath); installed.push(launcher); } }
     const manifest = JSON.parse(fs.readFileSync(path.join(pending.activeModulesRoot, ...pending.packageName.split('/'), 'package.json'), 'utf8'));
-    if (manifest.name !== pending.packageName || manifest.version !== pending.expectedVersion) throw new Error('Activated MCode package identity or version is invalid.');
+    if (manifest.name !== pending.packageName || manifest.version !== pending.expectedVersion) throw new Error('Activated KCode package identity or version is invalid.');
     await restart(restartArgs);
     writeStatus('completed');
     cleanup();
