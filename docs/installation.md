@@ -4,7 +4,7 @@
 > This repository is the fork [`tournierjc/minimax-code`](https://github.com/tournierjc/minimax-code).
 > The `filecdn.minimax.chat` installer scripts and the public `@minimax-ai/code` npm package deliver **upstream**
 > builds without this fork's changes. Install the fork from its own [GitHub Releases](https://github.com/tournierjc/minimax-code/releases)
-> or build it from this source. See [Fork release process](fork-release-process.md).
+> or build it from this source. See [Fork release process](releasing.md#fork-release-process-tournierjcminimax-code).
 
 ## Install a GitHub release archive
 
@@ -37,7 +37,7 @@ any updater run, reinstall the fork archive to restore fork behavior. To remove
 the package, use `npm uninstall --global @minimax-ai/code`. User data remains in place.
 
 Fork release archives are named `minimax-code-X.Y.Z-fork.N.tar.gz` (the version
-matches the tag, see [Fork release process](fork-release-process.md)); verify and
+matches the tag, see [Fork release process](releasing.md#fork-release-process-tournierjcminimax-code)); verify and
 install them the same way as the example above.
 
 ## Install from source

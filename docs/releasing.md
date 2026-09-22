@@ -1,5 +1,57 @@
 # Releasing MiniMax Code
 
+## Fork release process (tournierjc/minimax-code)
+
+This repository is a private fork. Its release channel is **GitHub Releases on
+`tournierjc/minimax-code` only**. Nothing else on the MiniMax side — the npm package
+`@minimax-ai/code`, the `filecdn.minimax.chat` installers, the `agent.minimax.io`
+site, or the desktop app — is built from this fork, and no fork release may publish
+to any of them. The repository's `package.json` and TUI manifests stay
+`private: true`; the release workflow publishes a GitHub release asset, never an
+npm package.
+
+A fork release is a normal upstream-style CLI release (below) plus fork rules:
+
+1. **Prerequisite — synchronization settled.** Do not cut a release while an
+   upstream synchronization PR (`merge/upstream-*` head, or a sync-branded PR) is
+   open, unless you are deliberately releasing without that pending sync. State
+   the last upstream revision carried (from `release/extraction.json`
+   `sourceRevision`, cross-checked against `upstream/main`) in the release notes.
+2. **Fork invariants must be green, not just CI.** Before releasing, confirm the
+   telemetry subsystem is still absent (`docs/telemetry.md` deleted, no
+   `requireTelemetryRunner` reference) and the default-deny egress guard is
+   installed from the CLI entry. `pnpm check:egress` covers the guard. A release
+   that would re-introduce an outbound reporting path is blocked by definition.
+3. **Branch/PR discipline.** Release via `pnpm release:cli` (below): it branches,
+   bumps both manifests, tags, and pushes atomically, then opens a version PR back
+   to `main`. Never push `main` directly and never move a distributed tag.
+   `gh` must be authenticated as the fork owner (`gh auth status`); pushes go
+   through the gh git-credential helper — no tokens embedded in remotes.
+4. **Version numbering.** Keep the upstream `X.Y.Z` core so synchronization stays
+   traceable (a fork release of upstream 0.5.x is `0.5.x` if the tree matches, or
+   the next patch). When a fork release carries fork-only changes on top of an
+   already-released core, add a fork prerelease suffix instead of stealing the
+   upstream number: `v0.5.1-fork.1` (tags like this create GitHub *prereleases*
+   and the release tooling accepts them). Never reuse an upstream version number
+   for a tree that differs from upstream at that version.
+5. **CI and publication.** The tag triggers the `CLI release` workflow: full
+   `pnpm verify` + gitleaks scans, one `minimax-code-X.Y.Z.tar.gz` archive, then
+   install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26). Only if
+   every install passes, a GitHub Release with the archive and `.sha256` is
+   created on this fork. Windows validation remains paused upstream-wide.
+6. **Post-release read-back.** After CI publishes, record: tag, commit SHA,
+   upstream `sourceRevision` carried, archive SHA-256, which live-service checks
+   were NOT RUN, and the release URL. Merge the version PR so `main` carries the
+   released version before the next release or the next upstream sync.
+7. **Installation docs.** The fork README and
+   [installation guide](installation.md#install-a-github-release-archive) are the
+   authoritative install instructions for this fork. Upstream installer/npm
+   commands that appear in mirrored docs are labeled as upstream-product-only;
+   keep those labels when re-syncing docs.
+
+Rollback: a released tag is immutable. To retract a bad release, unlist the GitHub
+Release and publish a new patch version; do not move or delete the tag.
+
 ## Tag-triggered CLI installation packages
 
 Run the release command from a clean checkout of the latest reviewed `origin/main`.

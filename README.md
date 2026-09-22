@@ -16,7 +16,7 @@
 > The official `filecdn.minimax.chat` one-command installer and the public `@minimax-ai/code` npm package deliver
 > **upstream** builds — they do not contain this fork's changes. To run this fork, install the verified archive from
 > [fork Releases](https://github.com/tournierjc/minimax-code/releases) or build from this source. See
-> [docs/fork-release-process.md](docs/fork-release-process.md) for how releases are produced.
+> [docs/releasing.md#fork-release-process-tournierjcminimax-code](docs/releasing.md#fork-release-process-tournierjcminimax-code) for how releases are produced.
 <p align="center">
   <a href="#quick-start">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -54,7 +54,7 @@ npm install --global ./minimax-code-0.5.1-fork.1.tar.gz --registry=https://regis
 The archive passed the full CI verification and npm-install checks on Linux and macOS across the supported Node
 lines before publication, and its release notes carry the source commit and SHA-256. See
 [install a fork release archive](docs/installation.md#install-a-github-release-archive) and
-[fork release process](docs/fork-release-process.md).
+[fork release process](docs/releasing.md#fork-release-process-tournierjcminimax-code).
 
 **Alternative — build from this source.** See [Build from source](#build-from-source) below.
 
