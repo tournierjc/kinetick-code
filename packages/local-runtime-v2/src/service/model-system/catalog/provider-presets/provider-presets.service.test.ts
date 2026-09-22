@@ -938,4 +938,49 @@ describe('Provider Preset ordering', () => {
     ).resolves.toEqual(['tencent-tokenhub', 'openai', 'anthropic', 'deepseek', 'zhipuai']);
     expect(commonConfigFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps a fork-anchored family on the shelf when the remote pins omit it', async () => {
+    // The live remote shelf sells no OpenRouter slot, yet the fork promises the
+    // aggregator. The shelf keeps its own order; the anchored family joins the
+    // pinned block behind it instead of sinking into the alphabetical tail.
+    const paths = await catalogPaths();
+    await writeFile(
+      paths.bundledCatalogPath,
+      gzipSync(
+        JSON.stringify({
+          version: 1,
+          source: 'https://models.dev/api.json',
+          updatedAt: 1,
+          catalog: {
+            openai: { name: 'OpenAI', npm: '@ai-sdk/openai', models: { gpt: { tool_call: true } } },
+            openrouter: {
+              name: 'OpenRouter',
+              npm: '@openrouter/ai-sdk-provider',
+              api: 'https://openrouter.ai/api/v1',
+              models: { 'anthropic/claude-opus-4': { tool_call: true } },
+            },
+            legacy: {
+              name: 'Legacy',
+              npm: '@ai-sdk/openai-compatible',
+              api: 'https://legacy.example/v1',
+              models: { model: { tool_call: true } },
+            },
+          },
+        }),
+      ),
+    );
+    const catalog = new ProviderPresetCatalog({
+      ...paths,
+      modelsDevFetch: vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch,
+      commonConfigFetch: vi.fn(async () =>
+        commonConfigResponse(['minimax', 'openai', 'anthropic', 'deepseek', 'moonshotai', 'ai']),
+      ) as typeof fetch,
+      commonConfigOriginGetter: () => 'https://gateway.example',
+      regionGetter: () => 'en',
+    });
+
+    await expect(
+      catalog.listProviderPresets().then((items) => items.map((item) => item.providerId)),
+    ).resolves.toEqual(['openai', 'openrouter', 'legacy']);
+  });
 });
