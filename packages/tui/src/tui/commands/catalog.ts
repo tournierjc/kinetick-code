@@ -42,6 +42,7 @@ export const SIDE_MODE_READ_ONLY_COMMANDS = new Set([
   'context',
   'status',
   'usage',
+  'cost',
   'export',
   'transcript',
   'copy',
@@ -427,6 +428,11 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     ...TUI_COMMAND_DESCRIPTORS.usage,
+    category: 'Transcript',
+    discoverability: 'contextual',
+  },
+  {
+    ...TUI_COMMAND_DESCRIPTORS.cost,
     category: 'Transcript',
     discoverability: 'contextual',
   },

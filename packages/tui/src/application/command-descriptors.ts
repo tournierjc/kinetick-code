@@ -40,6 +40,10 @@ export const TUI_COMMAND_DESCRIPTORS = {
     name: 'usage',
     description: 'Show session usage',
   },
+  cost: {
+    name: 'cost',
+    description: 'Show session cost by model, including sub-agents',
+  },
   compact: {
     name: 'compact',
     description: 'Shorten the active conversation',

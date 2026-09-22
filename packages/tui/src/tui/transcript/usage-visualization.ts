@@ -34,6 +34,9 @@ export class UsageVisualization implements Component {
 
     const lines = [this.header(width), chalk.hex(colors.dim)(safeInline(this.data.model)), ''];
     lines.push(...this.sessionSummary(width));
+    if (typeof this.data.costTotalUsd === 'number') {
+      lines.push('', ...this.costSummary(width));
+    }
     if (this.data.cacheMetrics) {
       lines.push('', ...renderCacheSummary(this.data.cacheMetrics, width));
     }
@@ -49,7 +52,12 @@ export class UsageVisualization implements Component {
     const summary =
       this.data.sessionRecorded === false
         ? chalk.hex(colors.dim)('Account only')
-        : chalk.bold.hex(colors.signal)(`${formatCompact(this.data.totalTokens)} total`);
+        : chalk.bold.hex(colors.signal)(
+            `${formatCompact(this.data.totalTokens)} total` +
+              (typeof this.data.costTotalUsd === 'number'
+                ? ` · ${formatTuiCostUsd(this.data.costTotalUsd)}`
+                : ''),
+          );
     return composeEdges(title, summary, width);
   }
 
@@ -68,6 +76,64 @@ export class UsageVisualization implements Component {
     if (width >= 26) return [heading, metrics.slice(0, 2).join('   '), metrics[2] ?? ''];
     return [heading, ...metrics];
   }
+
+  private costSummary(width: number): string[] {
+    const total = this.data.costTotalUsd ?? 0;
+    const approximate = this.data.costUnpriced === true;
+    const heading = composeEdges(
+      sectionHeading('Cost'),
+      chalk.bold.hex(colors.signal)(`\u{1F4B0} ${approximate ? '~' : ''}${formatTuiCostUsd(total)}`),
+      width,
+    );
+    const lines = [heading];
+    const split = [
+      metric('This agent', formatTuiCostUsd(this.data.rootCostUsd ?? 0)),
+      metric(
+        'Sub-agents',
+        formatTuiCostUsd(Math.max(0, total - (this.data.rootCostUsd ?? 0))),
+      ),
+    ];
+    lines.push(
+      width >= INLINE_METRICS_MIN_WIDTH
+        ? split.join('     ')
+        : split[0]!,
+      ...(width >= INLINE_METRICS_MIN_WIDTH || !split[1] ? [] : [split[1]!]),
+    );
+    if (approximate) {
+      lines.push(
+        chalk.hex(colors.dim)('Rows without a provider-reported price count as $0.'),
+      );
+    }
+    for (const row of this.data.costModels ?? []) {
+      lines.push(...renderCostModelRow(row, width));
+    }
+    return lines;
+  }
+}
+
+function renderCostModelRow(
+  row: NonNullable<TranscriptUsageVisualization['costModels']>[number],
+  width: number,
+): string[] {
+  const scope =
+    row.scope === 'both' ? 'agent + sub-agents' : row.scope === 'subagent' ? 'sub-agents' : 'agent';
+  const label = chalk.hex(colors.muted)(safeInline(row.model));
+  const cache = `${Math.round(clampRatio(row.cacheReadRatio) * 100)}% cache`;
+  const detail =
+    `${formatTuiCostUsd(row.costUsd)} · ${formatCompact(row.totalTokens)} tok` +
+    ` · ${row.turns} call${row.turns === 1 ? '' : 's'} · ${cache}` +
+    (row.unpricedRows > 0 ? ` · ${row.unpricedRows} unpriced` : '');
+  const lead = `${label}  ${chalk.hex(colors.dim)(`(${scope})`)}`;
+  const line =
+    visibleWidth(lead) + 2 + visibleWidth(detail) <= width
+      ? composeEdges(lead, chalk.hex(colors.text)(detail), width)
+      : `${lead}  ${chalk.hex(colors.text)(detail)}`;
+  return [truncateToWidth(line, width)];
+}
+
+function formatTuiCostUsd(value: number): string {
+  const amount = Number.isFinite(value) ? Math.max(0, value) : 0;
+  return `$${amount >= 1 ? amount.toFixed(2) : amount.toFixed(4)}`;
 }
 
 function renderCacheSummary(

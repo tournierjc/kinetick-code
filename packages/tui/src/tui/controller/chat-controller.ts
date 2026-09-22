@@ -124,6 +124,7 @@ export class TuiChatController {
       runtime: this.runtime,
       currentSessionId: () => this.state.session?.sessionId,
       currentAccount: () => this.state.account,
+      currentModelLabel: () => selectedModelLabel(this.state.session?.model),
       apply: (patch) => this.updateState(patch),
     });
   }
@@ -135,6 +136,7 @@ export class TuiChatController {
       session: this.state.session ? { ...this.state.session } : undefined,
       account: cloneAccountStatus(this.state.account),
       sessionUsage: this.state.sessionUsage ? { ...this.state.sessionUsage } : undefined,
+      sessionCost: this.state.sessionCost ? { ...this.state.sessionCost } : undefined,
       lastSettledTurn: this.state.lastSettledTurn ? { ...this.state.lastSettledTurn } : undefined,
     };
   }
@@ -144,6 +146,7 @@ export class TuiChatController {
       error: undefined,
       lastSettledTurn: undefined,
       sessionUsage: undefined,
+      sessionCost: undefined,
       contextSnapshot: undefined,
     });
     const [sessionsResult] = await Promise.allSettled([
@@ -204,6 +207,7 @@ export class TuiChatController {
       error: undefined,
       lastSettledTurn: undefined,
       sessionUsage: undefined,
+      sessionCost: undefined,
       contextSnapshot: undefined,
     });
     try {
@@ -789,6 +793,13 @@ export class TuiChatController {
     void this.statusMetrics.refreshContext(sessionId);
   }
 
+  /** Recomputes the session-tree cost (for example when a sub-agent finishes). */
+  refreshSessionCostNow(): void {
+    const sessionId = this.state.session?.sessionId;
+    if (!sessionId) return;
+    void this.statusMetrics.refreshSessionCost(sessionId);
+  }
+
   async requireLoginForAgentAction(): Promise<void> {
     await requireTuiInteractiveAgentAccess(this.runtime, this.state.session?.sessionId, (account) =>
       this.updateState({ account }),
@@ -863,6 +874,9 @@ export class TuiChatController {
       ...(currentSessionId !== nextSessionId && !('sessionUsage' in patch)
         ? { sessionUsage: undefined }
         : {}),
+      ...(currentSessionId !== nextSessionId && !('sessionCost' in patch)
+        ? { sessionCost: undefined }
+        : {}),
       ...(currentSessionId !== nextSessionId && !('contextSnapshot' in patch)
         ? { contextSnapshot: undefined }
         : {}),
@@ -896,4 +910,12 @@ export class TuiChatController {
     for (const resolve of this.idleWaiters) resolve();
     this.idleWaiters.clear();
   }
+}
+
+function selectedModelLabel(
+  model: { providerId?: string; modelId?: string; variant?: string } | undefined,
+): string | undefined {
+  if (!model?.modelId) return undefined;
+  const base = model.providerId ? `${model.providerId}/${model.modelId}` : model.modelId;
+  return model.variant && model.variant !== 'thinking' ? `${base}#${model.variant}` : base;
 }

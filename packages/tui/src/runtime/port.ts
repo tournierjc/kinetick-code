@@ -288,6 +288,10 @@ export interface TuiAccountStatusOptions {
 export interface TuiInspectionPort {
   getSessionUsage(sessionId: string): Promise<TuiSessionUsage>;
   getSessionUsageSummary?(sessionId: string): Promise<TuiSessionUsageSummary>;
+  /** Usage rows (per-message model + cost) for Sessions in the active tree. */
+  getSessionUsageWithRows?(sessionId: string): Promise<TuiSessionUsage>;
+  /** All Sessions (roots + branch children) for one agent, from the Runtime tree. */
+  getSessionTree?(agentName?: string): Promise<readonly TuiSession[]>;
   watchSessionUsageCommits?(signal: AbortSignal): AsyncGenerator<string>;
   requestCompaction(
     sessionId: string,

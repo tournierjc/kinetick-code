@@ -1259,7 +1259,9 @@ export class TuiCommandFlow {
         }
       },
       permissions: async () => this.options.featureFlow.showPermissions(),
+
       usage: async () => this.options.featureFlow.showSessionUsage(),
+      cost: async () => this.options.featureFlow.showSessionUsage(),
       export: async ({ args }) => this.options.featureFlow.exportCurrentTranscript(args),
       transcript: () => this.options.featureFlow.showTranscript(),
       copy: async () => this.options.featureFlow.copyLastAssistantReply(),

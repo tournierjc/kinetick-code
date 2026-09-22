@@ -22,6 +22,7 @@ import { sanitizeTuiUrl } from '../../rendering/url.js';
 import { resolveTuiThinkingChoice } from '../model/thinking.js';
 import { resolveTuiEffortChoice } from '../model/effort.js';
 import { resolveTuiSessionCacheMetrics } from '../../../application/session-cache-metrics.js';
+import type { SessionCostBreakdown } from '../../../application/session-cost.js';
 import type {
   TranscriptContextVisualization,
   TranscriptInspectionReport,
@@ -494,11 +495,14 @@ export function createTuiConfigInspection(
   };
 }
 
+
 export interface TuiUsagePresentationOptions {
   readonly context?: TuiContextSnapshotResponse;
   readonly model?: TuiModel;
   readonly account?: TuiAccountStatus;
   readonly scope?: 'session' | 'account';
+  /** Session-tree cost aggregate (root + delegated sub-agent Sessions). */
+  readonly cost?: SessionCostBreakdown;
 }
 
 export function formatTuiUsage(
@@ -558,6 +562,7 @@ function resolveTuiUsagePresentation(
     ? `${safeInline(options.model.providerId)}/${safeInline(options.model.modelId)}`
     : 'Model unavailable';
   const cacheMetrics = resolveTuiSessionCacheMetrics(summary);
+  const cost = options.cost;
   return {
     kind: 'usage',
     model,
@@ -568,7 +573,36 @@ function resolveTuiUsagePresentation(
     ...(cacheMetrics ? { cacheMetrics } : {}),
     context,
     ...(accountRows.length > 0 ? { accountRows } : {}),
+    ...(cost
+      ? {
+          costTotalUsd: cost.total.costUsd,
+          rootCostUsd: cost.root.costUsd,
+          costUnpriced: cost.hasUnpricedRows || undefined,
+          costModels: cost.models.map((row) => ({
+            model: row.model,
+            scope: costScopeOf(cost, row.model),
+            costUsd: row.costUsd,
+            unpricedRows: row.unpricedRows,
+            totalTokens: row.totalTokens,
+            inputTokens: row.inputTokens,
+            outputTokens: row.outputTokens,
+            cacheReadTokens: row.cacheReadTokens,
+            cacheReadRatio: row.cacheReadRatio,
+            turns: row.turns,
+          })),
+        }
+      : {}),
   };
+}
+
+function costScopeOf(
+  cost: SessionCostBreakdown,
+  model: string,
+): 'agent' | 'subagent' | 'both' {
+  const scopes = cost.models.find((row) => row.model === model)?.scopes;
+  if (!scopes) return 'agent';
+  if (scopes.has('agent') && scopes.has('subagent')) return 'both';
+  return scopes.has('subagent') ? 'subagent' : 'agent';
 }
 
 function createUsageAccountRows(

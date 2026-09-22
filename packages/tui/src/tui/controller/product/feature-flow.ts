@@ -35,6 +35,13 @@ import {
   readPackagedTuiChangelog,
 } from '../../features/changelog/content.js';
 import {
+  aggregateSessionCost,
+  buildSessionCostRows,
+  type SessionCostBreakdown,
+  type SessionCostRow,
+} from '../../../application/session-cost.js';
+import { collectTuiDelegatedSessions } from '../../../runtime/delegation.js';
+import {
   createTuiAccountStatusInspection,
   createTuiConfigInspection,
   createTuiRuntimeInspection,
@@ -1263,18 +1270,20 @@ export class TuiFeatureFlow {
           includeMembership: true,
           forceRefresh: true,
         });
-        const [usage, context, account] = session
+        const [usage, context, account, cost] = session
           ? await Promise.all([
               this.options.runtime.getSessionUsage(session.sessionId),
               this.options.runtime.getContextSnapshot(session.sessionId).catch(() => undefined),
               accountRequest.catch(() => undefined),
+              this.loadSessionCost(session).catch(() => undefined),
             ])
-          : [{ summary: undefined, rows: [] }, undefined, await accountRequest];
+          : [{ summary: undefined, rows: [] }, undefined, await accountRequest, undefined];
         const presentation = {
           context,
           model: this.selectedModel(),
           account,
           scope: session ? ('session' as const) : ('account' as const),
+          ...(cost ? { cost } : {}),
         };
         const inspection = createTuiUsageInspection(usage, presentation);
         return {
@@ -1284,6 +1293,66 @@ export class TuiFeatureFlow {
       },
       { summary: "Couldn't load usage.", nextStep: 'Retry /usage.' },
     );
+  }
+
+  /**
+   * Builds the session-tree cost breakdown for the detail view.
+   *
+   * Uses the row-level usage API so each assistant message is attributed to
+   * the model that actually generated it; delegated child Sessions (including
+   * nested delegations) are folded in as the sub-agent scope.
+   */
+  private async loadSessionCost(session: TuiSession): Promise<SessionCostBreakdown | undefined> {
+    const getSessionUsageWithRows = this.options.runtime.getSessionUsageWithRows;
+    if (!getSessionUsageWithRows) return undefined;
+    const rootModel = sessionModelLabel(session.model) ?? this.selectedModel()?.modelId;
+    const [rootUsage, subagentSessions] = await Promise.all([
+      getSessionUsageWithRows.call(this.options.runtime, session.sessionId),
+      this.loadDelegatedSessionTree(session.sessionId),
+    ]);
+    const rows: SessionCostRow[] = [
+      ...buildSessionCostRows(
+        {
+          scope: 'agent',
+          model: rootModel ?? 'unknown',
+          summary: rootUsage.summary ?? {},
+          ...(rootUsage.rows ? { rows: rootUsage.rows } : {}),
+        },
+        rootModel,
+      ),
+    ];
+    const childUsages = await Promise.all(
+      subagentSessions.map((child) =>
+        getSessionUsageWithRows
+          .call(this.options.runtime, child.sessionId)
+          .catch(() => undefined),
+      ),
+    );
+    for (const [index, childUsage] of childUsages.entries()) {
+      if (!childUsage) continue;
+      const childModel = sessionModelLabel(subagentSessions[index]!.model) ?? rootModel;
+      rows.push(
+        ...buildSessionCostRows(
+          {
+            scope: 'subagent',
+            model: childModel ?? 'unknown',
+            summary: childUsage.summary ?? {},
+            ...(childUsage.rows ? { rows: childUsage.rows } : {}),
+          },
+          childModel,
+        ),
+      );
+    }
+    return aggregateSessionCost(rows);
+  }
+
+  private async loadDelegatedSessionTree(sessionId: string): Promise<readonly TuiSession[]> {
+    const getSessionTree = this.options.runtime.getSessionTree;
+    if (getSessionTree) {
+      const sessions = await getSessionTree.call(this.options.runtime).catch(() => undefined);
+      if (sessions) return collectTuiDelegatedSessions(sessions, sessionId);
+    }
+    return collectTuiDelegatedSessions(this.options.controller.snapshot().sessions, sessionId);
   }
 
   private async showReportInspection(
@@ -1639,4 +1708,11 @@ function parseExportPath(rawPath: string): string | undefined {
     throw new Error('Usage: /export [path.md]');
   }
   return path;
+}
+
+function sessionModelLabel(
+  model: { providerId?: string; modelId?: string } | undefined,
+): string | undefined {
+  if (!model?.modelId) return undefined;
+  return model.providerId ? `${model.providerId}/${model.modelId}` : model.modelId;
 }

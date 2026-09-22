@@ -338,6 +338,21 @@ export class TuiSessionAccess {
       ...(response.nextCursor ? { nextCursor: response.nextCursor } : {}),
     };
   }
+
+  async getSessionTree(agentName = this.defaultAgentName): Promise<TuiSession[]> {
+    const response = await this.cliService.getSessionTree({ name: agentName });
+    return (response.sessions ?? []).flatMap((node) => {
+      const root = node.session ? [normalizeSessionInfoView(node.session)] : [];
+      const parentSessionId = node.session?.sessionId;
+      if (!parentSessionId) return root;
+      return [
+        ...root,
+        ...(node.childSessions ?? [])
+          .filter((child) => Boolean(child.sessionId))
+          .map((child) => normalizeSessionInfoView(toBranchSessionInfoView(child, parentSessionId))),
+      ];
+    });
+  }
 }
 
 function normalizeSessionPage(

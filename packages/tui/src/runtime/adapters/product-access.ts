@@ -15,11 +15,13 @@ import type {
   TuiModel,
   TuiModelSelection,
   TuiRuntimeDiagnostics,
+  TuiSession,
   TuiSessionUsage,
   TuiSessionUsageSummary,
   TuiSkillList,
 } from "../port.js";
 import type { TuiRuntimeAccessContext } from "./access-context.js";
+import type { TuiSessionAccess } from "./session-access.js";
 import type {
   McodeCreateProviderInput,
   McodeCopilotOAuthStatus,
@@ -45,6 +47,11 @@ export class TuiProductAccess {
     private readonly context: TuiRuntimeAccessContext,
     private readonly defaultAgentName: string,
     private readonly workspaceDir?: string,
+    /** Session-tree reader owned by the session access adapter (shared instance). */
+    private readonly sessionTree?: Pick<
+      TuiSessionAccess,
+      'getSessionTree'
+    >,
   ) {}
 
   async getAccountStatus(
@@ -297,6 +304,22 @@ export class TuiProductAccess {
     return (await this.context
       .service("session.usage-summary")
       .getSessionUsageSummary({ id: sessionId })) as TuiSessionUsageSummary;
+  }
+
+  async getSessionUsageWithRows(sessionId: string): Promise<TuiSessionUsage> {
+    const response = await this.context
+      .service("session.usage")
+      .getSessionUsage({ id: sessionId });
+    return {
+      ...(response.summary ? { summary: response.summary } : {}),
+      ...(Array.isArray(response.rows) ? { rows: response.rows } : {}),
+    } as TuiSessionUsage;
+  }
+
+  async getSessionTree(agentName?: string): Promise<readonly TuiSession[]> {
+    return await (this.sessionTree?.getSessionTree(
+      agentName ?? this.defaultAgentName,
+    ) ?? Promise.resolve([]));
   }
 
   async requestCompaction(
