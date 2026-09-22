@@ -16,6 +16,7 @@ import type { Editor } from '../../widgets/editor/editor.js';
 import type { TuiInteractionSurface } from '../../shell/interaction-surface.js';
 import type { TuiSurfaceHost } from '../../shell/surface-host.js';
 import type { TuiRunProjection } from '../../state/run-projection.js';
+import { TUI_TAB_DIRECT_SLOT_COUNT } from '../../state/tabs.js';
 import type { TuiActiveRunFlow } from '../run/active-run-flow.js';
 import type { TuiChatController } from '../chat-controller.js';
 import type { TuiFeatureFlow } from './feature-flow.js';
@@ -970,6 +971,33 @@ export class TuiCommandFlow {
           return;
         }
         await this.options.featureFlow.showSessionManager(args);
+      },
+      tabs: async ({ args }) => {
+        const action = args.trim().toLocaleLowerCase();
+        if (action === 'next') {
+          await this.options.sessionFlow.cycleTab(1);
+          return;
+        }
+        if (action === 'prev' || action === 'previous') {
+          await this.options.sessionFlow.cycleTab(-1);
+          return;
+        }
+        if (action === 'close') {
+          await this.options.sessionFlow.closeTab();
+          return;
+        }
+        const slot = Number(action);
+        if (Number.isInteger(slot) && slot >= 1 && slot <= TUI_TAB_DIRECT_SLOT_COUNT) {
+          await this.options.sessionFlow.activateTabSlot(slot);
+          return;
+        }
+        // Deliberately not "next" by default: an accidental bare `/tabs` must not
+        // move the user off the Session they are reading.
+        this.options.append(
+          'Usage: /tabs <next | prev | close | 1-9>. The key hints are in /hotkeys.',
+          'warning',
+        );
+        return 'retained';
       },
       goal: async ({ args }) => {
         if (!this.options.goalFlow) {

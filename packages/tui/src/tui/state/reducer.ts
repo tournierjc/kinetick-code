@@ -1,4 +1,5 @@
 import type { TuiAction, TuiEffect } from './actions.js';
+import { closeTuiTab, openTuiTab } from './tabs.js';
 import {
   createTuiSessionView,
   type TuiBackgroundTaskState,
@@ -21,9 +22,34 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
     if (!action.sessionId) {
       return { state: { ...state, activeSessionId: undefined }, effects: [] };
     }
-    return updateSession(state, action.sessionId, (session) => session, {
-      activeSessionId: action.sessionId,
-    });
+    return updateSession(
+      state,
+      action.sessionId,
+      // Becoming visible is what clears the unread marker; the badge counts
+      // turns that settled while another tab was on screen.
+      (session) => ({
+        ...session,
+        attention: { ...session.attention, unread: 0 },
+      }),
+      {
+        activeSessionId: action.sessionId,
+        tabs: { order: openTuiTab(state.tabs.order, action.sessionId) },
+      },
+    );
+  }
+
+  if (action.type === 'tabs/open') {
+    const order = openTuiTab(state.tabs.order, action.sessionId);
+    if (order === state.tabs.order) return { state, effects: [] };
+    return { state: { ...state, tabs: { order } }, effects: [] };
+  }
+  if (action.type === 'tabs/close') {
+    // The active Session is always an open tab: the caller activates a
+    // neighbour first, so this branch never has to move visibility.
+    if (action.sessionId === state.activeSessionId) return { state, effects: [] };
+    const order = closeTuiTab(state.tabs.order, action.sessionId);
+    if (order === state.tabs.order) return { state, effects: [] };
+    return { state: { ...state, tabs: { order } }, effects: [] };
   }
 
   if (action.type === 'interaction/permissionReceived') {
@@ -149,10 +175,17 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
           ? new Map(session.execution.runs)
           : new Map([[action.run.runId, action.run]]);
       if (action.run.status === 'terminal') runs.delete(action.run.runId);
+      // A turn that settles while another tab is on screen is exactly what the
+      // tab badge reports; the visible Session never accumulates unread marks.
+      const unread =
+        action.run.status === 'terminal' && state.activeSessionId !== action.sessionId
+          ? session.attention.unread + 1
+          : session.attention.unread;
       return {
         ...session,
         runRevision: session.runRevision + 1,
         execution: { ...session.execution, runs },
+        attention: { ...session.attention, unread },
       };
     });
   }

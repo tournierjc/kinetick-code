@@ -65,6 +65,8 @@ export type TuiAction =
   | { type: 'connection/subscribed' }
   | { type: 'connection/reconnected' }
   | { type: 'connection/sessionReconciled'; sessionId: string }
+  | { type: 'tabs/open'; sessionId: string }
+  | { type: 'tabs/close'; sessionId: string }
   | { type: 'lifecycle/leaveUi' }
   | { type: 'lifecycle/stopped' };
 

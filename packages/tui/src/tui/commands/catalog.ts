@@ -152,6 +152,17 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     runAvailability: 'idle',
   },
   {
+    name: 'tabs',
+    description: 'Switch between the open Session tabs',
+    category: 'Session',
+    argumentHint: '<next | prev | close | 1-9>',
+    getArgumentCompletions: argumentCompleter([
+      ['next', 'Switch to the next open tab'],
+      ['prev', 'Switch to the previous open tab'],
+      ['close', 'Close the visible tab and show its neighbour'],
+    ]),
+  },
+  {
     name: 'goal',
     description: 'Start or manage the current Session Goal',
     category: 'Session',

@@ -122,3 +122,30 @@ existing diagnostic-counts projection; raw error text, stacks and session IDs
 are not added to the uploaded ZIP. Offline tests cover persisted tool histories,
 archives, concurrent parent output, side-session cleanup and local diagnostics;
 this does not establish native-terminal or live-model acceptance.
+
+## Open Session tabs
+
+Every Session that has been opened in this run stays in a tab bar above the
+Composer. A tab shows its slot, its title and one live status: `working` for a
+turn on that Session, `waiting` while it holds a permission or question request,
+and `unread` when a turn settled while the tab was in the background. The bar
+appears from the second tab on and is hidden while a feature panel owns the
+screen.
+
+Switch tabs with `Ctrl+Shift+Left` / `Ctrl+Shift+Right`, or jump straight to a
+slot with `Alt+1`…`Alt+9`. `Alt+W` closes the visible tab and shows its
+neighbour; closing the last tab starts a new Session. The equivalent commands are
+`/tabs next`, `/tabs prev`, `/tabs close` and `/tabs 1-9`. `/hotkeys` lists the
+effective bindings, and `tui/keybindings.json` can remap any of them.
+
+Closing a tab only closes the tab: the Session keeps its history and reappears in
+the bar the next time it is opened from `/sessions`. The visible Session is always
+an open tab, so a tab cannot be closed without showing another one first.
+
+Tab switching still honours the live-run rule that `/sessions` follows: the
+transcript projection is per-Session, and opening another Session detaches and
+aborts the running turn. A Run must therefore still be stopped before switching,
+so a background tab shows `unread` but does not keep streaming. Offline tests
+cover the tab reducer, the bar rendering at narrow widths, the key bindings and
+the switch/close ordering; a background tab that keeps streaming is not
+implemented yet.

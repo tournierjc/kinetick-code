@@ -48,6 +48,12 @@ import { createTuiSessionLifecycleBridge } from './controller/session-lifecycle-
 import { parseTuiStatusLineItems as parseStatusItems } from './shell/status-line-items.js';
 import { showTuiStatusLineSetup } from './controller/product/status-line-setup.js';
 import { TuiCodexHandoffFlow } from './controller/product/codex-handoff-flow.js';
+import {
+  resolveTuiSessionTabStatus,
+  resolveTuiSessionTabs,
+  TuiSessionTabs,
+} from './shell/session-tabs.js';
+import { selectSessionView } from './state/selectors.js';
 
 export type { CreateTuiAppOptions, TuiApp, TuiStopOptions };
 export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
@@ -155,6 +161,18 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
   const hasLiveRun = () => Boolean(liveRunId() || controller.hasInProcessRun());
   const isTuiActive = (): boolean => started && !stopped && !suspended;
   let shouldResumeDraftAfterLogin = () => false;
+  const sessionTabs = new TuiSessionTabs({
+    tabs: () => {
+      const state = stateStore.snapshot();
+      return resolveTuiSessionTabs({
+        order: state.tabs.order,
+        activeSessionId: state.activeSessionId,
+        catalog: controller.snapshot().sessions,
+        statusOf: (sessionId) =>
+          resolveTuiSessionTabStatus(selectSessionView(state, sessionId)),
+      });
+    },
+  });
   const { layout, surfaceHost, fullscreenLayout, themeRendering, interactionSurface } =
     createTuiApplicationSurface({
       terminal,
@@ -164,6 +182,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       transcript,
       transcriptView,
       widgets,
+      sessionTabs,
       themeController,
       liveRunId,
       shouldResumeDraftAfterLogin: () => shouldResumeDraftAfterLogin(),
@@ -615,6 +634,9 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     leaveUi,
     isSideModeActive: () => sessionFlow.isSideModeActive(),
     toggleSideConversation: () => sessionFlow.toggleSideConversation(),
+    cycleSessionTab: (delta) => sessionFlow.cycleTab(delta),
+    selectSessionTab: (slot) => sessionFlow.activateTabSlot(slot),
+    closeSessionTab: () => sessionFlow.closeTab(),
     closeSideConversation: (exitReason) => sessionFlow.closeSideConversation(exitReason),
     requestProcessSuspend: options.requestProcessSuspend,
     keybindings: options.keybindings,
