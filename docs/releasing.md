@@ -30,10 +30,16 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
 4. **Version numbering.** Every fork release carries the `-fork.N` prerelease
    suffix: tag `v<X.Y.Z>-fork.N`, where `X.Y.Z` is the upstream core the merged
    tree is based on and `N` increments per fork release on that core
-   (`v0.5.1-fork.1`, then `v0.5.1-fork.2`; upstream 0.5.2 sync restarts at
-   `v0.5.2-fork.1`). The fork tree always differs from upstream at any given
-   core — the egress guard, telemetry removal, and fork docs are fork-only — so
-   a bare upstream number is never valid here. A `-fork.N` tag creates a GitHub
+   (`v0.5.2-fork.1`, then `v0.5.2-fork.2`; upstream 0.5.3 sync restarts at
+   `v0.5.3-fork.1`). `release:cli` accepts a same-core `-fork.N` version even
+   though plain SemVer orders it below the bare core (the version gate exempts
+   `X.Y.Z-fork.N` when `X.Y.Z` is the committed source version, as long as `N`
+   exceeds every existing `-fork.N` tag of that core, local and on origin). So
+   the first fork release on upstream 0.5.1 is `v0.5.1-fork.1`, cut from a tree
+   whose `package.json` reads `0.5.1`. The fork tree always differs from
+   upstream at any given core — the egress guard, telemetry removal, and
+   fork docs are fork-only — so a bare upstream number is never valid
+   here. A `-fork.N` tag creates a GitHub
    *prerelease* and the release tooling accepts it; the bare `v<X.Y.Z>` form is
    reserved for a deliberate stable promotion without fork-only changes.
    Never reuse an upstream version number for a tree that differs from upstream
