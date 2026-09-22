@@ -32,6 +32,13 @@ export interface ProviderFamily {
   readonly modelIdExcludes?: readonly string[];
   /** Whether the family is offered among the pinned presets. */
   readonly pinned?: boolean;
+  /**
+   * Whether the fork keeps this family pinned even when the remote pin list
+   * omits it. Reserved for families MiniMax's own shelf will never sell (an
+   * aggregator competing with the product's managed plans); for families MiniMax
+   * does sell, the remote shelf may retire the pin.
+   */
+  readonly forkAnchored?: boolean;
 }
 
 /**
@@ -68,6 +75,7 @@ const OPENROUTER: ProviderFamily = {
   apiFormat: 'openai-completions',
   thinkingFormat: 'openrouter',
   pinned: true,
+  forkAnchored: true,
 };
 
 export const PROVIDER_FAMILIES: readonly ProviderFamily[] = [DEEPSEEK, OPENROUTER];

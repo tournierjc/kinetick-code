@@ -77,17 +77,39 @@ export class ProviderPresetCatalog {
   async listProviderPresets(): Promise<ByokProviderPresetView[]> {
     const latest = await latestCatalogSnapshot(this.options);
     if (!latest) throw new Error('No valid models.dev catalog snapshot is available');
+    const remotePinnedProviderIds = await resolvePinnedProviderIds({
+      fetchImpl: this.options.commonConfigFetch,
+      originGetter: this.options.commonConfigOriginGetter,
+      timeoutMs: this.options.commonConfigTimeoutMs,
+      previewSecret: this.options.previewSecret,
+      lane: this.options.lane,
+    });
     const pinnedProviderIds =
-      (await resolvePinnedProviderIds({
-        fetchImpl: this.options.commonConfigFetch,
-        originGetter: this.options.commonConfigOriginGetter,
-        timeoutMs: this.options.commonConfigTimeoutMs,
-        previewSecret: this.options.previewSecret,
-        lane: this.options.lane,
-      })) ?? REGION_PINNED_PROVIDER_IDS[(this.options.regionGetter ?? getRuntimeRegion)()];
-    return orderProviderPresets(latest.presets, pinnedProviderIds);
+      remotePinnedProviderIds ??
+      REGION_PINNED_PROVIDER_IDS[(this.options.regionGetter ?? getRuntimeRegion)()];
+    // The fork's promise, narrower than `pinned`: a `forkAnchored` family is
+    // one MiniMax's shelf will never sell (the aggregator competes with the
+    // product's managed plans), so a valid remote list that omits it appends it
+    // at the tail of its pins. Every other family follows the shelf — MiniMax
+    // may retire its pin, and an unpinned catalog provider stays unpinned.
+    const shelfIds = new Set(latest.presets.map((preset) => preset.providerId));
+    const remoteList = remotePinnedProviderIds ?? [];
+    const forkAnchors =
+      remotePinnedProviderIds && remotePinnedProviderIds.length > 0
+        ? PROVIDER_FAMILIES.filter(
+            (family) =>
+              family.forkAnchored &&
+              shelfIds.has(family.providerId) &&
+              !remoteList.includes(family.providerId),
+          ).map((family) => family.providerId)
+        : [];
+    return orderProviderPresets(
+      latest.presets,
+      forkAnchors.length > 0 ? [...pinnedProviderIds, ...forkAnchors] : pinnedProviderIds,
+    );
   }
 }
+
 
 async function resolvePinnedProviderIds(
   options: Parameters<typeof fetchPinnedProviderIdsConfig>[0],
