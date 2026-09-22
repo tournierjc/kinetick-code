@@ -43,12 +43,12 @@ Understand a project, make changes, and run tests from your terminal. Use your M
 **This fork — GitHub Release archive (recommended).** Download the archive and checksum from the
 [latest fork release](https://github.com/tournierjc/minimax-code/releases/latest), verify the checksum, and install
 with npm. Node.js **22.19+ (22.x), 24.2+ (24.x), 25, or 26** is required; npm still needs network access to public
-npm for runtime dependencies. For example, for a `v0.5.1-fork.1` release:
+npm for runtime dependencies. For example, for a `v0.5.2-fork.1` release:
 
 ```bash
-# Linux; on macOS use: shasum -a 256 -c minimax-code-0.5.1-fork.1.tar.gz.sha256
-sha256sum -c minimax-code-0.5.1-fork.1.tar.gz.sha256
-npm install --global ./minimax-code-0.5.1-fork.1.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+# Linux; on macOS use: shasum -a 256 -c minimax-code-0.5.2-fork.1.tar.gz.sha256
+sha256sum -c minimax-code-0.5.2-fork.1.tar.gz.sha256
+npm install --global ./minimax-code-0.5.2-fork.1.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
 ```
 
 The archive passed the full CI verification and npm-install checks on Linux and macOS across the supported Node
