@@ -2,7 +2,7 @@
 
 ## Initial repository import, 2026-09-18
 
-The reviewed 0.4.12 CLI snapshot was imported at `c59cf5377045aa1a3e699c242d089b73b7cdc2ad` on top of the existing MiniMax Code Desktop support history. Commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image above the download links. The resulting tree ID, `327eb838c8bdc3da70d9e5f165ca6162a1d15545`, matched the reviewed source tree, and internal Git history was not imported.
+The reviewed 0.4.12 CLI snapshot was imported at `c59cf5377045aa1a3e699c242d089b73b7cdc2ad` on top of the existing Kinetick Code Desktop support history. Commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image above the download links. The resulting tree ID, `327eb838c8bdc3da70d9e5f165ca6162a1d15545`, matched the reviewed source tree, and internal Git history was not imported.
 
 Before import, `pnpm verify` passed all 14 applicable gates at implementation revision `1670bafd684ebf8dbb03dd41330ac2b099ffaf23` on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0, including 3,352 capability tests. History, exported-source, and built-distribution Gitleaks scans completed without unaddressed findings. Issue-form routing and Feishu payload generation used synthetic offline inputs and sent no notification.
 
@@ -38,11 +38,11 @@ Windows/Linux execution, fresh managed-account login, real provider calls, and l
 
 Verification results for the provider connector added in PR #2, at code revision `e7d12152` (the documentation commit that follows changes no code).
 
-Individual gates were run on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,163 files), generated paths (121 exports), typecheck, build, standalone boundary, egress boundary, capabilities (3,399 tests), CLI/ACP smoke (7 tests) and offline BYOK (1 test). All pass except `test:capabilities`, which reports 8 failures in `packages/tui/test/unit/update-service.test.ts` with `Unsupported MCode update host: linux-arm64`; that suite fails identically on an unmodified `origin/main` worktree in the same environment and does not fail on any CI platform.
+Individual gates were run on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,163 files), generated paths (121 exports), typecheck, build, standalone boundary, egress boundary, capabilities (3,399 tests), CLI/ACP smoke (7 tests) and offline BYOK (1 test). All pass except `test:capabilities`, which reports 8 failures in `packages/tui/test/unit/update-service.test.ts` with `Unsupported KCode update host: linux-arm64`; that suite fails identically on an unmodified `origin/main` worktree in the same environment and does not fail on any CI platform.
 
 GitHub Actions passed Source verification on ubuntu-latest, macos-latest and windows-latest (Node.js 24), the `verification` aggregate, and the Release audit.
 
-The connector adds 61 tests: 23 for the sign-in manager, 18 for the catalog reader, 3 for the composition, 1 for the per-model API override, 9 for the TUI sign-in panel, 6 for the `/provider` row and its snapshot, and 1 for the `/model` entry in the existing feature-flow suite. The discovery tests run against a captured `/models` response; their values are the API's, but they are not live-service acceptance. Live calls were made outside CI with a real account: completions on `openai-responses`, `anthropic-messages` and `openai-completions`, and `mcode exec` end to end on all three protocols and in all four egress modes (`managed-deny`, explicit `managed-deny`, `allowlist`, `off`). The TUI panel is covered by unit tests only: an interactive device-flow sign-in in a real terminal, enterprise-account hosts, and credential removal through provider management were not run.
+The connector adds 61 tests: 23 for the sign-in manager, 18 for the catalog reader, 3 for the composition, 1 for the per-model API override, 9 for the TUI sign-in panel, 6 for the `/provider` row and its snapshot, and 1 for the `/model` entry in the existing feature-flow suite. The discovery tests run against a captured `/models` response; their values are the API's, but they are not live-service acceptance. Live calls were made outside CI with a real account: completions on `openai-responses`, `anthropic-messages` and `openai-completions`, and `kcode exec` end to end on all three protocols and in all four egress modes (`managed-deny`, explicit `managed-deny`, `allowlist`, `off`). The TUI panel is covered by unit tests only: an interactive device-flow sign-in in a real terminal, enterprise-account hosts, and credential removal through provider management were not run.
 
 ### Release-preparation verification, 2026-09-12
 
@@ -75,7 +75,7 @@ This record preserves the clean-directory baseline from managed-capability resto
 
 ## Clean-directory acceptance
 
-Final source was copied outside the repository without `.git`, `node_modules`, `dist`, or `.cache`. A new pnpm store and public npm only were used for a frozen-lockfile install. The build downloaded the pinned MCode package again and extracted mcode-tools without reusing development artifacts.
+Final source was copied outside the repository without `.git`, `node_modules`, `dist`, or `.cache`. A new pnpm store and public npm only were used for a frozen-lockfile install. The build downloaded the pinned KCode package again and extracted mcode-tools without reusing development artifacts.
 
 | Check | Result |
 | --- | --- |

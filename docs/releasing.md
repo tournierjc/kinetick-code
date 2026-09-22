@@ -1,9 +1,9 @@
-# Releasing MiniMax Code
+# Releasing Kinetick Code
 
-## Fork release process (tournierjc/minimax-code)
+## Fork release process (tournierjc/kinetick-code)
 
 This repository is a private fork. Its release channel is **GitHub Releases on
-`tournierjc/minimax-code` only**. Nothing else on the MiniMax side — the npm package
+`tournierjc/kinetick-code` only**. Nothing else on the MiniMax side — the npm package
 `@minimax-ai/code`, the `filecdn.minimax.chat` installers, the `agent.minimax.io`
 site, or the desktop app — is built from this fork, and no fork release may publish
 to any of them. The repository's `package.json` and TUI manifests stay
@@ -45,7 +45,7 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    Never reuse an upstream version number for a tree that differs from upstream
    at that version.
 5. **CI and publication.** The tag triggers the `CLI release` workflow: full
-   `pnpm verify` + gitleaks scans, one `minimax-code-X.Y.Z.tar.gz` archive, then
+   `pnpm verify` + gitleaks scans, one `kinetick-code-X.Y.Z.tar.gz` archive, then
    install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26). Only if
    every install passes, a GitHub Release with the archive and `.sha256` is
    created on this fork. Windows validation remains paused upstream-wide.
@@ -81,7 +81,7 @@ files, creating commits or pushing. The release command then:
 4. Atomically pushes the release branch and tag, without pushing `main`.
 5. Opens a version PR back to `main`; merge it through the normal review process.
 
-CI requires the tag, both committed source versions and `mcode --version` to agree.
+CI requires the tag, both committed source versions and `kcode --version` to agree.
 It does not override the source version during a build. An existing tag or release
 branch, a non-increasing version, uncommitted files, or a starting commit other
 than the latest `origin/main` stops the command before version changes.
@@ -94,9 +94,9 @@ recreate an already distributed tag. Merge the version PR before starting the
 next release so `main` carries the released version.
 
 The workflow runs the full verification profile and secret scans, builds one
-`minimax-code-X.Y.Z.tar.gz` npm installation package, and authenticates and installs
+`kinetick-code-X.Y.Z.tar.gz` npm installation package, and authenticates and installs
 that same archive on Linux and macOS with Node 22.19.0, 24.2.0, 25 and 26. Each
-installation checks the generated `mcode` launcher, native SQLite, ripgrep, and
+installation checks the generated `kcode` launcher, native SQLite, ripgrep, and
 the offline smoke/BYOK suites. Windows validation remains paused.
 
 Only after every installation succeeds does CI create a GitHub Release with the
@@ -120,7 +120,7 @@ commit and keep output outside the repository:
 export MCODE_RELEASE_TAG="v$(node -p 'require("./package.json").version')"
 pnpm verify
 node scripts/package-cli-release.mjs "$MCODE_RELEASE_TAG" /tmp/mcode-release
-MCODE_RELEASE_ARCHIVE="/tmp/mcode-release/minimax-code-${MCODE_RELEASE_TAG#v}.tar.gz" pnpm verify --profile package
+MCODE_RELEASE_ARCHIVE="/tmp/mcode-release/kinetick-code-${MCODE_RELEASE_TAG#v}.tar.gz" pnpm verify --profile package
 ```
 
 The `package` profile validates installation of an existing archive; it does not
@@ -132,7 +132,7 @@ This workflow does not publish to the npm registry or change the official instal
 
 ## Source previews
 
-The current source target is MiniMax Code 0.4.12. Workspace and local-build manifests remain `private: true` to prevent accidental npm publication. A source release, npm package, and installer are separate artifacts with separate verification.
+The current source target is Kinetick Code 0.4.12. Workspace and local-build manifests remain `private: true` to prevent accidental npm publication. A source release, npm package, and installer are separate artifacts with separate verification.
 
 ## Prepare a release
 
@@ -153,7 +153,7 @@ Windows full validation is temporarily paused for Node compatibility and source 
 
 After both platform jobs pass, the workflow creates a `source-candidate-<full-SHA>` artifact containing:
 
-- `minimax-code-source.tar.gz`
+- `kinetick-code-source.tar.gz`
 - The archive receipt and SHA-256 file
 - `candidate.json` with the revision and platform summary
 - Per-platform verification reports
@@ -169,6 +169,6 @@ The intermediate `unverified-source-<full-SHA>` artifact is not a release candid
 
 ## Initial repository import
 
-The initial CLI source snapshot was imported on 2026-09-18 at `c59cf5377045aa1a3e699c242d089b73b7cdc2ad`, on top of the existing MiniMax Code Desktop support history. The follow-up commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image. The import kept the existing issue forms and Feishu support workflow, used `README_ZH.md` as the Chinese entry point, and excluded internal Git history.
+The initial CLI source snapshot was imported on 2026-09-18 at `c59cf5377045aa1a3e699c242d089b73b7cdc2ad`, on top of the existing Kinetick Code Desktop support history. The follow-up commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image. The import kept the existing issue forms and Feishu support workflow, used `README_ZH.md` as the Chinese entry point, and excluded internal Git history.
 
 `release/extraction.json` remains the shared-source baseline. Future updates arrive through reviewed synchronization PRs; the initial import is not repeated.

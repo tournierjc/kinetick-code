@@ -2,11 +2,11 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/wordmark-light.svg">
-    <img src="docs/assets/wordmark-light.svg" alt="MiniMax Code" width="760">
+    <img src="docs/assets/wordmark-light.svg" alt="Kinetick Code" width="784">
   </picture>
 </p>
 
-<h1 align="center">MiniMax Code</h1>
+<h1 align="center">Kinetick Code</h1>
 <p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
 
 > **分支说明。** 本仓库是
@@ -15,9 +15,12 @@
 > 各发布渠道（`filecdn.minimax.chat` 安装器、npm 包 `@minimax-ai/code`、
 > `agent.minimax.io` 文档与桌面端）发布的都是**官方构建，不包含本分叉的改动**。
 > 安装本分叉请从源码构建，或使用
-> [本仓库的 GitHub Releases](https://github.com/tournierjc/minimax-code/releases)；
+> [本仓库的 GitHub Releases](https://github.com/tournierjc/kinetick-code/releases)；
 > 不要使用 npm `@latest`。上游更新经审阅的同步 PR 进入本仓库，分叉发布流程见
 > [docs/releasing.md](docs/releasing.md)。
+> **更名说明。** 本分叉原名为 `tournierjc/minimax-code-fork`，命令原为 `mcode`。旧链接由 GitHub 自动跳转；
+> 当前命令为 **`kcode`**，发布归档名为 `kinetick-code-<version>.tar.gz`。旧安装的 `mcode` 启动器仍可继续使用，
+> 安装当前归档后改用 `kcode`；详见[安装说明](docs/installation.md#renamed-from-minimax-code-fork)。
 <p align="center">
   <a href="#快速开始">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -33,26 +36,26 @@
 
 在终端里读懂项目、修改代码并运行测试。使用 MiniMax 账号或自己的模型，把搜索、插件和多模态工具接入同一个工作流。
 
-[![MiniMax Code 真实 TUI：修复 clamp、查看代码 diff 并运行测试](docs/assets/tui-demo.png)](docs/demo.md)
+[![Kinetick Code 真实 TUI：修复 clamp、查看代码 diff 并运行测试](docs/assets/tui-demo.png)](docs/demo.md)
 
 <p align="center"><a href="docs/demo.md">观看 20 秒真实演示 →</a> · 真实终端输出回放，已压缩等待时间</p>
 
 ## 快速开始
 
-### 1. 安装 MCode
+### 1. 安装 KCode
 
 本分叉提供两个安装渠道。请勿使用上游安装器或 npm 渠道：它们安装的是 MiniMax
 **官方构建**，不是本分叉。
 
 **GitHub Release 归档（推荐）**：无需构建；需要 Node.js 22.19+（22 系列）、
 24.2+（24 系列）、25 或 26。从
-[本仓库 Releases](https://github.com/tournierjc/minimax-code/releases) 下载
-`minimax-code-X.Y.Z.tar.gz` 与配套 `.sha256`，校验后安装：
+[本仓库 Releases](https://github.com/tournierjc/kinetick-code/releases) 下载
+`kinetick-code-X.Y.Z.tar.gz` 与配套 `.sha256`，校验后安装：
 
 ```bash
-# Linux；macOS 使用：shasum -a 256 -c minimax-code-X.Y.Z.tar.gz.sha256
-sha256sum -c minimax-code-X.Y.Z.tar.gz.sha256
-npm install --global ./minimax-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+# Linux；macOS 使用：shasum -a 256 -c kinetick-code-X.Y.Z.tar.gz.sha256
+sha256sum -c kinetick-code-X.Y.Z.tar.gz.sha256
+npm install --global ./kinetick-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
 ```
 
 详见[安装 GitHub Release 归档](docs/installation.md#install-a-github-release-archive)。
@@ -76,7 +79,7 @@ irm https://filecdn.minimax.chat/public/install.ps1 | iex
 
 </details>
 
-脚本在 macOS / Linux / WSL 上默认安装到 `~/.minimax-code`，在 Windows 上默认安装到 `%USERPROFILE%\.minimax-code`。POSIX 启动器为 `bin/mcode` 和 `bin/mcode-tools`；Windows 启动器为 `mcode.cmd` / `mcode.ps1` 和 `mcode-tools.cmd` / `mcode-tools.ps1`。安装前设置 `MCODE_INSTALL_DIR` 可更改安装位置。移除 CLI 的方法见[卸载](#卸载)。
+脚本在 macOS / Linux / WSL 上默认安装到 `~/.minimax-code`，在 Windows 上默认安装到 `%USERPROFILE%\.minimax-code`。POSIX 启动器为 `bin/kcode` 和 `bin/mcode-tools`；Windows 启动器为 `kcode.cmd` / `kcode.ps1` 和 `mcode-tools.cmd` / `mcode-tools.ps1`。安装前设置 `MCODE_INSTALL_DIR` 可更改安装位置。移除 CLI 的方法见[卸载](#卸载)。
 
 **npm（`@minimax-ai/code`）**：该渠道发布 **MiniMax 官方构建**，不是本分叉；
 `@latest` 会在同一 npm prefix 中覆盖本分叉的安装。仅在确实需要官方 CLI 时，
@@ -91,8 +94,8 @@ npm install -g @minimax-ai/code@0.4.12 --registry=https://registry.npmjs.org/ --
 重新打开终端后检查安装：
 
 ```bash
-mcode --version
-mcode --help
+kcode --version
+kcode --help
 ```
 
 参阅官网的[快速开始](https://agent.minimaxi.com/docs/cli/quick-start)、[功能与配置](https://agent.minimaxi.com/docs/cli/features)和[故障排查](https://agent.minimaxi.com/docs/cli/faq)。
@@ -102,16 +105,16 @@ mcode --help
 中国大陆账号运行：
 
 ```bash
-mcode login
+kcode login
 ```
 
 Global 账号运行：
 
 ```bash
-mcode login --region global
+kcode login --region global
 ```
 
-在浏览器中完成登录，再启动 `mcode`，通过 `/status` 检查账号、通过 `/provider` 选择模型。退出登录使用 `mcode logout`。
+在浏览器中完成登录，再启动 `kcode`，通过 `/status` 检查账号、通过 `/provider` 选择模型。退出登录使用 `kcode logout`。
 
 Token Plan 需要账号与可用额度。从本仓库构建的版本与已发布的 npm CLI `@minimax-ai/code@0.4.12` 均默认将用户数据保存在 `~/.minimax`（选择 profile 时为 `~/.minimax-<profile>`）。`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以覆盖数据目录。安装脚本使用的 `~/.minimax-code` 安装目录与数据目录的选择是两回事。查找或删除配置和会话前，请参阅[账号与数据](docs/installation.md#accounts-and-data)。
 
@@ -121,13 +124,13 @@ Token Plan 需要账号与可用额度。从本仓库构建的版本与已发布
 BYOK 无需先登录 MiniMax。先在当前 shell 中设置 `MCODE_PROVIDER_API_KEY`，再添加提供方；将下方示例地址和模型名替换为实际配置：
 
 ```bash
-mcode provider add --name my-provider --base-url https://example.com/v1 \
+kcode provider add --name my-provider --base-url https://example.com/v1 \
   --api-format openai-completions --model my-model \
   --api-key-env MCODE_PROVIDER_API_KEY --use
-mcode
+kcode
 ```
 
-`--use` 会先测试第一个模型，成功后保存并设为默认模型；连接测试失败时不保存。省略 `--use` 则仅保存，不测试，也不改变默认模型。对于自定义或本地模型，可添加 `--context-limit 32768 --output-limit 4096`（请填写服务器的实际限制）。两个值都必须是正安全整数，并应用于所有重复指定的 `--model`。可通过 `mcode provider list --json` 查看已配置的限制。省略这两个参数时保持现有的模型限制默认值。
+`--use` 会先测试第一个模型，成功后保存并设为默认模型；连接测试失败时不保存。省略 `--use` 则仅保存，不测试，也不改变默认模型。对于自定义或本地模型，可添加 `--context-limit 32768 --output-limit 4096`（请填写服务器的实际限制）。两个值都必须是正安全整数，并应用于所有重复指定的 `--model`。可通过 `kcode provider list --json` 查看已配置的限制。省略这两个参数时保持现有的模型限制默认值。
 
 支持 `openai-completions`、`openai-responses` 和 `anthropic-messages`。连接测试、单次模型切换及环境变量设置见 [模型示例](docs/examples.md#2-choose-your-own-model)。
 
@@ -141,31 +144,31 @@ mcode
 
 ```bash
 cd /path/to/your/project
-mcode
+kcode
 ```
 
 在 TUI 中描述任务，也可以在启动时直接提交：
 
 ```bash
-mcode "Find a failing test, fix the implementation, and run the relevant tests."
+kcode "Find a failing test, fix the implementation, and run the relevant tests."
 ```
 
-使用 `mcode init .` 生成或更新 `AGENTS.md` 项目指导。任务中应说明期望结果、修改边界和验证方式。
+使用 `kcode init .` 生成或更新 `AGENTS.md` 项目指导。任务中应说明期望结果、修改边界和验证方式。
 
 | 入口 | 命令 | 适用场景 |
 | --- | --- | --- |
-| 交互式 TUI | `mcode [prompt]` | 探索代码、持续对话、审阅修改与权限确认。 |
-| Headless | `mcode exec [prompt]` | Shell、CI、批处理与评测。 |
-| ACP | `mcode acp` | 支持 Agent Client Protocol 的编辑器与客户端。 |
+| 交互式 TUI | `kcode [prompt]` | 探索代码、持续对话、审阅修改与权限确认。 |
+| Headless | `kcode exec [prompt]` | Shell、CI、批处理与评测。 |
+| ACP | `kcode acp` | 支持 Agent Client Protocol 的编辑器与客户端。 |
 
 ### 继续之前的工作
 
 ```bash
 # 恢复当前工作区最近的会话
-mcode --continue
+kcode --continue
 
 # 打开会话选择器
-mcode --session
+kcode --session
 ```
 
 在 TUI 中输入 `/sessions` 查找历史会话，输入 `/help` 查看完整命令与快捷键。
@@ -182,7 +185,7 @@ mcode --session
 
 ## 卸载
 
-卸载前请关闭正在运行的 MCode 会话，包括编辑器中的集成。先通过 `command -v mcode`（macOS / Linux / WSL）或 `Get-Command mcode -All`（PowerShell）定位命令，再按对应的安装方式操作。当前官方安装脚本**不提供卸载参数**。
+卸载前请关闭正在运行的 KCode 会话，包括编辑器中的集成。先通过 `command -v kcode`（macOS / Linux / WSL）或 `Get-Command kcode -All`（PowerShell）定位命令，再按对应的安装方式操作。当前官方安装脚本**不提供卸载参数**。
 
 ### 通过脚本安装
 
@@ -194,7 +197,7 @@ mcode --session
 rm -rf -- "$HOME/.minimax-code"
 ```
 
-从安装器修改的 shell 配置文件中删除 `# MiniMax Code CLI` 注释及其下一行 PATH 配置：zsh 使用 `~/.zshrc`；bash 依次选择 `~/.bashrc`、`~/.bash_profile`、`~/.profile` 中第一个已存在的文件，均不存在时创建 `~/.bashrc`；fish 使用 `~/.config/fish/config.fish`；其他 shell 使用 `~/.profile`。对应配置为 `export PATH="/absolute/install/path/bin:$PATH"`，fish 则为 `fish_add_path -g "/absolute/install/path/bin"`。只移除 MCode 对应的条目，保留其他 PATH 设置。如果设置了 `MCODE_NO_MODIFY_PATH` 或路径已存在，安装器会跳过此修改。
+从安装器修改的 shell 配置文件中删除 `# Kinetick Code CLI` 注释及其下一行 PATH 配置：zsh 使用 `~/.zshrc`；bash 依次选择 `~/.bashrc`、`~/.bash_profile`、`~/.profile` 中第一个已存在的文件，均不存在时创建 `~/.bashrc`；fish 使用 `~/.config/fish/config.fish`；其他 shell 使用 `~/.profile`。对应配置为 `export PATH="/absolute/install/path/bin:$PATH"`，fish 则为 `fish_add_path -g "/absolute/install/path/bin"`。只移除 KCode 对应的条目，保留其他 PATH 设置。如果设置了 `MCODE_NO_MODIFY_PATH` 或路径已存在，安装器会跳过此修改。
 
 **Windows（PowerShell）**
 
@@ -206,7 +209,7 @@ Remove-Item -LiteralPath "$env:USERPROFILE\.minimax-code" -Recurse -Force
 
 ### 通过 npm 或源码安装
 
-全局 npm 安装请使用当初安装 MCode 时的同一套 npm 和安装前缀：
+全局 npm 安装请使用当初安装 KCode 时的同一套 npm 和安装前缀：
 
 ```bash
 npm uninstall -g @minimax-ai/code
@@ -214,11 +217,11 @@ npm uninstall -g @minimax-ai/code
 
 源码构建请先保存工作，再仅删除自己创建的源码目录，详见[更新或移除](docs/installation.md#update-or-remove)。
 
-卸载后重新打开终端（编辑器集成终端需要完全重启编辑器），再次运行 `command -v mcode` 或 `Get-Command mcode -All`。没有结果表示 PATH 中已找不到该命令。如果出现另一份安装，请先确认它的安装方式再移除。
+卸载后重新打开终端（编辑器集成终端需要完全重启编辑器），再次运行 `command -v kcode` 或 `Get-Command kcode -All`。没有结果表示 PATH 中已找不到该命令。如果出现另一份安装，请先确认它的安装方式再移除。
 
 ### 可选：删除用户数据
 
-移除程序会保留单独存储的用户数据。如果还要删除本地登录状态、提供方配置、缓存和会话，请先按[账号与数据](docs/installation.md#accounts-and-data)确认实际数据目录，并备份需要保留的内容。其他 MCode 安装可能共用该目录。以下命令仅适用于默认的 `~/.minimax`：
+移除程序会保留单独存储的用户数据。如果还要删除本地登录状态、提供方配置、缓存和会话，请先按[账号与数据](docs/installation.md#accounts-and-data)确认实际数据目录，并备份需要保留的内容。其他 KCode 安装可能共用该目录。以下命令仅适用于默认的 `~/.minimax`：
 
 ```bash
 # macOS / Linux / WSL — 永久删除默认用户数据
@@ -230,7 +233,7 @@ rm -rf -- "$HOME/.minimax"
 Remove-Item -LiteralPath "$env:USERPROFILE\.minimax" -Recurse -Force
 ```
 
-profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以指定其他位置。只删除确定不再需要的具体目录，不要使用通配符批量删除。如果不再需要自行添加的 MCode 环境变量，也请从 shell 配置或用户环境变量设置中移除对应赋值。
+profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以指定其他位置。只删除确定不再需要的具体目录，不要使用通配符批量删除。如果不再需要自行添加的 KCode 环境变量，也请从 shell 配置或用户环境变量设置中移除对应赋值。
 
 ## 可以做什么
 
@@ -254,22 +257,22 @@ profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 
 
 ## 从源码构建
 
-开发 MCode 或运行本仓库源码需要 Git、Node.js **22.19+（22 系列）、24.2+（24 系列）、25 或 26**，以及 **pnpm 9.12.0**。在 Windows 上，请将源码放在本地 NTFS 卷上，并避开云同步目录；下面的预检命令会在 pnpm 创建 workspace link 前检查卷类型。
+开发 KCode 或运行本仓库源码需要 Git、Node.js **22.19+（22 系列）、24.2+（24 系列）、25 或 26**，以及 **pnpm 9.12.0**。在 Windows 上，请将源码放在本地 NTFS 卷上，并避开云同步目录；下面的预检命令会在 pnpm 创建 workspace link 前检查卷类型。
 ```bash
-git clone https://github.com/tournierjc/minimax-code.git
+git clone https://github.com/tournierjc/kinetick-code.git
 cd minimax-code
 node scripts/check-windows-source-location.mjs
 pnpm install --frozen-lockfile
 pnpm build
-pnpm mcode
+pnpm kcode
 ```
 
 首次构建需要联网；依赖和经过校验的 `mcode-tools` 均来自公共 npm。pnpm 安装、系统依赖和更新方法见[源码安装指南](docs/installation.md)。
 
-从源码目录运行时，将上方示例中的 `mcode` 替换为 `pnpm mcode`。要在自己的项目中工作，先切换到项目目录，再运行构建产物：
+从源码目录运行时，将上方示例中的 `kcode` 替换为 `pnpm kcode`。要在自己的项目中工作，先切换到项目目录，再运行构建产物：
 
 ```bash
-node /absolute/path/to/minimax-code/dist/cli.js
+node /absolute/path/to/kinetick-code/dist/cli.js
 ```
 
 本仓库目标为 **0.4.12 源码预览**。安装已发布的包与构建本仓库是两条独立路径，版本一致不代表构建来源完全相同，详见[版本与证据基线](docs/open-source-status.md#version-and-evidence-baseline)。
@@ -286,11 +289,11 @@ node /absolute/path/to/minimax-code/dist/cli.js
 
 ## 桌面版与问题反馈
 
-<a href="https://agent.minimaxi.com/download" title="下载 MiniMax Code">
-  <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="MiniMax Code 桌面版 — 点击下载" width="100%" />
+<a href="https://agent.minimaxi.com/download" title="下载 Kinetick Code">
+  <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="Kinetick Code 桌面版 — 点击下载" width="100%" />
 </a>
 
-本分叉仅覆盖终端 CLI，不包含 MiniMax Code 桌面版。桌面版可从
+本分叉仅覆盖终端 CLI，不包含 Kinetick Code 桌面版。桌面版可从
 [agent.minimaxi.com/download](https://agent.minimaxi.com/download) 下载，属于
 MiniMax 官方产品，不含本分叉的改动。上游桌面版问题反馈入口：
 [MiniMax-AI/minimax-code/issues](https://github.com/MiniMax-AI/minimax-code/issues)。

@@ -135,7 +135,7 @@ writeFileSync(
   JSON.stringify(result.metafile, null, 2) + "\n",
 );
 console.log(
-  `Built MiniMax Code ${version} from ${Object.keys(result.metafile.inputs).length} source files.`,
+  `Built Kinetick Code ${version} from ${Object.keys(result.metafile.inputs).length} source files.`,
 );
 
 writeFileSync(

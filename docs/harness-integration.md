@@ -1,26 +1,26 @@
-# Driving MiniMax Code from another process
+# Driving Kinetick Code from another process
 
-MiniMax Code is a program other programs can run. Two transports exist, and both
+Kinetick Code is a program other programs can run. Two transports exist, and both
 are stable enough that a script, a CI job, an editor, or another agent harness
 can depend on them.
 
 | Transport | Command | Shape |
 | --- | --- | --- |
-| Headless run | `mcode exec` | One process, one result, exits when the turn ends. |
-| Agent Client Protocol | `mcode acp` | One long-lived process over stdio, many sessions and turns. |
+| Headless run | `kcode exec` | One process, one result, exits when the turn ends. |
+| Agent Client Protocol | `kcode acp` | One long-lived process over stdio, many sessions and turns. |
 
 Everything below was observed on a build of this repository against a real
 provider. The verification method is stated per claim, because a documented
 contract that nobody exercised is a claim, not a fact.
 
-## 1. Headless runs: `mcode exec`
+## 1. Headless runs: `kcode exec`
 
 The prompt arrives as an argument or on stdin:
 
 ```bash
-mcode exec "Summarize the failing tests" --cwd /work/repo
+kcode exec "Summarize the failing tests" --cwd /work/repo
 
-printf 'Summarize the failing tests' | mcode exec --input - --input-format text
+printf 'Summarize the failing tests' | kcode exec --input - --input-format text
 ```
 
 `--input -` is the documented form for input that arrives from a pipe. The
@@ -72,7 +72,7 @@ No ANSI escapes appear in either format when the output is not a terminal.
 A run reports its `sessionId`; a later process resumes that session:
 
 ```bash
-printf 'What did I ask you to do first?' | mcode exec --session mvs_... --input - --output-format json
+printf 'What did I ask you to do first?' | kcode exec --session mvs_... --input - --output-format json
 ```
 
 The follow-up runs in a new process and still sees the earlier turn.
@@ -115,9 +115,9 @@ stdout keeps carrying only results. The table is defined in
 Observed: an unavailable model exits `4` with an empty stdout and an
 explanatory message on stderr.
 
-## 2. Sessions: `mcode acp`
+## 2. Sessions: `kcode acp`
 
-`mcode acp` speaks Agent Client Protocol (JSON-RPC over stdio, one message per
+`kcode acp` speaks Agent Client Protocol (JSON-RPC over stdio, one message per
 line) and serves editors and other client harnesses. It uses
 `@agentclientprotocol/sdk`, so a client built with the same SDK needs no
 adaptation.
