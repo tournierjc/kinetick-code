@@ -8,6 +8,18 @@
 
 <h1 align="center">MiniMax Code</h1>
 <p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
+
+> **Fork notice.** This repository is a private fork of
+> [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code). It removes
+> the telemetry subsystem and ships a default-deny network egress guard (see [Network
+> egress](#network-egress)). **No release channel hosted by MiniMax is built from this
+> fork**: the `filecdn.minimax.chat` installers, the npm package `@minimax-ai/code`,
+> the `agent.minimax.io` docs and desktop app, and `agent.minimax.*` service hosts
+> all serve MiniMax's official builds, not this one. Install this fork from source or
+> from [this repository's GitHub Releases](https://github.com/tournierjc/minimax-code/releases)
+> — never from `@latest` on npm. Upstream changes arrive through reviewed
+> synchronization PRs; see [docs/releasing.md](docs/releasing.md) for the fork release
+> process.
 <p align="center">
   <a href="#quick-start">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -31,7 +43,29 @@ Understand a project, make changes, and run tests from your terminal. Use your M
 
 ### 1. Install MCode
 
-Use the official installer for your platform. It installs the latest CLI, prepares a compatible Node.js runtime when needed, and does not require `sudo` or administrator privileges. Alpine / musl Linux is not supported by the one-command installer.
+Two channels are available for **this fork**. Do not use the upstream installer or
+npm channel: they install MiniMax's official builds, not this fork.
+
+**GitHub release archive (recommended)** — build-free; Node.js 22.19+ (22.x), 24.2+
+(24.x), 25, or 26 required. Download `minimax-code-X.Y.Z.tar.gz` and its `.sha256`
+from [this repository's Releases](https://github.com/tournierjc/minimax-code/releases),
+verify the checksum, and install the archive:
+
+```bash
+# Linux; on macOS use: shasum -a 256 -c minimax-code-X.Y.Z.tar.gz.sha256
+sha256sum -c minimax-code-X.Y.Z.tar.gz.sha256
+npm install --global ./minimax-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+```
+
+See [Install a GitHub release archive](docs/installation.md#install-a-github-release-archive).
+
+**From source** — see [Build from source](#build-from-source).
+
+<details>
+<summary>Official MiniMax installer (NOT this fork)</summary>
+
+MiniMax's own one-command installer works, but it installs MiniMax's **official** CLI
+(with the telemetry subsystem this fork removes):
 
 **macOS / Linux / WSL**
 
@@ -45,15 +79,23 @@ curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash
 irm https://filecdn.minimax.chat/public/install.ps1 | iex
 ```
 
+</details>
+
 The scripts install into `~/.minimax-code` on macOS / Linux / WSL and `%USERPROFILE%\.minimax-code` on Windows. The launchers are `bin/mcode` and `bin/mcode-tools` on POSIX, or `mcode.cmd` / `mcode.ps1` and `mcode-tools.cmd` / `mcode-tools.ps1` on Windows. Set `MCODE_INSTALL_DIR` before installation to choose a different location. See [Uninstall](#uninstall) to remove the CLI.
 
-**npm** — if you already have **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**:
+**npm (`@minimax-ai/code`)** — this channel publishes **MiniMax's official builds**,
+not this fork. `@latest` on npm will replace a fork installation in the same npm
+prefix. Pin an exact upstream version and use it only when you deliberately want the
+official CLI:
 
 ```bash
-npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
+npm install -g @minimax-ai/code@0.4.12 --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
 ```
 
-The npm command uses the public registry, includes the optional SQLite dependency, and permits the package and SQLite installation scripts. See the [installation guide](docs/installation.md) for version pinning and Node.js compatibility.
+The command uses the public registry, includes the optional SQLite dependency, and
+permits the package and SQLite installation scripts. See the
+[installation guide](docs/installation.md) for version pinning and Node.js
+compatibility.
 
 Reopen your terminal and check the installation:
 
@@ -62,7 +104,13 @@ mcode --version
 mcode --help
 ```
 
-See the official [quick start](https://agent.minimax.io/docs/cli/quick-start), [features](https://agent.minimax.io/docs/cli/features), and [troubleshooting](https://agent.minimax.io/docs/cli/faq).
+MiniMax's official [quick start](https://agent.minimax.io/docs/cli/quick-start),
+[features](https://agent.minimax.io/docs/cli/features), and
+[troubleshooting](https://agent.minimax.io/docs/cli/faq) describe the upstream
+product; account-login features behind `agent.minimax.*` hosts are refused by this
+fork's default-deny egress guard unless you allowlist them
+([docs/egress-policy.md](docs/egress-policy.md)). For this fork, prefer the local
+[documentation](docs/README.md).
 
 ### 2. Sign in or bring your own API key
 
@@ -234,7 +282,7 @@ The [small, reproducible project](examples/clamp) is the same task used in the d
 To develop MCode or run this source checkout, you need Git, **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**, and **pnpm 9.12.0**.
 
 ```bash
-git clone https://github.com/MiniMax-AI/minimax-code.git
+git clone https://github.com/tournierjc/minimax-code.git
 cd minimax-code
 pnpm install --frozen-lockfile
 pnpm build
@@ -254,12 +302,16 @@ This repository targets the **0.4.12 source preview**. Installing the published 
 ## Documentation and contributing
 
 - [Installation and updates](docs/installation.md) · [Examples](docs/examples.md) · [TUI status line](packages/tui/docs/status-line-config.md)
-- [Contributor guide](CONTRIBUTING.md) · [Report a bug or propose an idea](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) · [Report a security issue](SECURITY.md)
+- [Contributor guide](CONTRIBUTING.md) · [Fork release process](docs/releasing.md) · [Report a security issue](SECURITY.md)
 - [All documentation](docs/README.md): architecture, capability coverage, verification records, source synchronization, and release preparation.
 
 English is the primary documentation language. The [Chinese README](README_ZH.md) mirrors this page.
 
-For now, code and documentation pull requests are accepted only from repository collaborators. If you are not a collaborator but have an idea or proposal, please [open an issue](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) so we can discuss it. Remove secrets, account details, and private project content from reports.
+For now, code and documentation pull requests are accepted only from repository
+collaborators. This fork's development happens on feature branches and reviewed PRs
+against `main` — never direct pushes — including upstream synchronization PRs; see
+[docs/releasing.md](docs/releasing.md) and
+[docs/source-sync.md](docs/source-sync.md).
 
 ## Desktop app and support
 
@@ -267,9 +319,12 @@ For now, code and documentation pull requests are accepted only from repository 
   <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="MiniMax Code desktop app — click to download" width="100%" />
 </a>
 
-[Download for macOS or Windows](https://agent.minimax.io/download) · [Report a problem or ask a question](https://github.com/MiniMax-AI/minimax-code/issues/new/choose)
-
-This repository also hosts issue reporting for the MiniMax Code desktop app. The published source covers the terminal TUI, headless CLI, and ACP; it does not include the desktop application's source. Select the affected product when filing an issue. For a desktop bug, include the app version, operating system, and a log upload ID if available from **Settings → General → Upload logs**. For a CLI bug, include `mcode --version`, your interface, and a minimal reproduction. Remove credentials and private project content from reports.
+This fork covers the terminal CLI only; the MiniMax Code desktop app is not part of
+it. The desktop app can be downloaded from
+[agent.minimax.io/download](https://agent.minimax.io/download) — it is MiniMax's
+official product and does not include this fork's changes. Upstream issue reporting
+for the desktop app is at
+[MiniMax-AI/minimax-code/issues](https://github.com/MiniMax-AI/minimax-code/issues).
 
 ## License
 

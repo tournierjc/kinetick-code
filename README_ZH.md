@@ -8,6 +8,16 @@
 
 <h1 align="center">MiniMax Code</h1>
 <p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
+
+> **分支说明。** 本仓库是
+> [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code) 的私有分叉，
+> 移除了遥测子系统并默认启用拒绝一切外连的出口守卫（见「网络出口」）。MiniMax 托管的
+> 各发布渠道（`filecdn.minimax.chat` 安装器、npm 包 `@minimax-ai/code`、
+> `agent.minimax.io` 文档与桌面端）发布的都是**官方构建，不包含本分叉的改动**。
+> 安装本分叉请从源码构建，或使用
+> [本仓库的 GitHub Releases](https://github.com/tournierjc/minimax-code/releases)；
+> 不要使用 npm `@latest`。上游更新经审阅的同步 PR 进入本仓库，分叉发布流程见
+> [docs/releasing.md](docs/releasing.md)。
 <p align="center">
   <a href="#快速开始">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -31,7 +41,26 @@
 
 ### 1. 安装 MCode
 
-按操作系统选择官方安装器。安装器会安装最新版 CLI，并在需要时准备兼容的 Node.js，无需 `sudo` 或管理员权限；目前不支持 Alpine / musl Linux。
+本分叉提供两个安装渠道。请勿使用上游安装器或 npm 渠道：它们安装的是 MiniMax
+**官方构建**，不是本分叉。
+
+**GitHub Release 归档（推荐）**：无需构建；需要 Node.js 22.19+（22 系列）、
+24.2+（24 系列）、25 或 26。从
+[本仓库 Releases](https://github.com/tournierjc/minimax-code/releases) 下载
+`minimax-code-X.Y.Z.tar.gz` 与配套 `.sha256`，校验后安装：
+
+```bash
+# Linux；macOS 使用：shasum -a 256 -c minimax-code-X.Y.Z.tar.gz.sha256
+sha256sum -c minimax-code-X.Y.Z.tar.gz.sha256
+npm install --global ./minimax-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+```
+
+详见[安装 GitHub Release 归档](docs/installation.md#install-a-github-release-archive)。
+
+**源码构建**：见「从源码构建」。
+
+<details>
+<summary>MiniMax 官方安装器（安装的并非本分叉）</summary>
 
 **macOS / Linux / WSL**
 
@@ -45,15 +74,19 @@ curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash
 irm https://filecdn.minimax.chat/public/install.ps1 | iex
 ```
 
+</details>
+
 脚本在 macOS / Linux / WSL 上默认安装到 `~/.minimax-code`，在 Windows 上默认安装到 `%USERPROFILE%\.minimax-code`。POSIX 启动器为 `bin/mcode` 和 `bin/mcode-tools`；Windows 启动器为 `mcode.cmd` / `mcode.ps1` 和 `mcode-tools.cmd` / `mcode-tools.ps1`。安装前设置 `MCODE_INSTALL_DIR` 可更改安装位置。移除 CLI 的方法见[卸载](#卸载)。
 
-**npm**：适用于已安装 **Node.js 22.19+（22.x）、24.2+（24.x）、25 或 26** 的环境。
+**npm（`@minimax-ai/code`）**：该渠道发布 **MiniMax 官方构建**，不是本分叉；
+`@latest` 会在同一 npm prefix 中覆盖本分叉的安装。仅在确实需要官方 CLI 时，
+固定精确版本使用：
 
 ```bash
-npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
+npm install -g @minimax-ai/code@0.4.12 --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
 ```
 
-该 npm 命令使用公共 registry，包含可选的 SQLite 依赖，并允许执行主包和 SQLite 的安装脚本。固定版本和 Node.js 兼容范围见[安装指南](docs/installation.md)。
+该命令使用公共 registry，包含可选的 SQLite 依赖，并允许执行主包和 SQLite 的安装脚本。固定版本和 Node.js 兼容范围见[安装指南](docs/installation.md)。
 
 重新打开终端后检查安装：
 
@@ -224,7 +257,7 @@ profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 
 开发 MCode 或运行本仓库源码需要 Git、Node.js **22.19+（22 系列）、24.2+（24 系列）、25 或 26**，以及 **pnpm 9.12.0**。
 
 ```bash
-git clone https://github.com/MiniMax-AI/minimax-code.git
+git clone https://github.com/tournierjc/minimax-code.git
 cd minimax-code
 pnpm install --frozen-lockfile
 pnpm build
@@ -244,12 +277,12 @@ node /absolute/path/to/minimax-code/dist/cli.js
 ## 文档与贡献
 
 - [安装与更新](docs/installation.md) · [使用示例](docs/examples.md) · [TUI 状态栏](packages/tui/docs/status-line-config.md)
-- [贡献指南](CONTRIBUTING.md) · [报告 Bug / 提出建议](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) · [报告安全问题](SECURITY.md)
+- [贡献指南](CONTRIBUTING.md) · [分叉发布流程](docs/releasing.md) · [报告安全问题](SECURITY.md)
 - [全部文档](docs/README.md)：架构、能力对照、验证记录、源码同步和发布流程。
 
 项目文档以英文为主，本页为首页的简体中文译文。
 
-目前仅接受仓库协作者提交代码和文档 Pull Request。如果你不是协作者，但有想法或方案，欢迎先通过 [Issue](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) 讨论。请在报告中移除密钥、账号信息和私人项目内容。
+目前仅接受仓库协作者提交代码和文档 Pull Request。本分叉的开发一律通过功能分支和针对 `main` 的审阅 PR 进行（包括上游同步 PR），禁止直接推送 `main`；见 [docs/releasing.md](docs/releasing.md) 与 [docs/source-sync.md](docs/source-sync.md)。
 
 ## 桌面版与问题反馈
 
@@ -257,9 +290,10 @@ node /absolute/path/to/minimax-code/dist/cli.js
   <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="MiniMax Code 桌面版 — 点击下载" width="100%" />
 </a>
 
-[下载 macOS 或 Windows 桌面版](https://agent.minimaxi.com/download) · [报告问题或提问](https://github.com/MiniMax-AI/minimax-code/issues/new/choose)
-
-本仓库也承接 MiniMax Code 桌面版的问题反馈。公开源码范围为终端 TUI、Headless CLI 和 ACP，不包含桌面应用源码。提交 Issue 时请选择对应产品。桌面版问题请注明应用版本、操作系统，以及「设置 → 通用 → 上传日志」生成的日志上传 ID（如可用）；CLI 问题请注明 `mcode --version`、运行入口与最小复现。报告中请移除凭据和私人项目内容。
+本分叉仅覆盖终端 CLI，不包含 MiniMax Code 桌面版。桌面版可从
+[agent.minimaxi.com/download](https://agent.minimaxi.com/download) 下载，属于
+MiniMax 官方产品，不含本分叉的改动。上游桌面版问题反馈入口：
+[MiniMax-AI/minimax-code/issues](https://github.com/MiniMax-AI/minimax-code/issues)。
 
 ## 许可
 
