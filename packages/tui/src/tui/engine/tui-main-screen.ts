@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { deleteKittyImage, isImageLine } from "./terminal-image.js";
 import { type TUI, TuiBase, type TuiStopOptions } from "./tui.js";
-import { visibleWidth } from "./utils.js";
+import { stripTerminalSequences, visibleWidth } from "./utils.js";
 
 const KITTY_SEQUENCE_PREFIX = "\x1b_G";
 const MAX_RENDER_WRITE_CHARS = 1024 * 1024;
@@ -131,6 +131,9 @@ export class TuiMainScreen extends TuiBase implements TUI {
 	private historyReplayPending = false;
 
 	protected override onTerminalResize(): void {
+		// Some hosts repeat resize notifications while scrolling or reconnecting.
+		// An unchanged geometry must not clear and replay native scrollback.
+		if (this.previousWidth === this.terminal.columns && this.previousHeight === this.terminal.rows) return;
 		// Render the visible tail now; replay native scrollback only after the drag settles.
 		if (this.previousLines.length > 0 && !isTermuxSession()) {
 			if (this.resizeTimer) clearTimeout(this.resizeTimer);
@@ -296,6 +299,29 @@ export class TuiMainScreen extends TuiBase implements TUI {
 			newLines = this.compositeOverlays(newLines, width, height);
 		}
 
+		// A native scrollback viewport cannot move backwards without clearing history.
+		// When only addressable rows shrink, absorb the freed rows at the top of the
+		// screen instead. The composer stays at the bottom, historical rows stay unique,
+		// and later output consumes this temporary space before scrolling again.
+		if (
+			!widthChanged && !heightChanged && !this.historyReplayPending && !this.hasOverlayEntries &&
+			prevViewportTop > 0 && newLines.length > prevViewportTop &&
+			newLines.length < prevViewportTop + height &&
+			this.previousKittyImageIds.size === 0 && !newLines.some(isImageLine)
+		) {
+			let unchangedHistory = true;
+			for (let i = 0; i < prevViewportTop; i++) {
+				if (stripTerminalSequences(this.previousLines[i] ?? "") !== stripTerminalSequences(newLines[i] ?? "")) {
+					unchangedHistory = false;
+					break;
+				}
+			}
+			if (unchangedHistory) {
+				const padding = Array<string>(prevViewportTop + height - newLines.length).fill("");
+				newLines = [...newLines.slice(0, prevViewportTop), ...padding, ...newLines.slice(prevViewportTop)];
+			}
+		}
+
 		// Extract cursor position before applying line resets (marker must be found first)
 		const cursorPos = this.extractCursorPosition(newLines, height);
 
@@ -341,8 +367,6 @@ export class TuiMainScreen extends TuiBase implements TUI {
 				}
 				output.append(line);
 			}
-			output.append("\x1b[?2026l"); // End synchronized output
-			output.flush();
 			this.cursorRow = Math.max(0, newLines.length - 1);
 			this.hardwareCursorRow = this.cursorRow;
 			// Reset max lines when clearing, otherwise track growth
@@ -352,7 +376,9 @@ export class TuiMainScreen extends TuiBase implements TUI {
 				this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
 			}
 			this.previousViewportTop = Math.max(start, newLines.length - height);
-			this.positionHardwareCursor(cursorPos, newLines.length);
+			this.positionHardwareCursor(cursorPos, newLines.length, output);
+			output.append("\x1b[?2026l"); // Present only after restoring the input cursor.
+			output.flush();
 			this.previousLines = newLines;
 			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 			this.previousWidth = width;
@@ -489,12 +515,12 @@ export class TuiMainScreen extends TuiBase implements TUI {
 				if (moveBack > 0) {
 					output.append(`\x1b[${moveBack}A`);
 				}
-				output.append("\x1b[?2026l");
-				output.flush();
 				this.cursorRow = targetRow;
 				this.hardwareCursorRow = targetRow;
+				this.positionHardwareCursor(cursorPos, newLines.length, output);
+				output.append("\x1b[?2026l");
+				output.flush();
 			}
-			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
 			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 			this.previousWidth = width;
@@ -503,11 +529,19 @@ export class TuiMainScreen extends TuiBase implements TUI {
 			return;
 		}
 
-		// Differential rendering can only touch what was actually visible. A historical row cannot
-		// be rewritten in native scrollback. Redraw only the visible viewport so a session-state
-		// update does not clear the user's native scrollback or move Windows Terminal to its start.
+		// Native scrollback is not addressable. If its text changed, retaining the old prefix
+		// would splice stale rows onto the new document, even when its total height grew.
+		// Style-only changes can still repaint the viewport without replaying history.
 		if (firstChanged < prevViewportTop) {
 			logRedraw(`firstChanged < viewportTop (${firstChanged} < ${prevViewportTop})`);
+			for (let i = firstChanged; i < prevViewportTop; i++) {
+				const oldLine = this.previousLines[i] ?? "";
+				const newLine = newLines[i] ?? "";
+				if (oldLine !== newLine && stripTerminalSequences(oldLine) !== stripTerminalSequences(newLine)) {
+					fullRender(true);
+					return;
+				}
+			}
 			fullRender(true, true);
 			return;
 		}
@@ -620,8 +654,6 @@ export class TuiMainScreen extends TuiBase implements TUI {
 			output.append(`\x1b[${extraLines}A`);
 		}
 
-		output.append("\x1b[?2026l"); // End synchronized output
-
 		if (process.env.PI_TUI_DEBUG === "1") {
 			const debugDir = "/tmp/tui";
 			fs.mkdirSync(debugDir, { recursive: true });
@@ -651,8 +683,6 @@ export class TuiMainScreen extends TuiBase implements TUI {
 			fs.writeFileSync(debugPath, debugData);
 		}
 
-		output.flush();
-
 		// Track cursor position for next render
 		// cursorRow tracks end of content (for viewport calculation)
 		// hardwareCursorRow tracks actual terminal cursor position (for movement)
@@ -662,8 +692,10 @@ export class TuiMainScreen extends TuiBase implements TUI {
 		this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
 		this.previousViewportTop = Math.max(prevViewportTop, finalCursorRow - height + 1);
 
-		// Position hardware cursor for IME
-		this.positionHardwareCursor(cursorPos, newLines.length);
+		// Restore the IME anchor before presenting the frame, including cursor visibility.
+		this.positionHardwareCursor(cursorPos, newLines.length, output);
+		output.append("\x1b[?2026l");
+		output.flush();
 
 		this.previousLines = newLines;
 		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
@@ -676,9 +708,14 @@ export class TuiMainScreen extends TuiBase implements TUI {
 	 * @param cursorPos The cursor position extracted from rendered output, or null
 	 * @param totalLines Total number of rendered lines
 	 */
-	private positionHardwareCursor(cursorPos: { row: number; col: number } | null, totalLines: number): void {
+	private positionHardwareCursor(
+		cursorPos: { row: number; col: number } | null,
+		totalLines: number,
+		output?: BoundedTerminalWriter,
+	): void {
 		if (!cursorPos || totalLines <= 0) {
-			this.terminal.hideCursor();
+			if (output) output.append("\x1b[?25l");
+			else this.terminal.hideCursor();
 			return;
 		}
 
@@ -698,11 +735,14 @@ export class TuiMainScreen extends TuiBase implements TUI {
 		buffer += `\x1b[${targetCol + 1}G`;
 
 		if (buffer) {
-			this.terminal.write(buffer);
+			if (output) output.append(buffer);
+			else this.terminal.write(buffer);
 		}
 
 		this.hardwareCursorRow = targetRow;
-		if (this.getShowHardwareCursor()) {
+		if (output) {
+			output.append(this.getShowHardwareCursor() ? "\x1b[?25h" : "\x1b[?25l");
+		} else if (this.getShowHardwareCursor()) {
 			this.terminal.showCursor();
 		} else {
 			this.terminal.hideCursor();

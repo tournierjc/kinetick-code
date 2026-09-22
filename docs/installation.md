@@ -1,8 +1,14 @@
 # Installation packages and source builds
 
+> [!IMPORTANT]
+> This repository is the fork [`tournierjc/minimax-code`](https://github.com/tournierjc/minimax-code).
+> The `filecdn.minimax.chat` installer scripts and the public `@minimax-ai/code` npm package deliver **upstream**
+> builds without this fork's changes. Install the fork from its own [GitHub Releases](https://github.com/tournierjc/minimax-code/releases)
+> or build it from this source. See [Fork release process](releasing.md#fork-release-process-tournierjcminimax-code).
+
 ## Install a GitHub release archive
 
-When a CLI release is available on [this fork's GitHub Releases](https://github.com/tournierjc/minimax-code/releases),
+When a CLI release is available on the fork's [GitHub Releases](https://github.com/tournierjc/minimax-code/releases),
 download `minimax-code-X.Y.Z.tar.gz` and the matching `.sha256` file. This is an npm
 installation package containing the built CLI; no source build or pnpm is needed.
 Install Node.js 22.19+ (22.x), 24.2+ (24.x), 25 or 26 first. npm still needs network
@@ -26,28 +32,23 @@ This archive uses the same `@minimax-ai/code` package name, `mcode` command and
 default user data directory as the official npm CLI. Installing it globally into
 the same npm prefix replaces that npm installation. Update to another GitHub
 version by explicitly installing its archive; the built-in updater follows the
-official npm registry channel and does not select GitHub release assets. To remove
+official npm registry channel and does not select GitHub release assets — after
+any updater run, reinstall the fork archive to restore fork behavior. To remove
 the package, use `npm uninstall --global @minimax-ai/code`. User data remains in place.
+
+Fork release archives are named `minimax-code-X.Y.Z-fork.N.tar.gz` (the version
+matches the tag, see [Fork release process](releasing.md#fork-release-process-tournierjcminimax-code)); verify and
+install them the same way as the example above.
 
 ## Install from source
 
-**Fork notice.** The npm package [`@minimax-ai/code`](https://www.npmjs.com/package/@minimax-ai/code)
-and the `filecdn.minimax.chat` installers publish **MiniMax's official builds**, not this
-fork. Public npm `latest` was 0.4.12 on 2026-09-18. Use those channels only when you
-deliberately want the upstream CLI; installing them over a fork installation in the same
-npm prefix replaces it. This fork is distributed as GitHub release archives on
-[tournierjc/minimax-code](https://github.com/tournierjc/minimax-code/releases) and from
-source. See the [README installation steps](../README.md#quick-start) and the
-[official quick start](https://agent.minimax.io/docs/cli/quick-start) for the upstream
-channels.
-
-For npm, use the command in the README: it explicitly selects the public registry, includes optional dependencies, and allows the `@minimax-ai/code` and `better-sqlite3` lifecycle scripts. SQLite is declared optional in the package metadata, but a working native SQLite binding is required at runtime. Do not omit optional dependencies or disable installation scripts. On npm versions that enforce script approvals, `--allow-scripts` grants these two packages permission without allowing every dependency script.
-
-`@latest` follows the stable npm dist-tag. For a reproducible CLI version, replace `@latest` with an exact published version such as `@0.4.12`, keeping the other options. Use Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26 for both npm and source installations.
+The fork is not published to npm. The upstream CLI is available as [`@minimax-ai/code`](https://www.npmjs.com/package/@minimax-ai/code) — installing it gets you the **upstream** build, not this fork. The upstream `filecdn.minimax.chat` installer scripts likewise track upstream. For fork behavior, build from this repository's source (below) or install a [fork release archive](#install-a-github-release-archive).
 
 This guide builds the 0.4.12 source preview. Workspace/local build manifests remain `private: true` to prevent accidental publishing. A source checkout may contain additional reviewed distribution changes; matching version strings alone do not establish byte-for-byte or build-provenance equivalence with the official npm tarball. Use the committed source revision and release receipt to identify a source build.
 
 For a source build, you need Git, Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26, and pnpm 9.12.0. Regular CI uses Node.js 24 across Linux and macOS. The weekly and manual compatibility matrix covers Node.js 22.19.0, 24.2.0, 25, and 26 on both platforms. Windows CI and source-candidate validation are temporarily paused while their checks are made reliable. Initial installation and build require access to public npm.
+
+On Windows, check out this repository on a local NTFS volume before running `pnpm install`. The repository uses pnpm workspace links for vendored packages, and those links require NTFS junctions. FAT32/exFAT volumes, network shares, and other non-local Windows volumes cannot create the required junctions. The preflight command below verifies the volume and stops with a clear message before pnpm creates workspace links; run it immediately before `pnpm install`. A local NTFS volume can still contain a cloud-synced folder, which the preflight cannot identify reliably; keep the checkout outside OneDrive, Google Drive, Dropbox, and similar synced folders.
 
 Node 24.0 and 24.1 are unsupported: their bundled libuv can return inconsistent Windows file identity metadata, causing safe configuration reads to fail. [Node 24.2.0](https://nodejs.org/en/blog/release/v24.2.0) includes libuv 1.51.0 with the [upstream fix](https://github.com/libuv/libuv/commit/82cdfb75f). Use a current patch release of a supported Node line.
 
@@ -56,6 +57,7 @@ git clone https://github.com/tournierjc/minimax-code.git
 cd minimax-code
 corepack enable
 corepack prepare pnpm@9.12.0 --activate
+node scripts/check-windows-source-location.mjs
 pnpm install --frozen-lockfile
 pnpm build
 pnpm mcode --help
@@ -94,7 +96,7 @@ Earlier source builds used `~/.minimax-code` for user data. The new default does
 To locate data safely:
 
 1. Identify the launcher you actually use with `command -v mcode` (POSIX) or `Get-Command mcode -All` (PowerShell), and run that launcher's `--version`. For a local npm dependency, use `node_modules/.bin/mcode --version`; a global npm listing does not identify it. A source build may report the same version as the npm release.
-2. Check whether either data-directory override is set in that launcher's environment. Otherwise use the artifact-specific default above. Inspect directory and file names/permissions locally, without printing `config.yaml`, authentication files, or session contents. Builds from this fork removed the telemetry subsystem, so no `telemetry` command exists here; inspect the selected data directory's files directly instead.
+2. Check whether either data-directory override is set in that launcher's environment. Otherwise use the artifact-specific default above. Inspect directory and file names/permissions locally, without printing `config.yaml`, authentication files, or session contents. For builds from this repository, `mcode telemetry status` also reports the selected `configFile` path without printing credentials; npm 0.4.12 does not provide that command.
 3. If both directories exist, their presence alone does not identify the active one. Keep both protected, and include the launcher, version, installation method, and whether overrides are set when requesting help. Redact personal path components; do not attach configuration or authentication files. Changing an override does not migrate existing data, so do not move or delete either directory merely to match these docs.
 
 For tests, explicitly set `MINIMAX_DATA_DIR` to a temporary directory to keep normal sessions separate. Use `$env:MINIMAX_DATA_DIR = 'C:\path\to\test-profile'` in PowerShell or `export MINIMAX_DATA_DIR=/path/to/test-profile` in a POSIX shell.
