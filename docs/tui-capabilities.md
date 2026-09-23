@@ -141,6 +141,14 @@ project group or unfolds them all again. The equivalent commands are `/tabs next
 `/tabs collapse` and `/tabs 1-9`. `/hotkeys` lists the effective bindings, and
 `tui/keybindings.json` can remap any of them.
 
+The bar keeps insertion order — a new tab goes to the end — and moves only when you
+ask: `Shift+Alt+Left` / `Shift+Alt+Right` (or `/tabs move left`) push the visible tab
+one slot along the bar. Because the direct slots are positional, this is how a Session
+is put on the `Alt+<n>` key you expect. A move is clamped at either end rather than
+wrapped, and it is not a switch: the Session on screen stays, and a running turn is
+untouched. The order lives in the running TUI and is not persisted, so a restart
+reopens tabs in insertion order.
+
 Renaming a tab renames its Session: the tab label is the Session title, so
 `/tabs rename`, `/rename` and the inline rename in `/sessions` all write the same
 field and the bar follows on the next frame. There is no separate tab-only label,

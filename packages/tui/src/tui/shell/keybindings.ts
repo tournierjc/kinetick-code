@@ -27,6 +27,8 @@ export type TuiShellKeyAction =
   | 'previous-tab'
   | 'next-tab'
   | 'close-tab'
+  | 'move-tab-earlier'
+  | 'move-tab-later'
   | 'switch-tab-slot'
   | 'rename-tab'
   | 'toggle-tab-grouping'
@@ -323,6 +325,24 @@ const TAB_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
     description: 'Switch to the next open Session tab',
     helpOrder: 124,
     helpGroup: 'tabs.cycle',
+  },
+  {
+    id: 'tabs.move-earlier',
+    key: 'shift+alt+left',
+    action: 'move-tab-earlier',
+    when: 'application',
+    description: 'Move the visible Session tab one slot earlier',
+    helpOrder: 125,
+    helpGroup: 'tabs.order',
+  },
+  {
+    id: 'tabs.move-later',
+    key: 'shift+alt+right',
+    action: 'move-tab-later',
+    when: 'application',
+    description: 'Move the visible Session tab one slot later',
+    helpOrder: 125,
+    helpGroup: 'tabs.order',
   },
   {
     id: 'tabs.close',

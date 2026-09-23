@@ -411,6 +411,22 @@ describe("TUI shell keybindings", () => {
     ).toBe("toggle-tasks");
   });
 
+  it("resolves the tab order keys from the sequences a terminal actually sends", () => {
+    const context = {
+      interactionActive: false,
+      hasLiveRun: false,
+    };
+
+    // `Shift+Alt+←/→` as xterm sends a modified arrow (CSI 1;4). This is the whole
+    // point of the binding: the bar keys must work from bytes, not from a test-only
+    // key id.
+    expect(resolveTuiKeybinding("\u001b[1;4D", context)).toBe("move-tab-earlier");
+    expect(resolveTuiKeybinding("\u001b[1;4C", context)).toBe("move-tab-later");
+    // The cycling keys keep their own sequences.
+    expect(resolveTuiKeybinding("\u001b[1;6D", context)).toBe("previous-tab");
+    expect(resolveTuiKeybinding("\u001b[1;6C", context)).toBe("next-tab");
+  });
+
   it("checks reload candidates against host defaults instead of stale user bindings", () => {
     const keybindings = createTuiHostKeybindings({
       platform: "linux",

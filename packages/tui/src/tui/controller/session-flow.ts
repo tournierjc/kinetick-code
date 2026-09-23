@@ -14,6 +14,7 @@ import {
   applyingTuiTabGroupCollapse,
   foldingTuiTabGroups,
   cycleTuiTab,
+  moveTuiTab,
   selectTuiTabAfterClose,
   selectTuiTabSlot,
 } from '../state/tabs.js';
@@ -137,10 +138,9 @@ export class TuiSessionFlow {
   /**
    * Switch to the next (`delta` 1) or previous (`delta` -1) open tab.
    *
-   * Switching keeps the same live-run rule as `/sessions`. The projection is
-   * still single-Session: loading another Session detaches the foreground run
-   * and aborts its turn, so allowing the switch mid-run would silently kill the
-   * run instead of leaving it in the background.
+   * Switching keeps the same rule as `/sessions`: the visible Session changes and the
+   * run it was showing keeps running in the background, streaming into that Session's
+   * own pane (see `docs/tui-capabilities.md`). Nothing is aborted by a switch.
    *
    * Folding a project group only changes what the bar draws, so cycling walks
    * every open tab and a folded group stays reachable from the keyboard.
@@ -153,6 +153,29 @@ export class TuiSessionFlow {
       return;
     }
     await this.activateSessionById(target);
+  }
+
+  /**
+   * Move the visible tab one slot along the bar.
+   *
+   * Direct slots are positional (`Alt+<n>`), so this is how a Session is put on the
+   * key the user expects; the order is otherwise insertion order and never reshuffles
+   * on its own. At either end the move is refused with a hint rather than wrapped, so
+   * the bar moves exactly as far as asked.
+   */
+  async moveTab(delta: 1 | -1): Promise<void> {
+    const current = this.visibleSessionId();
+    if (!current) return;
+    const order = this.openTabOrder();
+    const next = moveTuiTab(order, current, delta);
+    if (next === order) {
+      this.options.append(
+        delta < 0 ? 'This tab is already first.' : 'This tab is already last.',
+        'warning',
+      );
+      return;
+    }
+    this.options.stateStore.dispatch({ type: 'tabs/move', sessionId: current, delta });
   }
 
   /** Switch to the Session bound to a 1-based direct tab slot (`Alt+<n>`). */

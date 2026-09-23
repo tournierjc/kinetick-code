@@ -62,6 +62,8 @@ export interface TuiInputFlowOptions {
   readonly toggleSideConversation?: () => Promise<boolean>;
   /** Cycles the open Session tabs; 1 is the next tab, -1 the previous one. */
   readonly cycleSessionTab?: (delta: 1 | -1) => Promise<unknown>;
+  /** Move the visible tab one slot along the bar (`Shift+Alt+←/→`). */
+  readonly moveSessionTab?: (delta: 1 | -1) => Promise<unknown>;
   /** Switches to the Session tab bound to a 1-based direct slot. */
   readonly selectSessionTab?: (slot: number) => Promise<unknown>;
   /** Closes the visible Session tab and shows its neighbour. */
@@ -281,6 +283,11 @@ export class TuiInputFlow {
     }
     if (keyAction === 'next-tab' || keyAction === 'previous-tab') {
       void this.options.cycleSessionTab?.(keyAction === 'next-tab' ? 1 : -1);
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'move-tab-earlier' || keyAction === 'move-tab-later') {
+      void this.options.moveSessionTab?.(keyAction === 'move-tab-later' ? 1 : -1);
       this.options.onChanged();
       return { consume: true };
     }

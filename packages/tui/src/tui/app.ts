@@ -651,6 +651,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     isSideModeActive: () => sessionFlow.isSideModeActive(),
     toggleSideConversation: () => sessionFlow.toggleSideConversation(),
     cycleSessionTab: (delta) => sessionFlow.cycleTab(delta),
+    moveSessionTab: (delta) => sessionFlow.moveTab(delta),
     selectSessionTab: (slot) => sessionFlow.activateTabSlot(slot),
     closeSessionTab: () => sessionFlow.closeTab(),
     renameSessionTab: () => sessionFlow.renameTab(),

@@ -1683,19 +1683,23 @@ describe("TuiCommandFlow /tabs", () => {
     const cycleTab = vi.fn(async () => undefined);
     const closeTab = vi.fn(async () => undefined);
     const activateTabSlot = vi.fn(async () => undefined);
+    const moveTab = vi.fn(async () => undefined);
     const flow = createReadinessCommandFlow({
       whenReady: async () => undefined,
-      sessionFlow: { cycleTab, closeTab, activateTabSlot },
+      sessionFlow: { cycleTab, closeTab, activateTabSlot, moveTab },
     });
 
     await expect(flow.submit("/tabs next")).resolves.toBe("consumed");
     await expect(flow.submit("/tabs prev")).resolves.toBe("consumed");
     await expect(flow.submit("/tabs close")).resolves.toBe("consumed");
     await expect(flow.submit("/tabs 3")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs move left")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs move right")).resolves.toBe("consumed");
 
     expect(cycleTab.mock.calls).toEqual([[1], [-1]]);
     expect(closeTab).toHaveBeenCalledOnce();
     expect(activateTabSlot).toHaveBeenCalledWith(3);
+    expect(moveTab.mock.calls).toEqual([[-1], [1]]);
   });
 
   it("renames the visible tab, with and without a title", async () => {
@@ -1733,25 +1737,30 @@ describe("TuiCommandFlow /tabs", () => {
     const cycleTab = vi.fn(async () => undefined);
     const activateTabSlot = vi.fn(async () => undefined);
     const setTabGrouping = vi.fn(async () => undefined);
+    const moveTab = vi.fn(async () => undefined);
     const flow = createReadinessCommandFlow({
       whenReady: async () => undefined,
       append,
-      sessionFlow: { cycleTab, activateTabSlot, setTabGrouping },
+      sessionFlow: { cycleTab, activateTabSlot, setTabGrouping, moveTab },
     });
 
     await expect(flow.submit("/tabs")).resolves.toBe("retained");
     await expect(flow.submit("/tabs 12")).resolves.toBe("retained");
     await expect(flow.submit("/tabs group sideways")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs move sideways")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs move")).resolves.toBe("retained");
 
     expect(cycleTab).not.toHaveBeenCalled();
     expect(activateTabSlot).not.toHaveBeenCalled();
     expect(setTabGrouping).not.toHaveBeenCalled();
+    expect(moveTab).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
-      "Usage: /tabs <next | prev | close | rename [title] | group [on|off] | collapse | 1-9>. " +
-        "The key hints are in /hotkeys.",
+      "Usage: /tabs <next | prev | close | move <left|right> | rename [title] | " +
+        "group [on|off] | collapse | 1-9>. The key hints are in /hotkeys.",
       "warning",
     );
     expect(append).toHaveBeenCalledWith("Usage: /tabs group <on | off>.", "warning");
+    expect(append).toHaveBeenCalledWith("Usage: /tabs move <left | right>.", "warning");
   });
 });
 
