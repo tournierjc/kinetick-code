@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createTuiState } from '../../src/tui/state/model.js';
 import { reduceTuiState } from '../../src/tui/state/reducer.js';
 import {
+  applyingTuiTabGroupCollapse,
   cycleTuiTab,
   selectTuiTabAfterClose,
   selectTuiTabSlot,
@@ -166,5 +167,45 @@ describe('tab navigation helpers', () => {
     expect(selectTuiTabSlot(order, TUI_TAB_DIRECT_SLOT_COUNT)).toBe(`s${TUI_TAB_DIRECT_SLOT_COUNT - 1}`);
     expect(selectTuiTabSlot(order, TUI_TAB_DIRECT_SLOT_COUNT + 1)).toBeUndefined();
     expect(selectTuiTabSlot(order, 0)).toBeUndefined();
+  });
+});
+
+describe('tab grouping state', () => {
+  it('starts grouped and keeps the open tabs when grouping turns off', () => {
+    const state = apply(createTuiState(), activate('a'), activate('b'));
+
+    expect(state.tabs.grouped).toBe(true);
+
+    const flat = apply(state, { type: 'tabs/toggleGrouping', grouped: false });
+
+    expect(flat.tabs.grouped).toBe(false);
+    expect(flat.tabs.order).toEqual(['a', 'b']);
+  });
+
+  it('does not report a change when grouping already has the requested value', () => {
+    const state = createTuiState();
+
+    expect(reduceTuiState(state, { type: 'tabs/toggleGrouping', grouped: true }).state).toBe(state);
+  });
+
+  it('folds and unfolds a group, and keeps folding across tab changes', () => {
+    const state = apply(createTuiState(), activate('a'), activate('b'));
+    const folded = apply(state, { type: 'tabs/toggleGroup', groupKey: '/work/api' });
+
+    expect(folded.tabs.collapsedGroups).toEqual(['/work/api']);
+    expect(apply(folded, { type: 'tabs/toggleGroup', groupKey: '/work/api' }).tabs.collapsedGroups)
+      .toEqual([]);
+
+    const reopened = apply(folded, { type: 'tabs/toggleGroup', groupKey: '/work/web' });
+    expect(reopened.tabs.collapsedGroups).toEqual(['/work/api', '/work/web']);
+    expect(reopened.tabs.order).toEqual(['a', 'b']);
+  });
+
+  it('applies folding, except to the group holding the visible Session', () => {
+    expect(applyingTuiTabGroupCollapse(['/work/api', '/work/web'], '/work/api')).toEqual([
+      '/work/web',
+    ]);
+    expect(applyingTuiTabGroupCollapse(['/work/api'], undefined)).toEqual(['/work/api']);
+    expect(applyingTuiTabGroupCollapse([], '/work/api')).toEqual([]);
   });
 });

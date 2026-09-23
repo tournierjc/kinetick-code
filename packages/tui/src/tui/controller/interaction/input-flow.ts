@@ -66,6 +66,12 @@ export interface TuiInputFlowOptions {
   readonly selectSessionTab?: (slot: number) => Promise<unknown>;
   /** Closes the visible Session tab and shows its neighbour. */
   readonly closeSessionTab?: () => Promise<unknown>;
+  /** Renames the visible Session tab; without a title the rename field opens. */
+  readonly renameSessionTab?: () => Promise<unknown>;
+  /** Switches project grouping of the tab bar on or off. */
+  readonly toggleSessionTabGrouping?: () => Promise<unknown>;
+  /** Folds or unfolds the visible tab's project group. */
+  readonly toggleSessionTabCollapse?: () => Promise<unknown>;
   /** Stops and destroys the visible side conversation. */
   readonly closeSideConversation?: (exitReason: 'ctrl_c' | 'ctrl_d') => Promise<boolean>;
   readonly requestProcessSuspend?: () => void;
@@ -288,6 +294,21 @@ export class TuiInputFlow {
       // The slot number comes from the key that matched, so a release or an
       // overridden binding that resolves to no slot stays a no-op.
       if (slot !== undefined) void this.options.selectSessionTab?.(slot);
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'rename-tab') {
+      void this.options.renameSessionTab?.();
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'toggle-tab-grouping') {
+      void this.options.toggleSessionTabGrouping?.();
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'toggle-tab-collapse') {
+      void this.options.toggleSessionTabCollapse?.();
       this.options.onChanged();
       return { consume: true };
     }

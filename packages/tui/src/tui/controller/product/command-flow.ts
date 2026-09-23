@@ -973,7 +973,9 @@ export class TuiCommandFlow {
         await this.options.featureFlow.showSessionManager(args);
       },
       tabs: async ({ args }) => {
-        const action = args.trim().toLocaleLowerCase();
+        const [verb, ...rest] = args.trim().split(/\s+/);
+        const action = (verb ?? '').toLocaleLowerCase();
+        const argument = rest.join(' ').trim();
         if (action === 'next') {
           await this.options.sessionFlow.cycleTab(1);
           return;
@@ -986,6 +988,27 @@ export class TuiCommandFlow {
           await this.options.sessionFlow.closeTab();
           return;
         }
+        if (action === 'rename') {
+          await this.options.sessionFlow.renameTab(argument || undefined);
+          return;
+        }
+        if (action === 'group') {
+          if (!argument) {
+            await this.options.sessionFlow.setTabGrouping(true);
+            return;
+          }
+          const wanted = argument.toLocaleLowerCase();
+          if (wanted !== 'on' && wanted !== 'off') {
+            this.options.append('Usage: /tabs group <on | off>.', 'warning');
+            return 'retained';
+          }
+          await this.options.sessionFlow.setTabGrouping(wanted === 'on');
+          return;
+        }
+        if (action === 'collapse') {
+          await this.options.sessionFlow.toggleTabGroupCollapse();
+          return;
+        }
         const slot = Number(action);
         if (Number.isInteger(slot) && slot >= 1 && slot <= TUI_TAB_DIRECT_SLOT_COUNT) {
           await this.options.sessionFlow.activateTabSlot(slot);
@@ -994,7 +1017,8 @@ export class TuiCommandFlow {
         // Deliberately not "next" by default: an accidental bare `/tabs` must not
         // move the user off the Session they are reading.
         this.options.append(
-          'Usage: /tabs <next | prev | close | 1-9>. The key hints are in /hotkeys.',
+          'Usage: /tabs <next | prev | close | rename [title] | group [on|off] | collapse | 1-9>. ' +
+            'The key hints are in /hotkeys.',
           'warning',
         );
         return 'retained';

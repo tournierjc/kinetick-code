@@ -8,9 +8,14 @@ import {
 } from '../../src/tui/shell/keybindings.js';
 import {
   IDLE_TUI_SESSION_TAB_STATUS,
+  resolveTuiSessionTabGroupRef,
+  resolveTuiSessionTabGroupRefs,
+  resolveTuiSessionTabGroups,
   resolveTuiSessionTabStatus,
   resolveTuiSessionTabs,
   TuiSessionTabs,
+  TUI_TAB_UNGROUPED_KEY,
+  type TuiSessionTabGroup,
   type TuiSessionTabStatus,
   type TuiSessionTabView,
 } from '../../src/tui/shell/session-tabs.js';
@@ -30,8 +35,30 @@ function tab(overrides: Partial<TuiSessionTabView> & { sessionId: string }): Tui
   };
 }
 
-function render(tabs: readonly TuiSessionTabView[], width = 100): string {
-  return stripVTControlCharacters(new TuiSessionTabs({ tabs: () => tabs }).render(width).join('\n'));
+function render(
+  tabs: readonly TuiSessionTabView[],
+  width = 100,
+  groups?: readonly TuiSessionTabGroup[],
+): string {
+  const model = groups ? { tabs, groups } : { tabs };
+  return stripVTControlCharacters(
+    new TuiSessionTabs({ tabs: () => model }).render(width).join('\n'),
+  );
+}
+
+/** Group the given tabs by the project each one carries in its sessionId. */
+function groupTabs(
+  tabs: readonly TuiSessionTabView[],
+  projects: Readonly<Record<string, string>>,
+): readonly TuiSessionTabGroup[] | undefined {
+  const refs = resolveTuiSessionTabGroupRefs(
+    Object.entries(projects).map(([sessionId, workspaceDir]) => ({ sessionId, workspaceDir })),
+  );
+  return resolveTuiSessionTabGroups({
+    tabs,
+    groupOf: (sessionId) => refs.get(sessionId),
+    collapsedGroups: [],
+  });
 }
 
 function statusOf(overrides: Partial<TuiSessionTabStatus> = {}): TuiSessionTabStatus {
@@ -138,7 +165,7 @@ describe('TuiSessionTabs', () => {
 
   it('respects a higher minimum tab count', () => {
     const bar = new TuiSessionTabs({
-      tabs: () => [tab({ sessionId: 'a', active: true }), tab({ sessionId: 'b' })],
+      tabs: () => ({ tabs: [tab({ sessionId: 'a', active: true }), tab({ sessionId: 'b' })] }),
       minimumTabs: 3,
     });
 
@@ -302,5 +329,212 @@ describe('tab keybindings', () => {
     expect(rows.find((row) => row.ids.includes('tabs.slot-1'))?.description).toBe(
       'Switch to the Session tab in slot 1-9',
     );
+  });
+
+  it('resolves rename, grouping and collapse', () => {
+    expect(resolveTuiKeybinding('\u001br', IDLE_CONTEXT)).toBe('rename-tab');
+    expect(resolveTuiKeybinding('\u001bg', IDLE_CONTEXT)).toBe('toggle-tab-grouping');
+    expect(resolveTuiKeybinding('\u001bh', IDLE_CONTEXT)).toBe('toggle-tab-collapse');
+    expect(resolveTuiKeybinding('\u001br', { interactionActive: true, hasLiveRun: true })).toBe(
+      'rename-tab',
+    );
+  });
+
+  it('lists the grouping keys separately from the cycle row', () => {
+    const rows = getDefaultTuiKeybindingRegistry().helpRows();
+
+    for (const [id, description, key] of [
+      ['tabs.rename', 'Rename the visible Session tab', 'R'],
+      ['tabs.grouping', 'Group the Session tabs by project', 'G'],
+      ['tabs.collapse', "Fold or unfold the visible tab's project group", 'H'],
+    ]) {
+      const row = rows.find((candidate) => candidate.ids.includes(id));
+
+      expect(row?.ids).toEqual([id]);
+      expect(row?.description).toBe(description);
+      expect(row?.keys).toContain(key);
+    }
+  });
+});
+
+describe('resolveTuiSessionTabGroupRef', () => {
+  it('keys a project by its workspace directory and labels it by the folder', () => {
+    expect(resolveTuiSessionTabGroupRef('/opt/data/work/kinetick-code')).toEqual({
+      key: '/opt/data/work/kinetick-code',
+      label: 'kinetick-code',
+    });
+  });
+
+  it('ignores a trailing separator and Windows separators', () => {
+    expect(resolveTuiSessionTabGroupRef('/work/api/')).toEqual({
+      key: '/work/api',
+      label: 'api',
+    });
+    expect(resolveTuiSessionTabGroupRef('C:\\work\\api')).toEqual({
+      key: 'C:\\work\\api',
+      label: 'api',
+    });
+  });
+
+  it('groups a Session without a workspace under one shared key', () => {
+    expect(resolveTuiSessionTabGroupRef(undefined)).toEqual({
+      key: TUI_TAB_UNGROUPED_KEY,
+      label: 'No project',
+    });
+    expect(resolveTuiSessionTabGroupRef('  ')).toEqual({
+      key: TUI_TAB_UNGROUPED_KEY,
+      label: 'No project',
+    });
+  });
+});
+
+describe('resolveTuiSessionTabGroups', () => {
+  function tabsWithProjects(): {
+    tabs: readonly TuiSessionTabView[];
+    projects: Record<string, string>;
+  } {
+    return {
+      tabs: [
+        tab({ sessionId: 'a', label: 'One', active: true, slot: 1 }),
+        tab({ sessionId: 'b', label: 'Two', slot: 2 }),
+        tab({ sessionId: 'c', label: 'Three', slot: 3 }),
+      ],
+      projects: { a: '/work/api', b: '/work/web', c: '/work/api' },
+    };
+  }
+
+  it('splits the tabs by project, keeping bar order', () => {
+    const { tabs, projects } = tabsWithProjects();
+    const groups = groupTabs(tabs, projects);
+
+    expect(groups?.map((group) => group.key)).toEqual(['/work/api', '/work/web']);
+    expect(groups?.map((group) => group.label)).toEqual(['api', 'web']);
+    expect(groups?.[0]?.tabs.map((entry) => entry.sessionId)).toEqual(['a', 'c']);
+    expect(groups?.[1]?.tabs.map((entry) => entry.sessionId)).toEqual(['b']);
+  });
+
+  it('returns nothing to group when every tab shares one project', () => {
+    expect(groupTabs([tab({ sessionId: 'a' }), tab({ sessionId: 'b' })], { a: '/work/api', b: '/work/api' }))
+      .toBeUndefined();
+  });
+
+  it('folds only the requested group, never the visible one', () => {
+    const { tabs, projects } = tabsWithProjects();
+    const refs = resolveTuiSessionTabGroupRefs(
+      Object.entries(projects).map(([sessionId, workspaceDir]) => ({ sessionId, workspaceDir })),
+    );
+    const groups = resolveTuiSessionTabGroups({
+      tabs,
+      groupOf: (sessionId) => refs.get(sessionId),
+      collapsedGroups: ['/work/api', '/work/web'],
+    });
+
+    // `a` is the visible tab and lives in `/work/api`, so that group stays open.
+    expect(groups?.map((group) => group.collapsed)).toEqual([false, true]);
+  });
+
+  it('combines the tab statuses so a folded group still shows activity', () => {
+    const tabs = [
+      tab({ sessionId: 'a', active: true, status: statusOf({ running: true, unread: 1 }) }),
+      tab({ sessionId: 'b', status: statusOf({ blocked: true, unread: 2 }) }),
+      tab({ sessionId: 'c', label: 'Three', status: statusOf({ unread: 3 }) }),
+    ];
+    const groups = groupTabs(tabs, { a: '/work/api', b: '/work/api', c: '/work/web' });
+
+    expect(groups?.[0]?.status).toEqual({ running: true, blocked: true, unread: 3 });
+    expect(groups?.[1]?.status).toEqual({ running: false, blocked: false, unread: 3 });
+  });
+});
+
+describe('TuiSessionTabs grouping', () => {
+  const tabs = [
+    tab({ sessionId: 'a', label: 'One', active: true, slot: 1 }),
+    tab({ sessionId: 'b', label: 'Two', slot: 2 }),
+    tab({ sessionId: 'c', label: 'Three', slot: 3 }),
+  ];
+  const projects = { a: '/work/api', b: '/work/web', c: '/work/api' };
+
+  it('draws a project header above each group of tabs', () => {
+    const groups = groupTabs(tabs, projects);
+    const rows = render(tabs, 100, groups).split('\n');
+
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toBe('▾ api · 2');
+    expect(rows[1]).toBe('1:[One]  3:Three');
+    expect(rows[2]).toBe('▾ web · 1');
+    expect(rows[3]).toBe('2:Two');
+  });
+
+  it('draws only the header for a folded group', () => {
+    const refs = resolveTuiSessionTabGroupRefs(
+      Object.entries(projects).map(([sessionId, workspaceDir]) => ({ sessionId, workspaceDir })),
+    );
+    const groups = resolveTuiSessionTabGroups({
+      tabs,
+      groupOf: (sessionId) => refs.get(sessionId),
+      collapsedGroups: ['/work/web'],
+    });
+    const folded = groups?.map((group, index) =>
+      index === 1 ? { ...group, collapsed: true } : group,
+    );
+    const rows = render(tabs, 100, folded).split('\n');
+
+    expect(rows).toEqual(['▾ api · 2', '1:[One]  3:Three', '▸ web · 1']);
+  });
+
+  it('shows the combined status on a folded group header', () => {
+    const statusTabs = [
+      tab({ sessionId: 'a', label: 'One', active: true, slot: 1 }),
+      tab({ sessionId: 'b', label: 'Two', slot: 2, status: statusOf({ blocked: true }) }),
+      tab({ sessionId: 'c', label: 'Three', slot: 3 }),
+    ];
+    const folded = [
+      {
+        key: '/work/api',
+        label: 'api',
+        collapsed: false,
+        tabs: [statusTabs[0] as TuiSessionTabView],
+        status: IDLE_TUI_SESSION_TAB_STATUS,
+      },
+      {
+        key: '/work/web',
+        label: 'web',
+        collapsed: true,
+        tabs: [statusTabs[1] as TuiSessionTabView],
+        status: statusOf({ blocked: true, unread: 2 }),
+      },
+    ];
+    const rows = render(statusTabs, 100, folded).split('\n');
+
+    expect(rows[2]).toBe('▸ web · 1 !•2');
+  });
+
+  it('drops trailing groups past the row budget and counts their tabs', () => {
+    const many = ['a', 'b', 'c', 'd'].map((sessionId, index) =>
+      tab({ sessionId, label: sessionId, slot: index + 1 }),
+    );
+    const grouped = groupTabs(many, {
+      a: '/work/api',
+      b: '/work/web',
+      c: '/work/docs',
+      d: '/work/infra',
+    });
+    const bar = new TuiSessionTabs({ tabs: () => ({ tabs: many, groups: grouped }), maximumRows: 5 });
+
+    const rows = stripVTControlCharacters(bar.render(120).join('\n')).split('\n');
+
+    // Four groups need eight rows; the budget keeps two groups and counts the rest.
+    expect(rows).toEqual(['▾ api · 1', '1:a', '▾ web · 1', '2:b  +2']);
+  });
+
+  it('renders a single strip when the tabs share one project', () => {
+    const single = [
+      tab({ sessionId: 'a', active: true, slot: 1 }),
+      tab({ sessionId: 'b', slot: 2 }),
+    ];
+    const groups = groupTabs(single, { a: '/work/api', b: '/work/api' });
+
+    expect(groups).toBeUndefined();
+    expect(render(single, 100, groups)).toBe('1:[a]  2:b');
   });
 });

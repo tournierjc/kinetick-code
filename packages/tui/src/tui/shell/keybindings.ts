@@ -28,6 +28,9 @@ export type TuiShellKeyAction =
   | 'next-tab'
   | 'close-tab'
   | 'switch-tab-slot'
+  | 'rename-tab'
+  | 'toggle-tab-grouping'
+  | 'toggle-tab-collapse'
   | 'cycle-permission'
   | 'scroll-up'
   | 'scroll-down'
@@ -328,6 +331,30 @@ const TAB_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
     when: 'application',
     description: 'Close the visible Session tab',
     helpOrder: 125,
+  },
+  {
+    id: 'tabs.rename',
+    key: 'alt+r',
+    action: 'rename-tab',
+    when: 'application',
+    description: 'Rename the visible Session tab',
+    helpOrder: 127,
+  },
+  {
+    id: 'tabs.grouping',
+    key: 'alt+g',
+    action: 'toggle-tab-grouping',
+    when: 'application',
+    description: 'Group the Session tabs by project',
+    helpOrder: 128,
+  },
+  {
+    id: 'tabs.collapse',
+    key: 'alt+h',
+    action: 'toggle-tab-collapse',
+    when: 'application',
+    description: "Fold or unfold the visible tab's project group",
+    helpOrder: 129,
   },
   ...TAB_SLOT_KEYS.map((key, index) => ({
     id: `tabs.slot-${index + 1}`,

@@ -134,9 +134,26 @@ screen.
 
 Switch tabs with `Ctrl+Shift+Left` / `Ctrl+Shift+Right`, or jump straight to a
 slot with `Alt+1`…`Alt+9`. `Alt+W` closes the visible tab and shows its
-neighbour; closing the last tab starts a new Session. The equivalent commands are
-`/tabs next`, `/tabs prev`, `/tabs close` and `/tabs 1-9`. `/hotkeys` lists the
-effective bindings, and `tui/keybindings.json` can remap any of them.
+neighbour; closing the last tab starts a new Session. `Alt+R` renames the visible
+tab, `Alt+G` turns project grouping on or off and `Alt+H` folds or unfolds the
+visible tab's project group. The equivalent commands are `/tabs next`,
+`/tabs prev`, `/tabs close`, `/tabs rename [title]`, `/tabs group [on|off]`,
+`/tabs collapse` and `/tabs 1-9`. `/hotkeys` lists the effective bindings, and
+`tui/keybindings.json` can remap any of them.
+
+Renaming a tab renames its Session: the tab label is the Session title, so
+`/tabs rename`, `/rename` and the inline rename in `/sessions` all write the same
+field and the bar follows on the next frame. There is no separate tab-only label,
+and a rename is refused while a turn is running.
+
+When the open tabs span more than one project — the Session's workspace
+directory, labelled by its folder name — the bar groups them: one header row per
+project showing its tab count and combined status, then one row of tabs per
+expanded project. Grouping switches itself off when every open tab belongs to the
+same project. The grouped bar is capped at five rows; groups past the cap are
+replaced by a `+N` counter, never the group holding the visible tab. Folding only
+changes what the bar draws: cycling and the direct slots still reach every open
+tab, and the visible tab's own group always stays open.
 
 Closing a tab only closes the tab: the Session keeps its history and reappears in
 the bar the next time it is opened from `/sessions`. The visible Session is always

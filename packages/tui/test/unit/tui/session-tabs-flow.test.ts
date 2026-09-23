@@ -15,7 +15,13 @@ const TAB_C = 'sess-c';
  * interaction between the flow and the tab-list invariants (the visible Session
  * is always an open tab) instead of a stand-in rule.
  */
-function createFlow(options: { tabs: readonly string[]; visible: string; hasLiveRun?: boolean }) {
+function createFlow(options: {
+  tabs: readonly string[];
+  visible: string;
+  hasLiveRun?: boolean;
+  /** Workspace directory per Session, so the tab bar can group by project. */
+  projects?: Readonly<Record<string, string>>;
+}) {
   let state = createTuiState();
   for (const sessionId of options.tabs) {
     state = reduceTuiState(state, { type: 'session/activate', sessionId }).state;
@@ -27,7 +33,14 @@ function createFlow(options: { tabs: readonly string[]; visible: string; hasLive
   ).state;
 
   const sessions = new Map<string, TuiSession>(
-    [...options.tabs, 'sess-new'].map((sessionId) => [sessionId, { sessionId } as TuiSession]),
+    [...options.tabs, 'sess-new'].map((sessionId) => [
+      sessionId,
+      {
+        sessionId,
+        title: sessionId,
+        ...(options.projects?.[sessionId] ? { workspaceDir: options.projects[sessionId] } : {}),
+      } as TuiSession,
+    ]),
   );
   const dispatch = vi.fn((action: TuiAction) => {
     state = reduceTuiState(state, action).state;
@@ -45,6 +58,11 @@ function createFlow(options: { tabs: readonly string[]; visible: string; hasLive
   });
   const append = vi.fn();
   const listSessionPage = vi.fn(async () => ({ sessions: [], hasMore: false }));
+  const renameSession = vi.fn(async (sessionId: string, title: string) => ({
+    sessionId,
+    title,
+  }) as TuiSession);
+  const showSessionManager = vi.fn(async () => undefined);
 
   const flow = new TuiSessionFlow({
     runtime: {
@@ -66,6 +84,7 @@ function createFlow(options: { tabs: readonly string[]; visible: string; hasLive
       })),
       loadSessionProjection,
       startNewSession,
+      renameSession,
       whenIdle: vi.fn(async () => undefined),
       refreshSessionList: vi.fn(async () => undefined),
     } as never,
@@ -75,6 +94,7 @@ function createFlow(options: { tabs: readonly string[]; visible: string; hasLive
     featureFlow: {
       resetSessionState: vi.fn(),
       refreshSelectedModel: vi.fn(async () => undefined),
+      showSessionManager,
     } as never,
     queueFlow: { reset: vi.fn(), refresh: vi.fn(async () => []) } as never,
     delegationFlow: { reset: vi.fn(), refresh: vi.fn(async () => undefined) } as never,
@@ -93,8 +113,11 @@ function createFlow(options: { tabs: readonly string[]; visible: string; hasLive
     dispatch,
     loadSessionProjection,
     startNewSession,
+    renameSession,
+    showSessionManager,
     tabOrder: () => state.tabs.order,
     activeSessionId: () => state.activeSessionId,
+    tabs: () => state.tabs,
   };
 }
 
@@ -229,5 +252,133 @@ describe('closeTab', () => {
     expect(append).toHaveBeenCalledWith('Stop the running turn before using /sessions.', 'warning');
     expect(tabOrder()).toEqual([TAB_A, TAB_B]);
     expect(activeSessionId()).toBe(TAB_A);
+  });
+});
+
+describe('renameTab', () => {
+  it('renames the visible Session and reports the new title', async () => {
+    const { flow, renameSession, append } = createFlow({ tabs: [TAB_A, TAB_B], visible: TAB_B });
+
+    await flow.renameTab('  Release checklist  ');
+
+    expect(renameSession).toHaveBeenCalledWith(TAB_B, 'Release checklist');
+    expect(append).toHaveBeenCalledWith('Session renamed to “Release checklist”.');
+  });
+
+  it('opens the rename field when no title is given', async () => {
+    const { flow, showSessionManager, renameSession } = createFlow({
+      tabs: [TAB_A],
+      visible: TAB_A,
+    });
+
+    await flow.renameTab();
+
+    expect(showSessionManager).toHaveBeenCalledWith('', { initialRenameSessionId: TAB_A });
+    expect(renameSession).not.toHaveBeenCalled();
+  });
+
+  it('asks for a Session instead of renaming nothing', async () => {
+    const { flow, append, renameSession, showSessionManager } = createFlow({
+      tabs: [],
+      visible: '',
+    });
+
+    await flow.renameTab('Anything');
+
+    expect(renameSession).not.toHaveBeenCalled();
+    expect(showSessionManager).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      'Start or resume a Session before renaming its tab.',
+      'warning',
+    );
+  });
+});
+
+describe('tab grouping', () => {
+  const projects = { [TAB_A]: '/work/api', [TAB_B]: '/work/web' };
+
+  it('turns grouping off and on without closing tabs', async () => {
+    const { flow, tabs, tabOrder } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_A,
+      projects,
+    });
+
+    expect(tabs().grouped).toBe(true);
+
+    await flow.setTabGrouping(false);
+    expect(tabs().grouped).toBe(false);
+    expect(tabOrder()).toEqual([TAB_A, TAB_B]);
+
+    await flow.setTabGrouping(true);
+    expect(tabs().grouped).toBe(true);
+  });
+
+  it('says so when every open tab is in the same project', async () => {
+    const { flow, append, tabs } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_A,
+      projects: { [TAB_A]: '/work/api', [TAB_B]: '/work/api' },
+    });
+
+    await flow.setTabGrouping(false);
+    append.mockClear();
+    await flow.setTabGrouping(true);
+
+    expect(tabs().grouped).toBe(true);
+    expect(append).toHaveBeenCalledWith('Grouping needs tabs from more than one project.');
+  });
+
+  it('folds the visible tab group and explains that it stays open', async () => {
+    const { flow, tabs, append } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_B,
+      projects,
+    });
+
+    await flow.toggleTabGroupCollapse();
+
+    expect(tabs().collapsedGroups).toEqual(['/work/web']);
+    expect(append).toHaveBeenCalledWith(
+      'web holds the visible tab, so it stays open. Switch tabs to fold it.',
+    );
+
+    await flow.toggleTabGroupCollapse();
+
+    expect(tabs().collapsedGroups).toEqual([]);
+    expect(append).toHaveBeenLastCalledWith('Showing the web tabs again.');
+  });
+
+  it('refuses to fold while grouping is off', async () => {
+    const { flow, append, tabs } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_A,
+      projects,
+    });
+
+    await flow.setTabGrouping(false);
+    append.mockClear();
+    await flow.toggleTabGroupCollapse();
+
+    expect(tabs().collapsedGroups).toEqual([]);
+    expect(append).toHaveBeenCalledWith(
+      'Project grouping is off. Turn it on with /tabs group on.',
+      'warning',
+    );
+  });
+
+  it('keeps a folded group reachable by cycling', async () => {
+    const { flow, tabs, loadSessionProjection } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_A,
+      projects,
+    });
+
+    await flow.toggleTabGroupCollapse();
+    expect(tabs().collapsedGroups).toEqual(['/work/api']);
+
+    await flow.cycleTab(1);
+
+    expect(loadSessionProjection).toHaveBeenCalledWith(TAB_B);
   });
 });

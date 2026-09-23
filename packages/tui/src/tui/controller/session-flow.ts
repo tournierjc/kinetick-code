@@ -10,7 +10,16 @@ import type { TuiRotationEvent, TuiSessionCatalogEvent } from '../../types/runti
 import type { TuiComposerDraft } from '../features/composer/draft.js';
 import type { TuiRunProjection } from '../state/run-projection.js';
 import type { TuiStateStore } from '../state/store.js';
-import { cycleTuiTab, selectTuiTabAfterClose, selectTuiTabSlot } from '../state/tabs.js';
+import {
+  applyingTuiTabGroupCollapse,
+  cycleTuiTab,
+  selectTuiTabAfterClose,
+  selectTuiTabSlot,
+} from '../state/tabs.js';
+import {
+  resolveTuiSessionTabGroupRefs,
+  type TuiSessionTabGroupRef,
+} from '../shell/session-tabs.js';
 import type { TuiChatController } from './chat-controller.js';
 import type { TuiFeatureFlow } from './product/feature-flow.js';
 import type { TuiInteractionFlow } from './interaction/interaction-flow.js';
@@ -112,6 +121,15 @@ export class TuiSessionFlow {
     return this.options.stateStore.snapshot().tabs.order;
   }
 
+  /** Project of the visible Session, used to fold and unfold its group. */
+  private visibleGroupRef(): TuiSessionTabGroupRef | undefined {
+    const sessionId = this.visibleSessionId();
+    if (!sessionId) return undefined;
+    return resolveTuiSessionTabGroupRefs(this.options.controller.snapshot().sessions).get(
+      sessionId,
+    );
+  }
+
   private visibleSessionId(): string | undefined {
     return this.options.controller.snapshot().session?.sessionId;
   }
@@ -123,6 +141,9 @@ export class TuiSessionFlow {
    * still single-Session: loading another Session detaches the foreground run
    * and aborts its turn, so allowing the switch mid-run would silently kill the
    * run instead of leaving it in the background.
+   *
+   * Folding a project group only changes what the bar draws, so cycling walks
+   * every open tab and a folded group stays reachable from the keyboard.
    */
   async cycleTab(delta: 1 | -1): Promise<void> {
     const current = this.visibleSessionId();
@@ -169,6 +190,72 @@ export class TuiSessionFlow {
       if (this.visibleSessionId() !== undefined) return;
     }
     this.options.stateStore.dispatch({ type: 'tabs/close', sessionId: current });
+    this.options.onChanged();
+  }
+
+  /**
+   * Rename the visible Session, which is what the tab label shows.
+   *
+   * Without a title the session manager opens on its rename field, so the tab
+   * and `/sessions` share one rename affordance and one source of truth; the bar
+   * re-reads the catalog on the next frame, so no refresh is needed here.
+   */
+  async renameTab(title?: string): Promise<void> {
+    if (this.stopped) return;
+    const sessionId = this.visibleSessionId();
+    if (!sessionId) {
+      this.options.append('Start or resume a Session before renaming its tab.', 'warning');
+      return;
+    }
+    const trimmed = title?.trim();
+    if (!trimmed) {
+      await this.options.featureFlow.showSessionManager('', { initialRenameSessionId: sessionId });
+      return;
+    }
+    const renamed = await this.options.controller.renameSession(sessionId, trimmed);
+    this.options.append(`Session renamed to “${renamed.title?.trim() || trimmed}”.`);
+    this.options.onChanged();
+  }
+
+  /** Group the tab bar by project, or go back to a single strip. */
+  async setTabGrouping(grouped: boolean): Promise<void> {
+    const state = this.options.stateStore.snapshot();
+    if (state.tabs.grouped === grouped) return;
+    this.options.stateStore.dispatch({ type: 'tabs/toggleGrouping', grouped });
+    const refs = resolveTuiSessionTabGroupRefs(this.options.controller.snapshot().sessions);
+    const open = new Set(state.tabs.order);
+    const projects = new Set(
+      [...refs.entries()]
+        .filter(([sessionId]) => open.has(sessionId))
+        .map(([, ref]) => ref.key),
+    );
+    if (grouped && projects.size < 2) {
+      this.options.append('Grouping needs tabs from more than one project.');
+    }
+    this.options.onChanged();
+  }
+
+  /**
+   * Fold or unfold the group holding the visible tab.
+   *
+   * Folding the visible tab's own group is recorded and ignored while that tab is
+   * on screen — the same rule that stops the visible tab from being closed — so
+   * this reports what happened instead of leaving the user with no bar.
+   */
+  async toggleTabGroupCollapse(): Promise<void> {
+    const state = this.options.stateStore.snapshot();
+    const ref = this.visibleGroupRef();
+    if (!ref || !state.tabs.grouped) {
+      this.options.append('Project grouping is off. Turn it on with /tabs group on.', 'warning');
+      return;
+    }
+    const collapsed = state.tabs.collapsedGroups.includes(ref.key);
+    this.options.stateStore.dispatch({ type: 'tabs/toggleGroup', groupKey: ref.key });
+    this.options.append(
+      collapsed
+        ? `Showing the ${ref.label} tabs again.`
+        : `${ref.label} holds the visible tab, so it stays open. Switch tabs to fold it.`,
+    );
     this.options.onChanged();
   }
 

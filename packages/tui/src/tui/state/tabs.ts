@@ -15,9 +15,24 @@
 
 export interface TuiTabListState {
   readonly order: readonly string[];
+  /**
+   * Group the bar by project. Grouping only draws when the open tabs span more
+   * than one project, so a single-project bar is unaffected either way.
+   */
+  readonly grouped: boolean;
+  /**
+   * Groups the user folded away. A group holding the visible Session is never
+   * treated as collapsed, so the visible tab can never be hidden — the same rule
+   * that keeps the visible tab from being closed.
+   */
+  readonly collapsedGroups: readonly string[];
 }
 
-export const EMPTY_TUI_TAB_LIST: TuiTabListState = { order: [] };
+export const EMPTY_TUI_TAB_LIST: TuiTabListState = {
+  order: [],
+  grouped: true,
+  collapsedGroups: [],
+};
 
 /**
  * Number of tabs reachable through a direct `Alt+<n>` binding. The bar may show
@@ -71,4 +86,41 @@ export function cycleTuiTab(
   const index = activeId ? order.indexOf(activeId) : -1;
   if (index < 0) return delta > 0 ? order[0] : order[order.length - 1];
   return order[(index + delta + order.length) % order.length];
+}
+
+/** Turn project grouping on or off without touching the open tabs. */
+export function setTuiTabGrouping(
+  state: TuiTabListState,
+  grouped: boolean,
+): TuiTabListState {
+  return state.grouped === grouped ? state : { ...state, grouped };
+}
+
+/**
+ * Fold a group away, or unfold it again. Folding the visible Session's group is
+ * recorded here and ignored when rendering, so unfolding later restores it.
+ */
+export function toggleTuiTabGroupCollapsed(
+  state: TuiTabListState,
+  groupKey: string,
+): TuiTabListState {
+  const collapsedGroups = state.collapsedGroups.includes(groupKey)
+    ? state.collapsedGroups.filter((key) => key !== groupKey)
+    : [...state.collapsedGroups, groupKey];
+  return { ...state, collapsedGroups };
+}
+
+/**
+ * Collapsed keys that actually hide tabs. The group holding the visible Session
+ * always stays open, so the bar can never hide the Session on screen.
+ *
+ * Folding is a rendering choice only: cycling and the direct slots still reach
+ * every open tab, so a folded group is never a keyboard dead end.
+ */
+export function applyingTuiTabGroupCollapse(
+  collapsedGroups: readonly string[],
+  activeGroupKey: string | undefined,
+): readonly string[] {
+  if (activeGroupKey === undefined) return collapsedGroups;
+  return collapsedGroups.filter((key) => key !== activeGroupKey);
 }
