@@ -98,6 +98,23 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     return this.sessions.delete(sessionId);
   }
 
+  /**
+   * Move a Session's cells to another Session, replacing what that Session held.
+   * Used when the pane learns which Session it belongs to: content written while no
+   * Session was visible becomes that Session's content, exactly as a single-pane
+   * store behaved when it learned the Session id.
+   */
+  moveSession(from: string, to: string): boolean {
+    if (from === to) return false;
+    const source = this.sessions.get(from);
+    this.sessions.delete(from);
+    if (!source) return false;
+    this.sessions.set(to, source);
+    source.revisionValue += 1;
+    if (this.activeSession === from) this.activeSession = to;
+    return true;
+  }
+
   get(id: string): TranscriptCell | undefined {
     const cell = this.state().cells.get(id);
     return cell ? { ...cell } : undefined;
@@ -302,7 +319,7 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     const current = snapshotOf(state);
     let durableBefore = 0;
     const retained = current.flatMap((cell, index) => {
-      if (!cell.ephemeral) {
+      if (!retainsAcrossReconcile(cell)) {
         durableBefore += 1;
         return [];
       }
@@ -320,7 +337,10 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     try {
       projectDurable();
     } finally {
-      const projectedDurableIds = state.orderedIds.filter((id) => !state.cells.get(id)?.ephemeral);
+      const projectedDurableIds = state.orderedIds.filter((id) => {
+        const cell = state.cells.get(id);
+        return cell !== undefined && !retainsAcrossReconcile(cell);
+      });
       const anchors = retained.map(
         ({ previousDurableId, nextDurableId, durableBefore: durableCountBefore }) => {
           if (nextDurableId && state.cells.has(nextDurableId)) return nextDurableId;
@@ -363,9 +383,22 @@ function findDurableId(
 ): string | undefined {
   for (let index = startIndex + direction; index >= 0 && index < cells.length; index += direction) {
     const cell = cells[index];
-    if (cell && !cell.ephemeral) return cell.id;
+    if (cell && !retainsAcrossReconcile(cell)) return cell.id;
   }
   return undefined;
+}
+
+/**
+ * Whether a cell survives a durable re-projection. Durable content is replaced
+ * wholesale, so a cell that the durable projection does not carry must be kept if
+ * re-projecting would lose something the pane is showing: local/ephemeral cells,
+ * and the cells of a turn that is still streaming — a running turn's output is not
+ * durable yet, so re-projecting without them is what makes a revisited Session lose
+ * the tail of its live turn.
+ */
+function retainsAcrossReconcile(cell: TranscriptCell): boolean {
+  if (cell.ephemeral) return true;
+  return cell.status === 'pending' || cell.status === 'running';
 }
 
 function turnKey(cell: TranscriptCell): string {

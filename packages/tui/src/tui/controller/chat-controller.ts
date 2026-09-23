@@ -1,4 +1,4 @@
-import type { TuiSession } from '../../runtime/port.js';
+import type { TuiMessage, TuiSession } from '../../runtime/port.js';
 import type { TuiStreamEvent } from '../../runtime/stream-events.js';
 import { TuiRunCoordinator } from '../../application/run-coordinator.js';
 import { executeTuiInteractiveTurn } from '../../application/interactive-turn-delivery.js';
@@ -8,6 +8,7 @@ import {
   toTuiTranscriptAttachments,
 } from '../features/composer/attachments.js';
 import type { TranscriptStore } from '../transcript/store.js';
+import { UNSCOPED_TRANSCRIPT_SESSION } from '../transcript/store.js';
 import type { TranscriptAttachment, TranscriptUserPresentation } from '../transcript/model.js';
 import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from '../../product-context.js';
 import { TuiTurnProjection } from './projection/turn-projection.js';
@@ -56,6 +57,13 @@ export type {
   TuiSubmitOptions,
 } from './chat-controller-types.js';
 
+/**
+ * How many Sessions keep their cells in the transcript store. The visible one is
+ * never evicted; the others are dropped oldest first, and closing a tab releases
+ * its Session immediately, so retention follows the tabs the user keeps open.
+ */
+const MAX_RETAINED_TRANSCRIPT_SESSIONS = 6;
+
 export class TuiChatController {
   private readonly runtime: TuiChatRuntimeLike;
   private readonly transcript: TranscriptStore;
@@ -82,6 +90,7 @@ export class TuiChatController {
   private sessionProjectionSequence = 0;
   private durableMessageAnchor?: string;
   private pendingHistoryRefresh = false;
+  private readonly retainedTranscriptSessions = new Set<string>();
   private readonly idleWaiters = new Set<() => void>();
   private notificationBatchDepth = 0;
   private notificationPending = false;
@@ -195,7 +204,18 @@ export class TuiChatController {
     return new Promise<void>((resolve) => this.idleWaiters.add(resolve));
   }
 
-  async loadSessionProjection(sessionId: string): Promise<void> {
+  /**
+   * Open `sessionId` in the pane.
+   *
+   * `rebuild` forces the pane to be projected from saved messages again, for a
+   * caller that rewrote the Session's history (a rewind): the cells kept for it
+   * describe content that no longer exists, so adopting them would show it.
+   */
+  async loadSessionProjection(
+    sessionId: string,
+    options: { rebuild?: boolean } = {},
+  ): Promise<void> {
+    if (options.rebuild) this.releaseSessionTranscript(sessionId);
     this.detachActiveTurnForSessionSwitch();
     this.invalidateSessionCatalogRefresh();
     this.invalidateSessionCreation();
@@ -220,9 +240,7 @@ export class TuiChatController {
         ? await this.setSessionArchived(storedSession.sessionId, false)
         : storedSession;
       if (projectionSequence !== this.sessionProjectionSequence) return;
-      this.turnProjection.clearTodos();
-      this.transcript.clear();
-      this.turnProjection.hydrateHistory(messages);
+      this.projectSessionIntoPane(sessionId, messages);
       this.durableMessageAnchor = latestHistoryMessageId(messages);
       if (projectionSequence !== this.sessionProjectionSequence) return;
       this.updateState({
@@ -243,6 +261,63 @@ export class TuiChatController {
       });
       throw error;
     }
+  }
+
+  /**
+   * Point the pane at `sessionId` and project its history into it.
+   *
+   * A Session this store has already projected is adopted: it keeps the cells the
+   * pane already showed — including a turn that is still streaming — and only its
+   * durable content is reconciled. Only a Session that was never projected (or was
+   * released) is rebuilt from scratch, because re-projecting a Session that is
+   * still on screen would drop the live tail of its running turn.
+   */
+  private projectSessionIntoPane(sessionId: string, messages: readonly TuiMessage[]): void {
+    this.transcript.setActiveSession(sessionId);
+    if (this.retainedTranscriptSessions.has(sessionId)) {
+      this.transcript.replaceDurableProjection(() => this.turnProjection.hydrateHistory(messages));
+      return;
+    }
+    this.turnProjection.clearTodos();
+    this.transcript.clear(sessionId);
+    this.turnProjection.hydrateHistory(messages);
+    this.retainSessionTranscript(sessionId);
+  }
+
+  /** Mark a Session as projected here, evicting the oldest pane past the cap. */
+  private retainSessionTranscript(sessionId: string): void {
+    this.retainedTranscriptSessions.add(sessionId);
+    while (this.retainedTranscriptSessions.size > MAX_RETAINED_TRANSCRIPT_SESSIONS) {
+      const victim = [...this.retainedTranscriptSessions].find(
+        (id) => id !== this.transcript.activeSessionId,
+      );
+      if (!victim) return;
+      this.releaseSessionTranscript(victim);
+    }
+  }
+
+  /**
+   * Make a freshly created Session the one the pane belongs to. When the pane had
+   * no Session yet (first turn of a new conversation), the cells it already wrote —
+   * the user's message being the important one — become this Session's cells, so a
+   * later switch away and back still shows them.
+   */
+  private claimPaneForSession(sessionId: string): void {
+    if (this.transcript.activeSessionId === UNSCOPED_TRANSCRIPT_SESSION) {
+      this.transcript.moveSession(UNSCOPED_TRANSCRIPT_SESSION, sessionId);
+    }
+    this.transcript.setActiveSession(sessionId);
+    this.retainSessionTranscript(sessionId);
+  }
+
+  /**
+   * Forget the cells kept for a Session. Called when its tab closes and when it is
+   * archived or deleted: a Session that comes back is projected from durable
+   * history again, so nothing stale can outlive it.
+   */
+  releaseSessionTranscript(sessionId: string): void {
+    this.retainedTranscriptSessions.delete(sessionId);
+    this.transcript.dropSession(sessionId);
   }
 
   async refreshCurrentSessionHistory(): Promise<void> {
@@ -328,9 +403,12 @@ export class TuiChatController {
       ? { ...existing, archived: true }
       : { ...(await this.resolveSession(sessionId, true)), archived: false };
     const isCurrent = this.state.session?.sessionId === sessionId;
+    if (archived) {
+      // An archived Session leaves the bar, and with it the store's retention.
+      this.releaseSessionTranscript(sessionId);
+    }
     if (archived && isCurrent) {
       this.turnProjection.clearTodos();
-      this.transcript.clear();
       this.durableMessageAnchor = undefined;
     }
     this.updateState({
@@ -356,9 +434,9 @@ export class TuiChatController {
     const deleteSessionMethod = requireRuntimeMethod(this.runtime, 'deleteSession');
     await deleteSessionMethod(sessionId);
     const isCurrent = this.state.session?.sessionId === sessionId;
+    this.releaseSessionTranscript(sessionId);
     if (isCurrent) {
       this.turnProjection.clearTodos();
-      this.transcript.clear();
       this.durableMessageAnchor = undefined;
     }
     this.updateState({
@@ -745,7 +823,11 @@ export class TuiChatController {
     this.sessionProjectionSequence += 1;
     this.turnProjection.clearTodos();
     this.outputRate.reset();
-    this.transcript.clear();
+    // The new conversation has no Session yet: empty the pane's unscoped cells and
+    // leave the Session being left with its cells, so switching back to it shows
+    // what it showed before.
+    this.transcript.clear(UNSCOPED_TRANSCRIPT_SESSION);
+    this.transcript.setActiveSession(UNSCOPED_TRANSCRIPT_SESSION);
     this.durableMessageAnchor = undefined;
     if (markSessionCleared) this.options.onSessionLifecycle?.();
     this.state = {
@@ -786,6 +868,7 @@ export class TuiChatController {
           session,
           sessions: upsertSession(this.state.sessions, session),
         });
+        this.claimPaneForSession(session.sessionId);
         return session;
       })
       .finally(() => {

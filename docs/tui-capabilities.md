@@ -163,14 +163,19 @@ an open tab, so a tab cannot be closed without showing another one first.
 Switching tabs does not stop work. A Session whose turn is running keeps running
 in the Runtime when you switch away: the TUI stops watching its stream and lets the
 run continue, the bar keeps showing that Session as running from the Runtime
-events, and the tab turns to `unread` when the turn settles. Switching back reloads
-the Session's saved messages and re-attaches to the live stream, so a run that is
-still going picks up where it is.
+events, and the tab turns to `unread` when the turn settles. Switching back
+re-adopts the Session's own pane instead of rebuilding it: the cells it already
+showed are still there, including the streaming tail of a turn that is still
+running, and its saved messages are reconciled into them.
 
-The pane is rebuilt from saved history rather than replayed from a buffer: output
-produced while you were elsewhere appears once the Runtime has persisted it. A
-permission or questionnaire prompt raised by a background Session is recorded
-against that Session and shows when you switch to its tab.
+The TUI keeps a pane per Session on the bar — the visible one plus the most recently
+opened others — and drops a Session's pane when its tab closes, or when the Session
+is archived or deleted, so a Session that comes back is projected from its saved
+messages again. What the pane still cannot do is accumulate output while you are
+elsewhere: the Runtime's stream for a background Session is not watched, so output
+produced during that time appears once it has been persisted. A permission or
+questionnaire prompt raised by a background Session is recorded against that Session
+and shows when you switch to its tab.
 
 Some commands still require a stopped Session, because they end or rebind its
 context: `/new`, `/rename`, `/parent`, and archiving or deleting a Session from
