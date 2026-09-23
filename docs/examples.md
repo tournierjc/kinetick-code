@@ -56,7 +56,7 @@ pnpm kcode exec "Explain this project's test entry points" --model <provider-id>
 
 Replace the example URL, model name, and IDs with your configuration and the IDs returned by the list command. `--use` tests the first listed model, then saves the provider and selects that model as the default. A failed connection test exits nonzero without saving or changing the default; correct the URL, key, or first model ID and retry. Omit `--use` to save without a connection test or default-model change. `exec --model` overrides only the current run. Backslash line continuations are for POSIX shells; use a single line in PowerShell.
 
-A local server that checks no credential needs no key: omit `--api-key-env`, and configure its actual token limits explicitly:
+A local server that checks no credential needs no key: omit `--api-key-env` and leave `MCODE_PROVIDER_API_KEY` unset, since that variable is the default when the flag is absent — then configure the server's actual token limits explicitly:
 
 ```bash
 pnpm kcode provider add --name local-models --base-url http://localhost:8080/v1 \
