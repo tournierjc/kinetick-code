@@ -197,6 +197,8 @@ export class TuiSessionFlow {
       if (this.visibleSessionId() !== undefined) return;
     }
     this.options.stateStore.dispatch({ type: 'tabs/close', sessionId: current });
+    // The closed Session has no tab left, so its pane is released with it.
+    this.options.controller.releaseSessionTranscript(current);
     this.options.onChanged();
   }
 

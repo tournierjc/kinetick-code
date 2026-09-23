@@ -563,7 +563,9 @@ export function createTuiApplicationSessionFeatures(options: {
     },
     reloadSessionProjection: async (sessionId) => {
       if (options.controller.snapshot().session?.sessionId !== sessionId) return;
-      await options.controller.loadSessionProjection(sessionId);
+      // A rewind rewrote this Session's history, so its pane is rebuilt rather than
+      // adopted with the cells of the turns that are gone.
+      await options.controller.loadSessionProjection(sessionId, { rebuild: true });
       options.onChanged();
     },
   });

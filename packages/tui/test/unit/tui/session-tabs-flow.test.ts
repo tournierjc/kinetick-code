@@ -57,6 +57,7 @@ function createFlow(options: {
     state = reduceTuiState(state, { type: 'session/activate', sessionId }).state;
   });
   const append = vi.fn();
+  const releaseSessionTranscript = vi.fn();
   const listSessionPage = vi.fn(async () => ({ sessions: [], hasMore: false }));
   const renameSession = vi.fn(async (sessionId: string, title: string) => ({
     sessionId,
@@ -85,6 +86,7 @@ function createFlow(options: {
       loadSessionProjection,
       startNewSession,
       renameSession,
+      releaseSessionTranscript,
       whenIdle: vi.fn(async () => undefined),
       refreshSessionList: vi.fn(async () => undefined),
     } as never,
@@ -115,6 +117,7 @@ function createFlow(options: {
     startNewSession,
     renameSession,
     showSessionManager,
+    releaseSessionTranscript,
     tabOrder: () => state.tabs.order,
     activeSessionId: () => state.activeSessionId,
     tabs: () => state.tabs,
@@ -218,10 +221,11 @@ describe('activateTabSlot', () => {
 
 describe('closeTab', () => {
   it('activates the next tab before closing the visible one', async () => {
-    const { flow, loadSessionProjection, tabOrder, activeSessionId } = createFlow({
-      tabs: [TAB_A, TAB_B, TAB_C],
-      visible: TAB_B,
-    });
+    const { flow, loadSessionProjection, releaseSessionTranscript, tabOrder, activeSessionId } =
+      createFlow({
+        tabs: [TAB_A, TAB_B, TAB_C],
+        visible: TAB_B,
+      });
 
     await flow.closeTab();
 
@@ -230,6 +234,8 @@ describe('closeTab', () => {
     expect(loadSessionProjection).toHaveBeenCalledWith(TAB_C);
     expect(activeSessionId()).toBe(TAB_C);
     expect(tabOrder()).toEqual([TAB_A, TAB_C]);
+    // The closed Session has no tab left, so its pane is released with it.
+    expect(releaseSessionTranscript).toHaveBeenCalledWith(TAB_B);
   });
 
   it('falls back to the previous tab when the last tab closes', async () => {

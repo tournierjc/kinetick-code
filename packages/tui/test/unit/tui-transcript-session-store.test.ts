@@ -184,6 +184,46 @@ describe('TranscriptStore session dimension', () => {
     expect(store.remove('b1')).toBe(false);
   });
 
+  it('keeps a running turn’s cells when durable content is re-projected', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('settled', 'old answer', 'turn-1'), 'session-a');
+    store.upsert(
+      { ...cell('live', 'streaming tail', 'turn-2'), status: 'running' },
+      'session-a',
+    );
+
+    store.replaceDurableProjection(() => {
+      store.upsert(cell('settled', 'durable answer', 'turn-1'), 'session-a');
+      store.upsert(cell('durable-2', 'durable tail', 'turn-2'), 'session-a');
+    }, 'session-a');
+
+    // The settled cell is replaced by its durable twin, the running one is kept:
+    // its content is not durable yet, so re-projecting would lose it.
+    store.setActiveSession('session-a');
+    expect(store.snapshot().map((entry) => entry.id)).toEqual(['settled', 'live', 'durable-2']);
+    expect(store.get('settled')?.content).toBe('durable answer');
+    expect(store.get('live')?.content).toBe('streaming tail');
+  });
+
+  it('moves a Session’s cells to another Session', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a1', 'A1'));
+    store.upsert(cell('a2', 'A2'));
+
+    expect(store.moveSession(UNSCOPED_TRANSCRIPT_SESSION, 'session-a')).toBe(true);
+
+    expect(store.hasSession(UNSCOPED_TRANSCRIPT_SESSION)).toBe(false);
+    expect(store.activeSessionId).toBe('session-a');
+    expect(store.snapshot().map((entry) => entry.content)).toEqual(['A1', 'A2']);
+  });
+
+  it('ignores a move that has nothing to move', () => {
+    const store = new TranscriptStore();
+
+    expect(store.moveSession('session-a', 'session-a')).toBe(false);
+    expect(store.moveSession('session-a', 'session-b')).toBe(false);
+  });
+
   it('reports activity from the active Session only', () => {
     const store = new TranscriptStore();
     store.upsert(
