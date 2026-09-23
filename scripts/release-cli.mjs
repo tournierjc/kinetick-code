@@ -39,13 +39,59 @@ function githubCli(root) {
   throw new Error('Install and authenticate gh (or gh-axi) to create the version PR.');
 }
 
-function createVersionPullRequest({ root, branch, version, tag }) {
+const pullRequestRetryDelaysMs = [2_000, 4_000, 8_000];
+
+function sleepFor(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function versionPullRequestNumber(cli, root, branch) {
+  try {
+    const listed = execFileSync(cli, ['pr', 'list', '--head', branch, '--state', 'all', '--json', 'number'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return JSON.parse(listed).length;
+  } catch { return 0; }
+}
+
+// The tag and the release branch are already pushed when this runs, so a
+// failure here must never read as a failed release. `gh pr create` can also
+// fail on a transient API error when it runs immediately after the push,
+// because the new head branch is not resolvable yet: that is the race behind
+// the "no commits between" and "head sha can't be blank" responses. Retry with
+// bounded backoff, accept a PR that exists, and when it truly cannot be
+// created, name the recovery instead of surfacing a child-process error.
+export function createVersionPullRequest({ root, branch, version, tag, attempts = pullRequestRetryDelaysMs.length + 1,
+  delaysMs = pullRequestRetryDelaysMs, sleep = sleepFor }) {
+  const cli = githubCli(root);
+  const title = `chore: release Kinetick Code ${version}`;
   const temporary = mkdtempSync(path.join(tmpdir(), 'mcode-version-pr-'));
   try {
     const body = path.join(temporary, 'body.md');
     writeFileSync(body, `Update the root and TUI source versions to ${version}.\n\nTag \`${tag}\` points to this version commit. The tag-triggered CLI release workflow builds and validates the npm installation archive. Merge this PR to carry the released source version back to main; do not move or recreate the release tag.\n`);
-    execFileSync(githubCli(root), ['pr', 'create', '--base', 'main', '--head', branch,
-      '--title', `chore: release Kinetick Code ${version}`, '--body-file', body], { cwd: root, stdio: 'inherit' });
+    let failure = '';
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        execFileSync(cli, ['pr', 'create', '--base', 'main', '--head', branch,
+          '--title', title, '--body-file', body], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        return;
+      } catch (error) {
+        failure = `${error.stderr || error.stdout || error.message}`.trim();
+        // An earlier attempt can have created the PR before failing to report it.
+        if (/already exists/i.test(failure)) return;
+        if (attempt + 1 < attempts) {
+          console.error(`gh pr create failed (attempt ${attempt + 1} of ${attempts}): ${failure}`);
+          sleep(delaysMs[Math.min(attempt, delaysMs.length - 1)]);
+        }
+      }
+    }
+    // The retries may have succeeded without reporting a URL, and the PR may
+    // pre-date this run when a maintainer re-runs the release command.
+    if (versionPullRequestNumber(cli, root, branch) > 0) {
+      console.error(`Version PR for ${branch} already exists; continuing.`);
+      return;
+    }
+    throw new Error(`The release is pushed (tag ${tag}, branch ${branch}) but its version PR could not be created: ${failure}\n` +
+      `Create it by hand, without touching the tag:\n  ${cli} pr create --base main --head ${branch} --title "${title}" --body "<release notes>"`);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }
 
