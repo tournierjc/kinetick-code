@@ -9,10 +9,10 @@ import {
   extractQuestionnaireResponseSummary,
 } from '../../interaction/questionnaire.js';
 import { visibleSessionMutationContent } from '../../features/session-mutation/transport.js';
-import type { TranscriptStore } from '../../transcript/store.js';
+import type { TranscriptProjectionTarget } from '../../transcript/store.js';
 
 export class TuiUserProjection {
-  constructor(private readonly transcript: TranscriptStore) {}
+  constructor(private readonly transcript: TranscriptProjectionTarget) {}
 
   hydrate(message: TuiMessage, messageId: string, turnId: string, timestamp: number): void {
     const content = message.content ?? '';

@@ -224,6 +224,40 @@ describe('TranscriptStore session dimension', () => {
     expect(store.moveSession('session-a', 'session-b')).toBe(false);
   });
 
+  it('writes through a Session-scoped projection target', () => {
+    const store = new TranscriptStore();
+    store.setActiveSession('session-a');
+    store.upsert(cell('a1', 'A on screen'));
+
+    const scoped = store.scoped('session-b');
+    scoped.upsert(cell('b1', 'B from a background turn'));
+    scoped.queueTextDelta('b1', ' and more');
+    expect(scoped.flushTextDeltas(7)).toEqual(['b1']);
+
+    // The pane on screen is untouched, and the target reads its own Session.
+    expect(store.snapshot().map((entry) => entry.content)).toEqual(['A on screen']);
+    expect(store.get('b1')).toBeUndefined();
+    expect(scoped.snapshot().map((entry) => entry.content)).toEqual([
+      'B from a background turn and more',
+    ]);
+    expect(scoped.get('a1')).toBeUndefined();
+    expect(scoped.get('b1')?.updatedAtMs).toBe(7);
+  });
+
+  it('keeps two scoped targets apart even for the same cell id', () => {
+    const store = new TranscriptStore();
+    const scopedA = store.scoped('session-a');
+    const scopedB = store.scoped('session-b');
+
+    scopedA.upsert(cell('turn-1', 'A copy'));
+    scopedB.upsert(cell('turn-1', 'B copy'));
+
+    expect(scopedA.snapshot().map((entry) => entry.content)).toEqual(['A copy']);
+    expect(scopedB.snapshot().map((entry) => entry.content)).toEqual(['B copy']);
+    expect(scopedA.remove('turn-1')).toBe(true);
+    expect(scopedB.snapshot().map((entry) => entry.content)).toEqual(['B copy']);
+  });
+
   it('reports activity from the active Session only', () => {
     const store = new TranscriptStore();
     store.upsert(

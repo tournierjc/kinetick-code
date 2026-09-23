@@ -1,4 +1,4 @@
-import type { TranscriptStore } from '../../transcript/store.js';
+import type { TranscriptProjectionTarget } from '../../transcript/store.js';
 
 export type LiveSegmentKind = 'thinking' | 'assistant' | 'tool';
 
@@ -43,7 +43,7 @@ export function releaseActiveMessageBindings(projection: TurnStreamProjection): 
 }
 
 export function bindCurrentAssistantSnapshot(
-  transcript: TranscriptStore,
+  transcript: TranscriptProjectionTarget,
   turnId: string,
   projection: TurnStreamProjection,
   messageId: string | undefined,

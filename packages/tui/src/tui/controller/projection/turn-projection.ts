@@ -4,7 +4,7 @@ import type {
   TranscriptCellStatus,
   TranscriptUserPresentation,
 } from '../../transcript/model.js';
-import type { TranscriptStore } from '../../transcript/store.js';
+import type { TranscriptProjectionTarget } from '../../transcript/store.js';
 import type { TuiTodoItem } from '../../todo/model.js';
 import { hydrateTuiHistory } from './turn-history-projection.js';
 import { TuiLiveTurnProjection } from './turn-live-projection.js';
@@ -16,14 +16,14 @@ import { formatTuiRuntimeFailure } from '../runtime/runtime-error-presentation.j
 export type OptimisticUserCommitMode = 'immediate' | 'runtime-message';
 
 interface TuiTurnProjectionOptions {
-  transcript: TranscriptStore;
+  transcript: TranscriptProjectionTarget;
   now: () => number;
   onChange: () => void;
   onTodoChange?: (items: readonly TuiTodoItem[]) => void;
 }
 
 export class TuiTurnProjection {
-  private readonly transcript: TranscriptStore;
+  private readonly transcript: TranscriptProjectionTarget;
   private readonly now: () => number;
   private readonly onChange: () => void;
   private readonly toolProjection: TuiToolProjection;

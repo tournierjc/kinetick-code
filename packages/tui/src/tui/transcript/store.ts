@@ -13,6 +13,23 @@ export interface TranscriptActivitySource {
 }
 
 /**
+ * The transcript surface a Turn projection reads and writes through. A
+ * `TranscriptStore` is one, and so is the per-Session view it hands out from
+ * `scoped`, which is how a background Session's projection writes into that
+ * Session's pane.
+ */
+export interface TranscriptProjectionTarget {
+  get(id: string): TranscriptCell | undefined;
+  snapshot(): TranscriptCell[];
+  upsert(update: TranscriptCellUpdate): TranscriptCell;
+  remove(id: string): boolean;
+  moveBefore(id: string, anchorId: string): boolean;
+  moveToEnd(id: string): boolean;
+  queueTextDelta(id: string, delta: string): void;
+  flushTextDeltas(updatedAtMs: number): string[];
+}
+
+/**
  * Session key used before a Session is active, and by callers with no Session of
  * their own (welcome chrome, app-local cells). It keeps the single-Session
  * behaviour of a store whose owner never calls `setActiveSession`.
@@ -57,7 +74,9 @@ function createSessionCells(): TranscriptSessionCells {
  * Session pointer and the retained cells are independent — `clear` empties one
  * Session, `dropSession` forgets it, and neither touches the other Sessions.
  */
-export class TranscriptStore implements TranscriptProjectionSource, TranscriptActivitySource {
+export class TranscriptStore
+  implements TranscriptProjectionSource, TranscriptActivitySource, TranscriptProjectionTarget
+{
   private readonly sessions = new Map<string, TranscriptSessionCells>();
   private activeSession = UNSCOPED_TRANSCRIPT_SESSION;
 
@@ -115,8 +134,8 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     return true;
   }
 
-  get(id: string): TranscriptCell | undefined {
-    const cell = this.state().cells.get(id);
+  get(id: string, sessionId: string = this.activeSession): TranscriptCell | undefined {
+    const cell = this.state(sessionId).cells.get(id);
     return cell ? { ...cell } : undefined;
   }
 
@@ -128,8 +147,8 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     return this.state().revisionValue;
   }
 
-  cellRevision(cell: TranscriptCell): number | undefined {
-    const state = this.state();
+  cellRevision(cell: TranscriptCell, sessionId: string = this.activeSession): number | undefined {
+    const state = this.state(sessionId);
     return state.cells.get(cell.id) === cell ? state.cellRevisions.get(cell.id) : undefined;
   }
 
@@ -137,21 +156,24 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     return this.state().turnStarts.length;
   }
 
-  cellAt(index: number): TranscriptCell | undefined {
-    const state = this.state();
+  cellAt(index: number, sessionId: string = this.activeSession): TranscriptCell | undefined {
+    const state = this.state(sessionId);
     const id = state.orderedIds[index];
     return id === undefined ? undefined : state.cells.get(id);
   }
 
-  locateCell(id: string): TranscriptCellLocation | undefined {
-    const state = this.state();
+  locateCell(id: string, sessionId: string = this.activeSession): TranscriptCellLocation | undefined {
+    const state = this.state(sessionId);
     const index = state.indexById.get(id);
     if (index === undefined) return undefined;
     return { index, turnIndex: findTurnIndex(index, state) };
   }
 
-  turnRange(turnIndex: number): TranscriptTurnRange | undefined {
-    const state = this.state();
+  turnRange(
+    turnIndex: number,
+    sessionId: string = this.activeSession,
+  ): TranscriptTurnRange | undefined {
+    const state = this.state(sessionId);
     const start = state.turnStarts[turnIndex];
     if (start === undefined) return undefined;
     return {
@@ -160,8 +182,26 @@ export class TranscriptStore implements TranscriptProjectionSource, TranscriptAc
     };
   }
 
-  snapshot(): TranscriptCell[] {
-    return snapshotOf(this.state());
+  snapshot(sessionId: string = this.activeSession): TranscriptCell[] {
+    return snapshotOf(this.state(sessionId));
+  }
+
+  /**
+   * A projection target bound to one Session, for work that is not about the Session
+   * on screen: a background Session's turn writes into its own pane through this,
+   * while the reads of the visible pane keep describing the visible Session.
+   */
+  scoped(sessionId: string): TranscriptProjectionTarget {
+    return {
+      get: (id) => this.get(id, sessionId),
+      snapshot: () => this.snapshot(sessionId),
+      upsert: (update) => this.upsert(update, sessionId),
+      remove: (id) => this.remove(id, sessionId),
+      moveBefore: (id, anchorId) => this.moveBefore(id, anchorId, sessionId),
+      moveToEnd: (id) => this.moveToEnd(id, sessionId),
+      queueTextDelta: (id, delta) => this.queueTextDelta(id, delta, sessionId),
+      flushTextDeltas: (updatedAtMs) => this.flushTextDeltas(updatedAtMs, sessionId),
+    };
   }
 
   findVisibleError(error: string): { readonly turnId?: string } | undefined {

@@ -1,6 +1,6 @@
 import type { TuiMessage } from '../../../runtime/port.js';
 import { buildTuiMessageParts } from '../../../runtime/stream-events.js';
-import type { TranscriptStore } from '../../transcript/store.js';
+import type { TranscriptProjectionTarget } from '../../transcript/store.js';
 import { isQuestionnaireTool, type TuiToolProjection } from './turn-tool-projection.js';
 import type { TuiTodoProjection } from './turn-todo-projection.js';
 import type { TuiUserProjection } from './turn-user-projection.js';
@@ -8,7 +8,7 @@ import { projectTuiReviewMessage } from '../../../review/projection.js';
 
 interface HydrateTuiHistoryOptions {
   messages: readonly TuiMessage[];
-  transcript: TranscriptStore;
+  transcript: TranscriptProjectionTarget;
   toolProjection: TuiToolProjection;
   todoProjection: TuiTodoProjection;
   userProjection: TuiUserProjection;
