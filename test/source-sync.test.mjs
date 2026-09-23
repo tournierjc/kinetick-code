@@ -17,7 +17,7 @@ import { parse as parseYaml } from 'yaml';
 import { cliBuildVersion, cliExternalModules, cliReleaseTargets, versionFromTag } from '../scripts/lib/cli-release.mjs';
 import { releaseManifest } from '../scripts/package-cli-release.mjs';
 import { validateReleaseReports } from '../scripts/publish-cli-release.mjs';
-import { compareVersions, releaseCli } from '../scripts/release-cli.mjs';
+import { compareVersions, createVersionPullRequest, releaseCli } from '../scripts/release-cli.mjs';
 import { compareRuns, validateRun, validateRequest, validateToolOutput, median, selectScenarios } from '../scripts/perf/report.mjs';
 import { copyMcodeToolsArtifact, downloadMcodeToolsArtifact, MCODE_TOOLS_ARTIFACT } from '../scripts/lib/mcode-tools-artifact.mjs';
 
@@ -280,9 +280,12 @@ test('release command rejects dirty trees, version regressions, stale bases and 
   const release = version => releaseCli({ root: f.root, version, dryRun: true });
   for (const version of ['1.2.3', '1.2.2', '1.2.3-rc.1']) assert.throws(() => release(version), /must be newer/);
   // The retired `-fork.N` scheme is refused even when it would order above the
-  // committed version.
-  assert.throws(() => release('1.2.3-fork.1'), /-fork\.N` release suffix is retired/);
-  assert.throws(() => release('1.2.4-fork.2'), /-fork\.N` release suffix is retired/);
+  // committed version, and so is a bare `-fork`, which is a valid SemVer
+  // prerelease identifier and would otherwise carry the retired name into a tag.
+  assert.throws(() => release('1.2.3-fork.1'), /-fork` release suffix is retired/);
+  assert.throws(() => release('1.2.4-fork.2'), /-fork` release suffix is retired/);
+  assert.throws(() => release('1.2.4-fork'), /-fork` release suffix is retired/);
+  assert.throws(() => release('2.0.0-fork'), /-fork` release suffix is retired/);
   // A genuinely newer version passes, plain or prerelease.
   releaseCli({ root: f.root, version: '1.2.4-rc.1', dryRun: true });
   releaseCli({ root: f.root, version: '1.2.4', dryRun: true });
@@ -311,6 +314,82 @@ test('rejected tag pushes cannot leave a partial remote release branch or open a
   assert.equal(f.git('ls-remote', 'origin', 'refs/tags/v1.2.4', 'refs/heads/release/v1.2.4'), '');
   assert.equal(f.git('rev-parse', 'origin/main'), f.base);
   assert.equal(f.git('rev-parse', 'v1.2.4^{commit}'), f.git('rev-parse', 'HEAD'));
+});
+
+// The version PR is the only release step that talks to GitHub, and it runs
+// immediately after the atomic push. A transient failure there used to surface
+// as a bare child-process error with no hint that the tag and branch were
+// already pushed, so a release that was publishing looked broken. The tests
+// above inject `openPullRequest` and never reach this function; these drive it
+// through a stub `gh` on PATH.
+function fakeGithubCli(t, mode) {
+  const bin = mkdtempSync(path.join(tmpdir(), 'fake-gh-'));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  const calls = path.join(bin, 'create-calls'), log = path.join(bin, 'create-args'), listed = path.join(bin, 'pull-request-exists');
+  const program = `#!/usr/bin/env node
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === '--help') process.exit(0);
+if (args[0] === 'pr' && args[1] === 'list') {
+  process.stdout.write(existsSync(${JSON.stringify(listed)}) ? '[{"number":51}]' : '[]');
+  process.exit(0);
+}
+appendFileSync(${JSON.stringify(log)}, args.join(' ') + '\\n');
+const attempt = (existsSync(${JSON.stringify(calls)}) ? Number(readFileSync(${JSON.stringify(calls)}, 'utf8')) : 0) + 1;
+writeFileSync(${JSON.stringify(calls)}, String(attempt));
+const mode = ${JSON.stringify(mode)};
+if (mode.startsWith('transient:') && attempt <= Number(mode.slice('transient:'.length))) {
+  process.stderr.write("GraphQL: Head sha can't be blank, No commits between main and release/v1.2.4 (createPullRequest)");
+  process.exit(1);
+}
+if (mode === 'exists') {
+  process.stderr.write('a pull request for branch "release/v1.2.4" into branch "main" already exists');
+  process.exit(1);
+}
+if (mode === 'failing') {
+  process.stderr.write('HTTP 403: Resource not accessible by integration');
+  process.exit(1);
+}
+process.stdout.write('https://github.com/example/kinetick-code/pull/51');
+`;
+  writeFileSync(path.join(bin, 'gh'), program, { mode: 0o755 });
+  // A wrapper that refuses to run keeps `gh-axi` out of the search path on hosts that install it.
+  writeFileSync(path.join(bin, 'gh-axi'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const previous = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${previous}`;
+  t.after(() => { process.env.PATH = previous; });
+  return { listed,
+    createCalls: () => existsSync(calls) ? Number(readFileSync(calls, 'utf8')) : 0,
+    createArguments: () => existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [] };
+}
+
+test('version PR creation retries the transient failure that follows the release push', { skip: process.platform === 'win32' }, t => {
+  const fake = fakeGithubCli(t, 'transient:2');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(fake.createCalls(), 3);
+  assert.equal(fake.createArguments().length, 3);
+  for (const arguments_ of fake.createArguments())
+    assert.match(arguments_, /^pr create --base main --head release\/v1\.2\.4 --title chore: release Kinetick Code 1\.2\.4 --body-file /);
+});
+
+test('version PR creation accepts an existing pull request and otherwise names the recovery', { skip: process.platform === 'win32' }, t => {
+  const existing = fakeGithubCli(t, 'exists');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(existing.createCalls(), 1);
+
+  const created = fakeGithubCli(t, 'failing');
+  writeFileSync(created.listed, 'created by an earlier attempt\n');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(created.createCalls(), 4);
+
+  const missing = fakeGithubCli(t, 'failing');
+  assert.throws(() => createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} }),
+    error => {
+      assert.match(error.message, /HTTP 403: Resource not accessible by integration/);
+      assert.match(error.message, /The release is pushed \(tag v1\.2\.4, branch release\/v1\.2\.4\)/);
+      assert.match(error.message, /gh pr create --base main --head release\/v1\.2\.4 --title "chore: release Kinetick Code 1\.2\.4"/);
+      return true;
+    });
 });
 
 test('npm release manifests require native SQLite and pin installed external dependencies', t => {
