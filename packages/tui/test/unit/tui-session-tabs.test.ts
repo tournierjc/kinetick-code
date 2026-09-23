@@ -538,3 +538,58 @@ describe('TuiSessionTabs grouping', () => {
     expect(render(single, 100, groups)).toBe('1:[a]  2:b');
   });
 });
+
+describe('pinned tab markers', () => {
+  it('carries the pin from the catalog onto the tab', () => {
+    const tabs = resolveTuiSessionTabs({
+      order: ['a', 'b'],
+      activeSessionId: 'a',
+      catalog: [
+        { sessionId: 'a', title: 'Pinned', pinned: true },
+        { sessionId: 'b', title: 'Plain' },
+      ],
+      statusOf: () => undefined,
+    });
+
+    expect(tabs[0]?.pinned).toBe(true);
+    // An unpinned tab stays without the key, so nothing renders for it.
+    expect('pinned' in (tabs[1] as TuiSessionTabView)).toBe(false);
+  });
+
+  it('marks the labelled tab and leaves the others alone', () => {
+    const row = render([
+      tab({ sessionId: 'a', label: 'Pinned', active: true, slot: 1, pinned: true }),
+      tab({ sessionId: 'b', label: 'Plain', slot: 2 }),
+      tab({ sessionId: 'c', label: 'Pinned too', slot: 3, pinned: true }),
+    ]);
+
+    expect(row).toBe('1:* [Pinned]  2:Plain  3:* Pinned too');
+  });
+
+  it('keeps the marker when the label has to shrink', () => {
+    const tabs = [
+      tab({ sessionId: 'a', label: 'A long pinned title', active: true, slot: 1, pinned: true }),
+      tab({ sessionId: 'b', label: 'Other', slot: 2 }),
+    ];
+
+    const row = render(tabs, 18);
+
+    // The marker is a fixed part of the segment, so shrinking the label never
+    // drops it.
+    expect(row).toContain('*');
+    expect(stripVTControlCharacters(row).length).toBeLessThanOrEqual(18);
+  });
+
+  it('shows a pin on a group header when the group holds a pinned tab', () => {
+    const tabs = [
+      tab({ sessionId: 'a', label: 'One', active: true, slot: 1, pinned: true }),
+      tab({ sessionId: 'b', label: 'Two', slot: 2 }),
+      tab({ sessionId: 'c', label: 'Three', slot: 3 }),
+    ];
+    const groups = groupTabs(tabs, { a: '/work/api', b: '/work/api', c: '/work/web' });
+
+    expect(groups?.[0]?.pinned).toBe(true);
+    expect(groups?.[1]?.pinned).toBeUndefined();
+    expect(render(tabs, 100, groups).split('\n')[0]).toBe('▾ api · 2 *');
+  });
+});
