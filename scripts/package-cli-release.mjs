@@ -9,6 +9,8 @@ import { c as createTar } from 'tar';
 import { cliBuildVersion, cliExternalModules } from './lib/cli-release.mjs';
 import { readExtraction, dependencyLicensesPath } from './lib/release-metadata.mjs';
 
+import { PACKAGE_NAME } from './lib/package-identity.mjs';
+
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -62,7 +64,7 @@ export function releaseManifest(importers, version) {
     target[name] = [...versions][0];
   }
   return {
-    name: '@minimax-ai/code', version, private: true, type: 'module', license: 'MIT',
+    name: PACKAGE_NAME, version, private: true, type: 'module', license: 'MIT',
     description: 'Kinetick Code CLI built from the tagged public source.',
     bin: { kcode: 'cli.js' },
     engines: json(path.join(root, 'package.json')).engines,
@@ -91,8 +93,11 @@ export async function packageCliRelease({ tag, out }) {
 Built from https://github.com/tournierjc/kinetick-code/tree/${revision}.
 Install this tar.gz with npm. Node.js must satisfy the package engines requirement.
 Keep optional dependencies enabled and allow better-sqlite3 installation scripts.
-Update by installing a newer GitHub release archive; the built-in updater follows npm.
-The archive uses the same package name, kcode command and user data as the official npm CLI.
+Update by installing a newer GitHub release archive; the built-in updater follows this
+repository's releases.
+The archive installs as ${PACKAGE_NAME}, under the \`kcode\` command, and shares the data
+directory with the official npm CLI. An installation made before this product took its own
+name stays behind as @minimax-ai/code; remove it with \`npm uninstall --global @minimax-ai/code\`.
 See https://github.com/tournierjc/kinetick-code/blob/${revision}/docs/installation.md.
 `);
     mkdirSync(out, { recursive: true });

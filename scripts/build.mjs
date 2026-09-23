@@ -20,6 +20,8 @@ import { copyMcodeToolsArtifact } from './lib/mcode-tools-artifact.mjs';
 import { readExtraction } from "./lib/release-metadata.mjs";
 import { cliBuildVersion, cliExternalModules } from './lib/cli-release.mjs';
 
+import { PACKAGE_NAME } from './lib/package-identity.mjs';
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 const metadata = readExtraction(root);
 const packages = new Map(
@@ -141,7 +143,7 @@ writeFileSync(
   path.join(outdir, "package.json"),
   JSON.stringify(
     {
-      name: "@minimax-ai/code", version, type: "module", private: true,
+      name: PACKAGE_NAME, version, type: "module", private: true,
       ...(process.env.MCODE_RELEASE_TAG ? {
         gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
       } : {}),

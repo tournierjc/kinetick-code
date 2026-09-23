@@ -214,8 +214,10 @@ Remove-Item -LiteralPath "$env:USERPROFILE\.minimax-code" -Recurse -Force
 全局 npm 安装请使用当初安装 KCode 时的同一套 npm 和安装前缀：
 
 ```bash
-npm uninstall -g @minimax-ai/code
+npm uninstall -g kinetick-code
 ```
+
+在本产品使用自有包名之前安装的实例名为 `@minimax-ai/code`；如仍存在于磁盘上，用同样方式卸载。
 
 源码构建请先保存工作，再仅删除自己创建的源码目录，详见[更新或移除](docs/installation.md#update-or-remove)。
 

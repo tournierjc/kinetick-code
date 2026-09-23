@@ -48,33 +48,33 @@ const PENDING_UPDATE_FILE = '.mcode-update-pending.json';
 
 describe('KCode install source classification', () => {
   it.each([
-    ['/opt/homebrew/lib/node_modules/@minimax-ai/code', 'npm-global'],
+    ['/opt/homebrew/lib/node_modules/kinetick-code', 'npm-global'],
     // The current internal identity, and the one a workspace install used before the rename.
     ['/opt/data/lib/node_modules/@mavis/code', 'npm-global'],
     ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@mavis\\code', 'npm-global'],
-    ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@minimax\\code', 'npm-global'],
-    ['/usr/local/lib/node_modules/@minimax-ai/code', 'npm-global'],
-    ['/Users/demo/.local/share/pnpm/global/5/node_modules/@minimax-ai/code', 'pnpm-global'],
+    ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\kinetick-code', 'npm-global'],
+    ['/usr/local/lib/node_modules/kinetick-code', 'npm-global'],
+    ['/Users/demo/.local/share/pnpm/global/5/node_modules/kinetick-code', 'pnpm-global'],
     [
-      '/Users/demo/Library/pnpm/global/v11/10c0afe5/node_modules/@minimax-ai/code',
+      '/Users/demo/Library/pnpm/global/v11/10c0afe5/node_modules/kinetick-code',
       'pnpm-global',
     ],
     [
-      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\5\\node_modules\\@minimax\\code',
+      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\5\\node_modules\\kinetick-code',
       'pnpm-global',
     ],
     [
-      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\v11\\10c0afe5\\node_modules\\@minimax-ai\\code',
+      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\v11\\10c0afe5\\node_modules\\kinetick-code',
       'pnpm-global',
     ],
-    ['/Users/demo/.config/yarn/global/node_modules/@minimax-ai/code', 'yarn-global'],
+    ['/Users/demo/.config/yarn/global/node_modules/kinetick-code', 'yarn-global'],
     [
-      'C:\\Users\\demo\\.config\\yarn\\global\\node_modules\\@minimax\\code',
+      'C:\\Users\\demo\\.config\\yarn\\global\\node_modules\\kinetick-code',
       'yarn-global',
     ],
-    ['/Users/demo/.bun/install/global/node_modules/@minimax-ai/code', 'bun-global'],
+    ['/Users/demo/.bun/install/global/node_modules/kinetick-code', 'bun-global'],
     [
-      'C:\\Users\\demo\\.bun\\install\\global\\node_modules\\@minimax\\code',
+      'C:\\Users\\demo\\.bun\\install\\global\\node_modules\\kinetick-code',
       'bun-global',
     ],
   ] as const)('classifies %s as %s', (packageRoot, expected) => {
@@ -82,9 +82,37 @@ describe('KCode install source classification', () => {
   });
 
   it.each([
-    ['/usr/local/lib/node_modules/@minimax-ai/code', '/usr/local', 'linux'],
+    ['/usr/local/lib/node_modules/@minimax-ai/code', 'npm-global'],
+    ['/usr/local/lib/node_modules/@minimax/code', 'npm-global'],
+    ['/Users/demo/.config/yarn/global/node_modules/@minimax-ai/code', 'yarn-global'],
+    ['/Users/demo/.bun/install/global/node_modules/@minimax-ai/code', 'bun-global'],
     [
-      'C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@minimax\\code',
+      '/Users/demo/Library/pnpm/global/v11/10c0afe5/node_modules/@minimax-ai/code',
+      'pnpm-global',
+    ],
+    [
+      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\v11\\10c0afe5\\node_modules\\@minimax-ai\\code',
+      'pnpm-global',
+    ],
+  ] as const)(
+    'still reports an installation an earlier release or the upstream CLI made: %s',
+    (packageRoot, expected) => {
+      expect(classifyKcodeInstallPath(packageRoot)).toBe(expected);
+    },
+  );
+
+  it('reports no package-manager owner for a directory owned by another package', () => {
+    expect(classifyKcodeInstallPath('/usr/local/lib/node_modules/some-other-cli')).toBeUndefined();
+    expect(
+      classifyKcodeInstallPath('/usr/local/lib/node_modules/@minimax-ai/mcode-tools'),
+    ).toBeUndefined();
+    expect(classifyKcodeInstallPath('/usr/local/lib/node_modules/@mavis/other')).toBeUndefined();
+  });
+
+  it.each([
+    ['/usr/local/lib/node_modules/kinetick-code', '/usr/local', 'linux'],
+    [
+      'C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\kinetick-code',
       'C:\\Users\\demo\\AppData\\Roaming\\npm',
       'win32',
     ],
@@ -94,16 +122,16 @@ describe('KCode install source classification', () => {
 
   it('denies npm global ownership for a directory outside the reported prefix', () => {
     expect(
-      classifyNpmGlobalInstall('/srv/apps/tools/lib/node_modules/@minimax-ai/code', '/usr/local'),
+      classifyNpmGlobalInstall('/srv/apps/tools/lib/node_modules/kinetick-code', '/usr/local'),
     ).toBe('unsupported');
   });
 });
 
 describe('KCode install source detection ordering', () => {
-  const publicPackageRoot = '/usr/local/lib/node_modules/@minimax-ai/code';
+  const publicPackageRoot = '/usr/local/lib/node_modules/kinetick-code';
   const prefixInstall = {
     executable: '/opt/minimax/runtime/node/bin/npm',
-    packageName: '@minimax-ai/code' as const,
+    packageName: 'kinetick-code' as const,
     prefix: '/opt/minimax',
     registry: 'https://registry.npmjs.org/',
   };
@@ -165,7 +193,7 @@ describe('KCode install source detection ordering', () => {
       detectKcodeInstallSource({
         installRoot: '/source',
         platform: 'linux',
-        packageRoot: () => '/srv/apps/tools/node_modules/@minimax-ai/code',
+        packageRoot: () => '/srv/apps/tools/node_modules/kinetick-code',
         npmGlobalPrefix,
         managedInstall: () => false,
         prefixInstall: () => undefined,
@@ -179,7 +207,7 @@ describe('KCode install source detection ordering', () => {
       detectKcodeInstallSource({
         installRoot: '/source',
         platform: 'linux',
-        packageRoot: () => '/srv/apps/tools/node_modules/@minimax-ai/code',
+        packageRoot: () => '/srv/apps/tools/node_modules/kinetick-code',
         npmGlobalPrefix: async () => {
           throw new Error('npm is not installed');
         },
@@ -225,16 +253,19 @@ describe('KCode install source detection ordering', () => {
 });
 
 describe('KCode npm prefix ownership receipts', () => {
-  it.each(['https://registry.npmjs.org/', 'https://registry.npmmirror.com/'])(
-    'reads the installer prefix receipt and keeps its registry: %s',
-    (registry) => {
+  it.each([
+    ['https://registry.npmjs.org/', 'kinetick-code'],
+    ['https://registry.npmmirror.com/', 'kinetick-code'],
+    ['https://registry.npmjs.org/', '@minimax-ai/code'],
+  ] as const)(
+    'reads the installer prefix receipt and keeps its registry: %s %s',
+    (registry, packageName) => {
       const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-prefix-receipt-')));
       const packageRoot = path.join(
         root,
         ...(process.platform === 'win32' ? [] : ['lib']),
         'node_modules',
-        '@minimax-ai',
-        'code',
+        ...packageName.split('/'),
       );
       const npmExecutable = path.join(
         root,
@@ -250,7 +281,7 @@ describe('KCode npm prefix ownership receipts', () => {
         writeFileSync(entryFile, '');
         writeFileSync(
           path.join(packageRoot, 'package.json'),
-          JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+          JSON.stringify({ name: packageName, version: '1.2.3' }),
         );
         writeFileSync(
           path.join(root, 'install.json'),
@@ -259,7 +290,7 @@ describe('KCode npm prefix ownership receipts', () => {
             product: 'minimax-code',
             updateOwner: 'npm-prefix',
             packageManager: 'npm',
-            packageName: '@minimax-ai/code',
+            packageName,
             registry,
             distTag: 'latest',
             prefix: root,
@@ -269,7 +300,7 @@ describe('KCode npm prefix ownership receipts', () => {
 
         expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
           executable: npmExecutable,
-          packageName: '@minimax-ai/code',
+          packageName,
           prefix: realpathSync(root),
           registry,
         });
@@ -286,7 +317,7 @@ describe('KCode npm prefix ownership receipts', () => {
       prefix,
       'releases/1.2.3',
       ...(process.platform === 'win32' ? [] : ['lib']),
-      'node_modules/@minimax-ai/code',
+      'node_modules/kinetick-code',
     );
     const npmExecutable = path.join(
       prefix,
@@ -300,7 +331,7 @@ describe('KCode npm prefix ownership receipts', () => {
       writeFileSync(npmExecutable, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
       writeFileSync(
         path.join(prefix, 'install.json'),
@@ -309,7 +340,7 @@ describe('KCode npm prefix ownership receipts', () => {
           product: 'minimax-code',
           updateOwner: 'npm-prefix',
           packageManager: 'npm',
-          packageName: '@minimax-ai/code',
+          packageName: 'kinetick-code',
           registry: 'https://registry.npmjs.org/',
           distTag: 'latest',
           prefix,
@@ -322,7 +353,7 @@ describe('KCode npm prefix ownership receipts', () => {
 
       expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
         executable: npmExecutable,
-        packageName: '@minimax-ai/code',
+        packageName: 'kinetick-code',
         prefix: realpathSync(prefix),
         registry: 'https://registry.npmjs.org/',
       });
@@ -356,12 +387,12 @@ describe('KCode npm prefix ownership receipts', () => {
       writeFileSync(entryFile, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
 
       expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform, nodeExecutable)).toEqual({
         executable: npmExecutable,
-        packageName: '@minimax-ai/code',
+        packageName: 'kinetick-code',
         prefix: realpathSync(prefix),
         registry: 'https://registry.npmjs.org/',
       });
@@ -385,8 +416,7 @@ describe('KCode npm prefix ownership receipts', () => {
       root,
       ...(process.platform === 'win32' ? [] : ['lib']),
       'node_modules',
-      '@minimax-ai',
-      'code',
+      'kinetick-code',
     );
     const npmExecutable = path.join(
       root,
@@ -402,7 +432,7 @@ describe('KCode npm prefix ownership receipts', () => {
       writeFileSync(entryFile, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
       writeFileSync(
         path.join(root, 'install.json'),
@@ -411,7 +441,7 @@ describe('KCode npm prefix ownership receipts', () => {
           product: 'minimax-code',
           updateOwner: 'npm-prefix',
           packageManager: 'npm',
-          packageName: '@minimax-ai/code',
+          packageName: 'kinetick-code',
           registry: 'https://registry.npmjs.org/',
           distTag: 'latest',
           prefix: root,
@@ -432,8 +462,7 @@ describe('KCode npm prefix ownership receipts', () => {
       root,
       ...(process.platform === 'win32' ? [] : ['lib']),
       'node_modules',
-      '@minimax-ai',
-      'code',
+      'kinetick-code',
     );
     const entryFile = path.join(packageRoot, 'cli.js');
     try {
@@ -441,7 +470,7 @@ describe('KCode npm prefix ownership receipts', () => {
       writeFileSync(entryFile, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
       writeFileSync(
         path.join(root, 'install.json'),
@@ -450,7 +479,7 @@ describe('KCode npm prefix ownership receipts', () => {
           product: 'minimax-code',
           updateOwner: 'npm-prefix',
           packageManager: 'npm',
-          packageName: '@minimax-ai/code',
+          packageName: 'kinetick-code',
           registry: 'https://registry.npmjs.org/',
           distTag: 'latest',
           prefix: root,
@@ -471,8 +500,7 @@ describe('KCode npm prefix ownership receipts', () => {
       root,
       ...(process.platform === 'win32' ? [] : ['lib']),
       'node_modules',
-      '@minimax-ai',
-      'code',
+      'kinetick-code',
     );
     const npmExecutable = path.join(
       root,
@@ -488,7 +516,7 @@ describe('KCode npm prefix ownership receipts', () => {
       writeFileSync(entryFile, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
       writeFileSync(
         path.join(root, 'install.json'),
@@ -497,7 +525,7 @@ describe('KCode npm prefix ownership receipts', () => {
           product: 'minimax-code',
           updateOwner: 'npm-prefix',
           packageManager: 'npm',
-          packageName: '@minimax-ai/code',
+          packageName: 'kinetick-code',
           registry: 'https://registry.npmjs.org/',
           distTag: 'latest',
           prefix: otherPrefix,
@@ -518,20 +546,40 @@ describe('KCode npm prefix ownership receipts', () => {
       temporaryRoot,
       'lib',
       'node_modules',
-      '@minimax-ai',
-      'code',
+      'kinetick-code',
     );
     try {
       mkdirSync(packageRoot, { recursive: true });
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code' }),
+        JSON.stringify({ name: 'kinetick-code' }),
+      );
+      const entryFile = path.join(packageRoot, 'cli.js');
+      writeFileSync(entryFile, '');
+
+      expect(resolveKcodePackageName(entryFile)).toBe('kinetick-code');
+      expect(resolveInstalledKcodePackageVersion(entryFile)).toBeUndefined();
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('still reads the identity an earlier release installed under', () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-legacy-'));
+    const packageRoot = path.join(temporaryRoot, 'lib', 'node_modules', '@minimax-ai', 'code');
+    try {
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(
+        path.join(packageRoot, 'package.json'),
+        JSON.stringify({ name: '@minimax-ai/code', version: '9.9.9' }),
       );
       const entryFile = path.join(packageRoot, 'cli.js');
       writeFileSync(entryFile, '');
 
       expect(resolveKcodePackageName(entryFile)).toBe('@minimax-ai/code');
-      expect(resolveInstalledKcodePackageVersion(entryFile)).toBeUndefined();
+      expect(resolveInstalledKcodePackageVersion(entryFile)).toBe('9.9.9');
+      expect(classifyKcodeInstallPath(packageRoot)).toBe('npm-global');
+      expect(isInternalKcodePackageName('@minimax-ai/code')).toBe(false);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -540,7 +588,7 @@ describe('KCode npm prefix ownership receipts', () => {
   it('recognizes the internal package identities as environment-selectable', () => {
     expect(isInternalKcodePackageName('@mavis/code')).toBe(true);
     expect(isInternalKcodePackageName('@minimax/code')).toBe(true);
-    expect(isInternalKcodePackageName('@minimax-ai/code')).toBe(false);
+    expect(isInternalKcodePackageName('kinetick-code')).toBe(false);
     expect(isInternalKcodePackageName(undefined)).toBe(false);
   });
 });
@@ -617,11 +665,11 @@ describe('KCode install root resolution', () => {
 
 describe('KCode prefix update journal', () => {
   function writePackage(modulesRoot: string, version: string): void {
-    const packageRoot = path.join(modulesRoot, '@minimax-ai', 'code');
+    const packageRoot = path.join(modulesRoot, 'kinetick-code');
     mkdirSync(path.join(packageRoot, 'dist'), { recursive: true });
     writeFileSync(
       path.join(packageRoot, 'package.json'),
-      JSON.stringify({ name: '@minimax-ai/code', version, bin: { kcode: 'dist/index.js' } }),
+      JSON.stringify({ name: 'kinetick-code', version, bin: { kcode: 'dist/index.js' } }),
     );
   }
 
@@ -648,7 +696,7 @@ describe('KCode prefix update journal', () => {
       activeModulesRoot,
       stagedModulesRoot: resolveKcodePrefixModulesRoot(stagingPrefix, process.platform),
       backupModulesRoot: `${activeModulesRoot}.mcode-update-backup`,
-      packageName: '@minimax-ai/code',
+      packageName: 'kinetick-code',
       expectedVersion,
       launchers: resolveKcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
     };
@@ -666,7 +714,7 @@ describe('KCode prefix update journal', () => {
     const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.staging`);
     const entryFile = path.join(
       resolveKcodePrefixModulesRoot(prefix),
-      '@minimax-ai/code',
+      'kinetick-code',
       'dist/index.js',
     );
     try {
@@ -700,7 +748,7 @@ describe('KCode prefix update journal', () => {
     const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.activated`);
     const entryFile = path.join(
       resolveKcodePrefixModulesRoot(prefix),
-      '@minimax-ai/code',
+      'kinetick-code',
       'dist/index.js',
     );
     try {
@@ -727,7 +775,7 @@ describe('KCode prefix update journal', () => {
     const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.missing`);
     const entryFile = path.join(
       resolveKcodePrefixModulesRoot(prefix),
-      '@minimax-ai/code',
+      'kinetick-code',
       'dist/index.js',
     );
     try {
@@ -750,7 +798,7 @@ describe('KCode prefix update journal', () => {
     const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-invalid-')));
     const entryFile = path.join(
       resolveKcodePrefixModulesRoot(prefix),
-      '@minimax-ai/code',
+      'kinetick-code',
       'dist/index.js',
     );
     const pendingFile = path.join(prefix, PENDING_UPDATE_FILE);
@@ -777,7 +825,7 @@ describe('KCode prefix update journal', () => {
     const foreignStaging = path.join(path.dirname(foreignPrefix), '.foreign-staging');
     const entryFile = path.join(
       resolveKcodePrefixModulesRoot(prefix),
-      '@minimax-ai/code',
+      'kinetick-code',
       'dist/index.js',
     );
     const pendingFile = path.join(prefix, PENDING_UPDATE_FILE);

@@ -28,23 +28,19 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    to `main`. Never push `main` directly and never move a distributed tag.
    `gh` must be authenticated as the fork owner (`gh auth status`); pushes go
    through the gh git-credential helper — no tokens embedded in remotes.
-4. **Version numbering.** Every fork release carries the `-fork.N` prerelease
-   suffix: tag `v<X.Y.Z>-fork.N`, where `X.Y.Z` is the upstream core the merged
-   tree is based on and `N` increments per fork release on that core
-   (`v0.5.2-fork.1`, then `v0.5.2-fork.2`; upstream 0.5.3 sync restarts at
-   `v0.5.3-fork.1`). `release:cli` accepts a same-core `-fork.N` version even
-   though plain SemVer orders it below the bare core (the version gate exempts
-   `X.Y.Z-fork.N` when `X.Y.Z` is the committed source version, as long as `N`
-   exceeds every existing `-fork.N` tag of that core, local and on origin). So
-   the first fork release on upstream 0.5.1 is `v0.5.1-fork.1`, cut from a tree
-   whose `package.json` reads `0.5.1`. The fork tree always differs from
-   upstream at any given core — the egress guard, telemetry removal, and
-   fork docs are fork-only — so a bare upstream number is never valid
-   here. A `-fork.N` tag creates a GitHub
-   *prerelease* and the release tooling accepts it; the bare `v<X.Y.Z>` form is
-   reserved for a deliberate stable promotion without fork-only changes.
-   Never reuse an upstream version number for a tree that differs from upstream
-   at that version.
+4. **Version numbering.** Releases carry plain versions: tag `v<X.Y.Z>`, archive
+   `kinetick-code-X.Y.Z.tar.gz`. The sequence belongs to this repository and is
+   not tied to the upstream core — the tree differs from upstream at every
+   revision anyway (egress guard, telemetry removal, fork docs) — so the only
+   rule `release:cli` enforces is that the new version is newer than the
+   committed one, in canonical SemVer order. The `-fork.N` suffix used before
+   this product had its own identity is retired: `release:cli` refuses it, and
+   the releases published under it (`v0.5.2-fork.1`, whose tag is immutable)
+   keep their names. Pick the next number by meaning: a patch for fixes on the
+   released line, a minor for the new upstream core, a major for a deliberate
+   break in this product's own behaviour. A genuinely newer *prerelease* tag
+   (`v0.6.0-rc.1`) is still allowed: it publishes as a GitHub prerelease and the
+   `stable` channel ignores it, while `preview` offers it.
 5. **CI and publication.** The tag triggers the `CLI release` workflow: full
    `pnpm verify` + gitleaks scans, one `kinetick-code-X.Y.Z.tar.gz` archive, then
    install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26). Only if
@@ -61,14 +57,15 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    keep those labels when re-syncing docs.
 8. **Assets the updater consumes.** `kcode update` reads this repository's
    releases through `https://api.github.com/repos/tournierjc/kinetick-code/releases` and installs the
-   asset named `kinetick-code-X.Y.Z-fork.N.tar.gz` together with its `.sha256`
+   asset named `kinetick-code-X.Y.Z.tar.gz` together with its `.sha256`
    (`<digest>  <archive name>`). A release it cannot read or verify is a release
    the updater refuses. Therefore: publish the release as a published release,
    not a draft (drafts are ignored); keep both assets in every release; never
    replace an asset under a published tag — publish a new version instead. The
-   `-fork.N` prerelease marker is expected by the default `preview` channel;
-   only a bare `v<X.Y.Z>` stable promotion is invisible to it. Archives published
-   under the pre-rename `minimax-code-X.Y.Z.tar.gz` name stay installable by an
+   default `preview` channel takes every published release, including a
+   prerelease tag if one is ever cut; `stable` skips GitHub prereleases and
+   therefore follows plain releases only. Archives published under the
+   pre-rename `minimax-code-X.Y.Z.tar.gz` name stay installable by an
    installation that predates the rename.
 
 Rollback: a released tag is immutable. To retract a bad release, unlist the GitHub

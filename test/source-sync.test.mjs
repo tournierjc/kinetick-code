@@ -279,13 +279,14 @@ test('release command rejects dirty trees, version regressions, stale bases and 
   const f = cliReleaseFixture(t);
   const release = version => releaseCli({ root: f.root, version, dryRun: true });
   for (const version of ['1.2.3', '1.2.2', '1.2.3-rc.1']) assert.throws(() => release(version), /must be newer/);
-  // Fork rule: same-core -fork.N passes the version gate; only existing fork tags advance it.
-  releaseCli({ root: f.root, version: '1.2.3-fork.1', dryRun: true });
-  f.git('tag', 'v1.2.3-fork.1');
-  try { release('1.2.3-fork.1'); assert.fail('same-core fork prerelease below the highest tag should be rejected'); }
-  catch (error) { assert.match(String(error.message), /newer than 1\.2\.3-fork\.1/); }
-  release('1.2.3-fork.2');
-  f.git('tag', '-d', 'v1.2.3-fork.1');
+  // The retired `-fork.N` scheme is refused even when it would order above the
+  // committed version.
+  assert.throws(() => release('1.2.3-fork.1'), /-fork\.N` release suffix is retired/);
+  assert.throws(() => release('1.2.4-fork.2'), /-fork\.N` release suffix is retired/);
+  // A genuinely newer version passes, plain or prerelease.
+  releaseCli({ root: f.root, version: '1.2.4-rc.1', dryRun: true });
+  releaseCli({ root: f.root, version: '1.2.4', dryRun: true });
+  releaseCli({ root: f.root, version: '2.0.0', dryRun: true });
   writeFileSync(path.join(f.root, 'untracked'), 'unfinished');
   assert.throws(() => release('1.2.4'), /clean working tree/);
   f.git('add', 'untracked'); f.git('commit', '-m', 'Unreviewed change');

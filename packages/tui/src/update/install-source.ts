@@ -2,15 +2,19 @@ import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import spawn from 'cross-spawn';
 import { homedir } from 'node:os';
+import {
+  KCODE_PACKAGE_DIR_PATTERN,
+  KCODE_WORKSPACE_PACKAGE_NAME,
+  isInternalKcodePackageName,
+  isKcodePackageName,
+  type KcodePackageName,
+} from '../package-identity.js';
 import { KCODE_NPM_REGISTRY } from './release.js';
 
-const KCODE_PACKAGE_BASENAME = 'code';
-const KCODE_INTERNAL_SCOPE = '@mavis';
-const KCODE_PUBLIC_SCOPE = '@minimax-ai';
+export { isInternalKcodePackageName };
 
-export type KcodeNpmPackageName = '@mavis/code' | '@minimax-ai/code' | KcodeLegacyPackageName;
-/** Internal identity written by releases built before the rename. */
-export type KcodeLegacyPackageName = '@minimax/code';
+/** Identity this product is installed under, current or historical. */
+export type KcodeNpmPackageName = KcodePackageName;
 export type KcodePackageManagerInstallSource =
   | 'npm-global'
   | 'npm-prefix'
@@ -107,21 +111,21 @@ export function classifyKcodeInstallPath(
 ): KcodePackageManagerInstallSource | undefined {
   const normalized = packageRoot.replaceAll('\\', '/').toLocaleLowerCase();
   if (
-    /\/pnpm\/global\/(?:v11\/[^/]+|[^/]+)\/node_modules\/@(?:mavis|minimax(?:-ai)?)\/code$/u.test(normalized)
+    new RegExp(`/pnpm/global/(?:v11/[^/]+|[^/]+)/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)
   ) {
     return 'pnpm-global';
   }
   if (
-    /\/(?:\.config\/yarn|\.yarn)\/global\/node_modules\/@(?:mavis|minimax(?:-ai)?)\/code$/u.test(normalized)
+    new RegExp(`/(?:\\.config/yarn|\\.yarn)/global/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)
   ) {
     return 'yarn-global';
   }
-  if (/\/\.bun\/install\/global\/node_modules\/@(?:mavis|minimax(?:-ai)?)\/code$/u.test(normalized)) {
+  if (new RegExp(`/\\.bun/install/global/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)) {
     return 'bun-global';
   }
   if (
-    /\/lib\/node_modules\/@(?:mavis|minimax(?:-ai)?)\/code$/u.test(normalized) ||
-    /\/npm\/node_modules\/@(?:mavis|minimax(?:-ai)?)\/code$/u.test(normalized)
+    new RegExp(`/lib/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized) ||
+    new RegExp(`/npm/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)
   ) {
     return 'npm-global';
   }
@@ -136,7 +140,7 @@ export function classifyNpmGlobalInstall(
   const normalizedRoot = normalizeResolvedPath(packageRoot, platform);
   const platformPath = platform === 'win32' ? path.win32 : path.posix;
   const packageName =
-    kcodePackageNameFromPath(packageRoot) ?? kcodePackageName(KCODE_INTERNAL_SCOPE);
+    kcodePackageNameFromPath(packageRoot) ?? KCODE_WORKSPACE_PACKAGE_NAME;
   const candidates =
     platform === 'win32'
       ? [platformPath.join(globalPrefix, 'node_modules', packageName)]
@@ -177,10 +181,6 @@ export function resolveKcodePackageName(
   return resolveKcodePackageIdentity(entryFile)?.packageName;
 }
 
-export function isInternalKcodePackageName(packageName: string | undefined): boolean {
-  return packageName === kcodePackageName(KCODE_INTERNAL_SCOPE) || packageName === '@minimax/code';
-}
-
 export function resolveInstalledKcodePackageVersion(
   entryFile = process.argv[1],
 ): string | undefined {
@@ -195,8 +195,13 @@ export function resolveKcodeNpmPrefixInstall(
   const identity = resolveKcodePackageIdentity(entryFile);
   if (!identity) return undefined;
   const platformPath = platform === 'win32' ? path.win32 : path.posix;
-  const nodeModules = platformPath.dirname(platformPath.dirname(identity.packageRoot));
-  if (platformPath.basename(nodeModules).toLocaleLowerCase() !== 'node_modules') return undefined;
+  // The package sits either directly in `node_modules` or behind a scope directory,
+  // so the containing `node_modules` is found rather than assumed at a fixed depth.
+  const packageParent = platformPath.dirname(identity.packageRoot);
+  const nodeModules = [packageParent, platformPath.dirname(packageParent)].find(
+    (candidate) => platformPath.basename(candidate).toLocaleLowerCase() === 'node_modules',
+  );
+  if (!nodeModules) return undefined;
   const nodeModulesParent = platformPath.dirname(nodeModules);
   const packagePrefix =
     platform !== 'win32' && platformPath.basename(nodeModulesParent) === 'lib'
@@ -386,31 +391,21 @@ function isResolvedPathInside(
   return relative !== '' && !relative.startsWith('..') && !platformPath.isAbsolute(relative);
 }
 
-/**
- * Identities this product is installed under. `@mavis/code` is the current
- * from-source internal identity, `@minimax-ai/code` is the distributed one the
- * release archives keep using, and a workspace install made before the rename
- * is still recognized rather than reported as a foreign package.
- */
-const KCODE_PACKAGE_NAMES: readonly KcodeNpmPackageName[] = [
-  kcodePackageName(KCODE_INTERNAL_SCOPE),
-  '@minimax/code',
-  kcodePackageName(KCODE_PUBLIC_SCOPE),
-];
-
 function parseKcodePackageName(value: unknown): KcodeNpmPackageName | undefined {
-  return KCODE_PACKAGE_NAMES.find((name) => name === value);
+  return isKcodePackageName(value) ? value : undefined;
 }
 
-function kcodePackageName(scope: string): KcodeNpmPackageName {
-  return `${scope}/${KCODE_PACKAGE_BASENAME}` as KcodeNpmPackageName;
-}
-
+/**
+ * Identity of the package directory a build is running from: the product's own
+ * name directly under `node_modules`, or a scoped historical name, which needs
+ * its scope segment to be read back.
+ */
 function kcodePackageNameFromPath(packageRoot: string): KcodeNpmPackageName | undefined {
   const normalized = packageRoot.replaceAll('\\', '/');
   const segments = normalized.split('/');
-  if (segments.at(-1) !== KCODE_PACKAGE_BASENAME) return undefined;
-  return parseKcodePackageName(`${segments.at(-2)}/${KCODE_PACKAGE_BASENAME}`);
+  const last = segments.at(-1);
+  const scoped = parseKcodePackageName(`${segments.at(-2)}/${last}`);
+  return parseKcodePackageName(last) ?? scoped;
 }
 
 function normalizeResolvedPath(value: string, platform: NodeJS.Platform): string {

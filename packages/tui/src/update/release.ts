@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import spawn from 'cross-spawn';
 import { EnvHttpProxyAgent, fetch } from 'undici';
+import { KCODE_INSTALLABLE_PACKAGE_NAMES } from '../package-identity.js';
 import {
   KcodeUpdateCancelledError,
   reportKcodeUpdatePhase,
@@ -305,7 +306,7 @@ export function buildKcodeInstallCommand(
   const npmArgs = [
     '--ignore-scripts=false',
     '--include=optional',
-    '--allow-scripts=@minimax-ai/code,better-sqlite3',
+    `--allow-scripts=${KCODE_INSTALLABLE_PACKAGE_NAMES.join(',')},better-sqlite3`,
     '--registry',
     registry,
   ];

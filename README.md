@@ -47,12 +47,13 @@ Understand a project, make changes, and run tests from your terminal. Use your M
 **This fork — GitHub Release archive (recommended).** Download the archive and checksum from the
 [latest fork release](https://github.com/tournierjc/kinetick-code/releases/latest), verify the checksum, and install
 with npm. Node.js **22.19+ (22.x), 24.2+ (24.x), 25, or 26** is required; npm still needs network access to public
-npm for runtime dependencies. For example, for a `v0.5.1-fork.1` release:
+npm for runtime dependencies. For a `vX.Y.Z` release:
 
 ```bash
-# Linux; on macOS use: shasum -a 256 -c kinetick-code-0.5.1-fork.1.tar.gz.sha256
-sha256sum -c kinetick-code-0.5.1-fork.1.tar.gz.sha256
-npm install --global ./kinetick-code-0.5.1-fork.1.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+# Linux; on macOS use: shasum -a 256 -c kinetick-code-X.Y.Z.tar.gz.sha256
+sha256sum -c kinetick-code-X.Y.Z.tar.gz.sha256
+npm install --global ./kinetick-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+kcode --version
 ```
 
 The archive passed the full CI verification and npm-install checks on Linux and macOS across the supported Node
@@ -196,8 +197,11 @@ Open **Edit environment variables for your account**, edit the user **Path**, an
 For a global npm installation, use the same npm installation/prefix you used to install KCode:
 
 ```bash
-npm uninstall -g @minimax-ai/code
+npm uninstall -g kinetick-code
 ```
+
+An installation made before this product took its own name is `@minimax-ai/code`; uninstall that one the
+same way if it is still on disk.
 
 For a source build, save any work and remove only the checkout you created; see [Update or remove](docs/installation.md#update-or-remove).
 

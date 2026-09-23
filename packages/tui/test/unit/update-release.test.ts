@@ -138,7 +138,7 @@ function service(
   } = {},
 ): KcodeReleaseService {
   return new KcodeReleaseService({
-    currentVersion: options.currentVersion ?? '0.5.2-fork.1',
+    currentVersion: options.currentVersion ?? '0.5.2',
     installSource: options.installSource ?? 'npm-global',
     installRoot: options.installRoot ?? installRootWithChannel(),
     platform: options.platform ?? 'linux',
@@ -151,20 +151,20 @@ describe('KCode release channel', () => {
   it('selects the newest release for the preview channel, including prereleases', () => {
     const release = selectKcodeRelease(
       [
-        releaseEntry('0.5.2-fork.1', { prerelease: true }),
-        releaseEntry('0.5.3-fork.1', { prerelease: true }),
+        releaseEntry('0.5.2-rc.1', { prerelease: true }),
+        releaseEntry('0.5.3-rc.1', { prerelease: true }),
       ],
       { channel: 'preview' },
     );
-    expect(release.version).toBe('0.5.3-fork.1');
+    expect(release.version).toBe('0.5.3-rc.1');
     expect(release.prerelease).toBe(true);
-    expect(release.artifact.name).toBe('kinetick-code-0.5.3-fork.1.tar.gz');
+    expect(release.artifact.name).toBe('kinetick-code-0.5.3-rc.1.tar.gz');
   });
 
   it('keeps the stable channel on published releases and ignores drafts', () => {
     const release = selectKcodeRelease(
       [
-        releaseEntry('0.5.3-fork.1', { prerelease: true }),
+        releaseEntry('0.5.3-rc.1', { prerelease: true }),
         releaseEntry('0.5.4', { draft: true }),
         releaseEntry('0.5.2'),
       ],
@@ -176,36 +176,36 @@ describe('KCode release channel', () => {
 
   it('accepts the pre-rename minimax-code archive name', () => {
     const release = selectKcodeRelease(
-      [releaseEntry('0.5.2-fork.1', { prefix: 'minimax-code' })],
+      [releaseEntry('0.5.2', { prefix: 'minimax-code' })],
       { channel: 'preview' },
     );
-    expect(release.artifact.name).toBe('minimax-code-0.5.2-fork.1.tar.gz');
-    expect(kcodeReleaseArchiveNames('0.5.2-fork.1')).toEqual([
-      'kinetick-code-0.5.2-fork.1.tar.gz',
-      'minimax-code-0.5.2-fork.1.tar.gz',
+    expect(release.artifact.name).toBe('minimax-code-0.5.2.tar.gz');
+    expect(kcodeReleaseArchiveNames('0.5.2')).toEqual([
+      'kinetick-code-0.5.2.tar.gz',
+      'minimax-code-0.5.2.tar.gz',
     ]);
   });
 
   it('rejects a release whose archive has no published checksum', () => {
     expect(() =>
-      selectKcodeRelease([releaseEntry('0.5.3-fork.1', { omitChecksum: true })], {
+      selectKcodeRelease([releaseEntry('0.5.3', { omitChecksum: true })], {
         channel: 'preview',
       }),
     ).toThrow(/without its .*\.sha256 checksum/u);
   });
 
   it('rejects a release that publishes no archive for the version', () => {
-    const entry = releaseEntry('0.5.3-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.5.3-rc.1', { prerelease: true });
     entry.assets[0] = asset('something-else.tar.gz', 12);
     expect(() => selectKcodeRelease([entry], { channel: 'preview' })).toThrow(
-      /does not publish kinetick-code-0\.5\.3-fork\.1\.tar\.gz/u,
+      /does not publish kinetick-code-0\.5\.3-rc\.1\.tar\.gz/u,
     );
   });
 
   it('selects a pinned version and reports the releases page when it is absent', () => {
-    const entries = [releaseEntry('0.5.2-fork.1', { prerelease: true })];
-    expect(selectKcodeRelease(entries, { channel: 'preview', version: '0.5.2-fork.1' }).version).toBe(
-      '0.5.2-fork.1',
+    const entries = [releaseEntry('0.5.2-rc.1', { prerelease: true })];
+    expect(selectKcodeRelease(entries, { channel: 'preview', version: '0.5.2-rc.1' }).version).toBe(
+      '0.5.2-rc.1',
     );
     expect(() => selectKcodeRelease(entries, { channel: 'preview', version: '9.9.9' })).toThrow(
       new RegExp(KCODE_RELEASES_URL, 'u'),
@@ -235,16 +235,16 @@ describe('KCode release channel', () => {
   });
 
   it('verifies the archive against the published digest and size', () => {
-    const name = archiveName('0.5.3-fork.1');
+    const name = archiveName('0.5.3');
     const release: KcodeRelease = {
-      tag: 'v0.5.3-fork.1',
-      version: '0.5.3-fork.1',
+      tag: 'v0.5.3',
+      version: '0.5.3',
       prerelease: true,
       publishedAt: '2026-09-22T09:43:59Z',
       artifact: {
         name,
         url: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/archive',
-        downloadUrl: 'https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3-fork.1/' + name,
+        downloadUrl: 'https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3/' + name,
         size: ARCHIVE_BYTES.length,
         checksumUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/checksum',
       },
@@ -264,25 +264,25 @@ describe('KCode release channel', () => {
   });
 
   it('orders versions so a prerelease follows its release and its own builds', () => {
-    expect(compareKcodeVersions('0.5.3', '0.5.2-fork.9')).toBeGreaterThan(0);
-    expect(compareKcodeVersions('0.5.2-fork.2', '0.5.2-fork.1')).toBeGreaterThan(0);
-    expect(compareKcodeVersions('0.5.2', '0.5.2-fork.1')).toBeGreaterThan(0);
-    expect(compareKcodeVersions('0.5.2-fork.1', '0.5.2')).toBeLessThan(0);
-    expect(compareKcodeVersions('0.5.2-fork.1', '0.5.2-fork.1')).toBe(0);
-    expect(parseKcodeVersion('0.5.2-fork.1')).toBe('0.5.2-fork.1');
+    expect(compareKcodeVersions('0.5.3', '0.5.2-rc.9')).toBeGreaterThan(0);
+    expect(compareKcodeVersions('0.6.0-rc.2', '0.6.0-rc.1')).toBeGreaterThan(0);
+    expect(compareKcodeVersions('0.6.0', '0.6.0-rc.1')).toBeGreaterThan(0);
+    expect(compareKcodeVersions('0.6.0-rc.1', '0.6.0')).toBeLessThan(0);
+    expect(compareKcodeVersions('0.6.0-rc.1', '0.6.0-rc.1')).toBe(0);
+    expect(parseKcodeVersion('0.6.0-rc.1')).toBe('0.6.0-rc.1');
     expect(() => parseKcodeVersion('latest')).toThrow(/Invalid KCode version/u);
     expect(() => parseKcodeVersion('../0.5.2')).toThrow(/Invalid KCode version/u);
   });
 
   it('builds the install command for each owning package manager', () => {
-    const archive = '/tmp/kcode-update/kinetick-code-0.5.3-fork.1.tar.gz';
+    const archive = '/tmp/kcode-update/kinetick-code-0.5.3.tar.gz';
     expect(buildKcodeInstallCommand('npm-global', archive, { platform: 'linux' }).args).toEqual(
       expect.arrayContaining([
         'install',
         '--global',
         archive,
         '--ignore-scripts=false',
-        '--allow-scripts=@minimax-ai/code,better-sqlite3',
+        '--allow-scripts=kinetick-code,@minimax-ai/code,better-sqlite3',
         '--registry',
         'https://registry.npmjs.org/',
       ]),
@@ -308,31 +308,31 @@ describe('KCode release channel', () => {
 describe('KcodeReleaseService', () => {
   it('reports the newest release over the GitHub API', async () => {
     const serviceUnderTest = service([
-      releaseEntry('0.5.2-fork.1', { prerelease: true }),
-      releaseEntry('0.6.0-fork.1', { prerelease: true }),
+      releaseEntry('0.5.2-rc.1', { prerelease: true }),
+      releaseEntry('0.6.0-rc.1', { prerelease: true }),
     ]);
     const result = await serviceUnderTest.check({});
     expect(result.status).toBe('available');
     expect(result.channel).toBe('preview');
-    expect(result.latestVersion).toBe('0.6.0-fork.1');
-    expect(result.release.artifact.name).toBe('kinetick-code-0.6.0-fork.1.tar.gz');
+    expect(result.latestVersion).toBe('0.6.0-rc.1');
+    expect(result.release.artifact.name).toBe('kinetick-code-0.6.0-rc.1.tar.gz');
   });
 
   it('reports current and ahead states against the channel', async () => {
-    const entries = [releaseEntry('0.5.2-fork.1', { prerelease: true })];
+    const entries = [releaseEntry('0.5.2-rc.1', { prerelease: true })];
     await expect(
-      service(entries, {}, { currentVersion: '0.5.2-fork.1' }).check({}),
+      service(entries, {}, { currentVersion: '0.5.2-rc.1' }).check({}),
     ).resolves.toMatchObject({ status: 'current' });
     await expect(
-      service(entries, {}, { currentVersion: '0.5.3-fork.1' }).check({}),
+      service(entries, {}, { currentVersion: '0.5.3' }).check({}),
     ).resolves.toMatchObject({ status: 'ahead' });
   });
 
   it('defaults to the preview channel and follows the one update.json selects', async () => {
-    const entries = [releaseEntry('0.6.0', {}), releaseEntry('0.7.0-fork.1', { prerelease: true })];
+    const entries = [releaseEntry('0.6.0', {}), releaseEntry('0.7.0-rc.1', { prerelease: true })];
     await expect(service(entries).check({})).resolves.toMatchObject({
       channel: 'preview',
-      latestVersion: '0.7.0-fork.1',
+      latestVersion: '0.7.0-rc.1',
     });
     await expect(
       service(entries, {}, { installRoot: installRootWithChannel('stable') }).check({}),
@@ -354,11 +354,11 @@ describe('KcodeReleaseService', () => {
   });
 
   it('installs the verified archive and reports that a restart is required', async () => {
-    const entry = releaseEntry('0.6.0-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.6.0-rc.1', { prerelease: true });
     const runInstall = vi.fn(async () => undefined);
     const serviceUnderTest = service([entry], {
       runInstall,
-      readInstalledPackageVersion: () => '0.6.0-fork.1',
+      readInstalledPackageVersion: () => '0.6.0-rc.1',
     });
     const result = await serviceUnderTest.apply({});
     expect(result.applied).toBe(true);
@@ -369,28 +369,28 @@ describe('KcodeReleaseService', () => {
       NodeJS.ProcessEnv,
     ];
     const archiveArgument = command.args.find((argument) => argument.endsWith('.tar.gz')) ?? '';
-    expect(archiveArgument).toMatch(/kinetick-code-0\.6\.0-fork\.1\.tar\.gz$/u);
+    expect(archiveArgument).toMatch(/kinetick-code-0\.6\.0-rc\.1\.tar\.gz$/u);
     expect(environment).toBeTypeOf('object');
     // The downloaded archive never outlives the update.
     expect(existsSync(archiveArgument)).toBe(false);
   });
 
   it('does not install anything when the installation is already current', async () => {
-    const entry = releaseEntry('0.5.2-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.5.2-rc.1', { prerelease: true });
     const runInstall = vi.fn(async () => undefined);
     const result = await service(
       [entry],
       { runInstall },
-      { currentVersion: '0.5.2-fork.1' },
+      { currentVersion: '0.5.2-rc.1' },
     ).apply({});
     expect(result).toMatchObject({ status: 'current', applied: false, restartRequired: false });
     expect(runInstall).not.toHaveBeenCalled();
   });
 
   it('refuses to install an archive whose published checksum does not match', async () => {
-    const entry = releaseEntry('0.6.0-fork.1', {
+    const entry = releaseEntry('0.6.0-rc.1', {
       prerelease: true,
-      checksumText: `${'f'.repeat(64)}  kinetick-code-0.6.0-fork.1.tar.gz\n`,
+      checksumText: `${'f'.repeat(64)}  kinetick-code-0.6.0-rc.1.tar.gz\n`,
     });
     const runInstall = vi.fn(async () => undefined);
     await expect(service([entry], { runInstall }).apply({})).rejects.toThrow(
@@ -400,21 +400,21 @@ describe('KcodeReleaseService', () => {
   });
 
   it('rejects an installation whose version does not match the installed one', async () => {
-    const entry = releaseEntry('0.6.0-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.6.0-rc.1', { prerelease: true });
     await expect(
-      service([entry], { readInstalledPackageVersion: () => '0.6.0-fork.0' }).apply({}),
-    ).rejects.toThrow(/installed 0\.6\.0-fork\.0; expected 0\.6\.0-fork\.1/u);
+      service([entry], { readInstalledPackageVersion: () => '0.5.9' }).apply({}),
+    ).rejects.toThrow(/installed 0\.5\.9; expected 0\.6\.0-rc\.1/u);
   });
 
   it('does not downgrade an installation without an explicit version', async () => {
-    const entry = releaseEntry('0.5.1-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.5.1-rc.1', { prerelease: true });
     await expect(
-      service([entry], {}, { currentVersion: '0.5.2-fork.1' }).apply({}),
+      service([entry], {}, { currentVersion: '0.5.2' }).apply({}),
     ).rejects.toThrow(/no update was applied/u);
   });
 
   it('refuses to install on Windows, where no release is validated', async () => {
-    const entry = releaseEntry('0.6.0-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.6.0-rc.1', { prerelease: true });
     const runInstall = vi.fn(async () => undefined);
     await expect(
       service([entry], { runInstall }, { platform: 'win32' }).apply({}),
@@ -423,9 +423,9 @@ describe('KcodeReleaseService', () => {
   });
 
   it('reports the public archive URL in the install command for a source checkout', async () => {
-    const entry = releaseEntry('0.6.0-fork.1', { prerelease: true });
+    const entry = releaseEntry('0.6.0-rc.1', { prerelease: true });
     const command = await service([entry]).resolveInstallCommand({});
-    const name = archiveName('0.6.0-fork.1');
+    const name = archiveName('0.6.0-rc.1');
     expect(command).toBe(`npm install --global ${browserUrlOf(entry, name)}`);
     expect(command).not.toContain('api.github.com');
   });
@@ -434,7 +434,7 @@ describe('KcodeReleaseService', () => {
     const controller = new AbortController();
     controller.abort();
     await expect(
-      service([releaseEntry('0.6.0-fork.1', { prerelease: true })]).check({
+      service([releaseEntry('0.6.0-rc.1', { prerelease: true })]).check({
         signal: controller.signal,
       }),
     ).rejects.toBeInstanceOf(KcodeUpdateCancelledError);

@@ -15,8 +15,9 @@ directory name follows the repository name.
 
 An installation made from an earlier fork archive keeps its `mcode` launcher and keeps working; that
 launcher is only replaced when you install a current archive, which provides `kcode`. User data is
-unchanged, because the package name, data directories, and configuration files are untouched by the
-rename. The built-in updater installs releases published by this fork, see [Updating](#updating).
+unchanged, because the rename left the data directories and configuration files alone; the installed
+package name did change, see [Install a GitHub release archive](#install-a-github-release-archive). The
+built-in updater installs releases published by this fork, see [Updating](#updating).
 
 ## Install a GitHub release archive
 
@@ -40,16 +41,25 @@ Keep optional dependencies enabled and allow the native SQLite installation
 script. The tag determines the installed version. GitHub archive installation is
 validated on Linux and macOS; Windows package acceptance is currently not run.
 
-This archive uses the same `@minimax-ai/code` package name, `kcode` command and
-default user data directory as the official npm CLI. Installing it globally into
-the same npm prefix replaces that npm installation. Update to another GitHub
-version either by explicitly installing its archive or by running `kcode update`,
-which selects this fork's releases (see [Updating](#updating)). To remove the
-package, use `npm uninstall --global @minimax-ai/code`. User data remains in place.
+This archive installs under its own package name, `kinetick-code`, provides the
+`kcode` command and uses the same default user data directory as the official npm
+CLI. Update to another GitHub version either by explicitly installing its archive
+or by running `kcode update`, which selects this fork's releases (see
+[Updating](#updating)). To remove the package, use
+`npm uninstall --global kinetick-code`. User data remains in place.
 
-Fork release archives are named `kinetick-code-X.Y.Z-fork.N.tar.gz` (the version
-matches the tag, see [Fork release process](releasing.md#fork-release-process-tournierjckinetick-code)); verify and
-install them the same way as the example above.
+An installation made before this product took its own name is installed as
+`@minimax-ai/code`. Installing a newer archive adds `kinetick-code` beside it, and
+the `kcode` command resolves to the newly installed package; remove the old one with
+`npm uninstall --global @minimax-ai/code`, then confirm with `command -v kcode`. The
+updater recognizes both names, so such an installation keeps updating from this
+repository either way.
+
+Fork release archives are named `kinetick-code-X.Y.Z.tar.gz` (the version matches
+the tag, see [Fork release process](releasing.md#fork-release-process-tournierjckinetick-code)); verify and
+install them the same way as the example above. Releases published before this
+product took its own identity keep their `-fork.N` names, so an archive from that
+period installs the same way.
 
 ## Updating
 
@@ -61,11 +71,16 @@ checksum differs from the published values. The verified archive is then install
 manager that owns the running installation (`npm`, `pnpm`, `yarn`, or `bun`). Restart the CLI to use
 the installed version.
 
-- The `preview` channel is the default and includes the `-fork.N` prereleases this fork publishes.
-  Set `"channel": "stable"` in `update.json` inside the install data directory to follow only
-  non-prerelease releases.
+- The `preview` channel is the default and takes every published release, including a prerelease
+  tag if one is ever cut. Set `"channel": "stable"` in `update.json` inside the install data
+  directory to skip GitHub prereleases and follow plain releases only.
 - A source checkout has no package manager to update. `kcode update` prints the exact
   `npm install --global <archive>` command for the newest release instead of running it.
+- Installing an archive never moves or migrates an existing installation: where this product was
+  installed under an earlier package name (`@minimax-ai/code`), the new `kinetick-code` package is
+  added beside it and the previous one stays until it is removed with
+  `npm uninstall --global @minimax-ai/code`. User data, provider configuration and sessions are
+  unaffected, because the data directory is unchanged.
 - An installation the upstream installer owns is not replaced in place. That is either a data root
   carrying the installer's `install.json` receipt (`product: minimax-code`, `updateOwner:
   mcode-installer`) or an npm prefix carrying the installer's versioned layout (receipt,
