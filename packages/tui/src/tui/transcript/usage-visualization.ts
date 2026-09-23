@@ -53,10 +53,11 @@ export class UsageVisualization implements Component {
       this.data.sessionRecorded === false
         ? chalk.hex(colors.dim)('Account only')
         : chalk.bold.hex(colors.signal)(
-            `${formatCompact(this.data.totalTokens)} total` +
-              (typeof this.data.costTotalUsd === 'number'
-                ? ` · ${this.data.costUnpriced === true ? '~' : ''}${formatTuiCostUsd(this.data.costTotalUsd)}`
-                : ''),
+            `${formatCompact(this.data.totalTokens)} total${
+                typeof this.data.costTotalUsd === 'number'
+                  ? ` · ${this.data.costUnpriced === true ? '~' : ''}${formatTuiCostUsd(this.data.costTotalUsd)}`
+                  : ''
+              }`,
           );
     return composeEdges(title, summary, width);
   }
@@ -122,7 +123,7 @@ function renderCostModelRow(
   const detail =
     `${formatTuiCostUsd(row.costUsd)} · ${formatCompact(row.totalTokens)} tok` +
     ` · ${row.turns} call${row.turns === 1 ? '' : 's'} · ${cache}` +
-    (row.unpricedRows > 0 ? ` · ${row.unpricedRows} unpriced` : '');
+    `${row.unpricedRows > 0 ? ` · ${row.unpricedRows} unpriced` : ''}`;
   const lead = `${label}  ${chalk.hex(colors.dim)(`(${scope})`)}`;
   const line =
     visibleWidth(lead) + 2 + visibleWidth(detail) <= width
