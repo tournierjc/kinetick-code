@@ -16,8 +16,7 @@ directory name follows the repository name.
 An installation made from an earlier fork archive keeps its `mcode` launcher and keeps working; that
 launcher is only replaced when you install a current archive, which provides `kcode`. User data is
 unchanged, because the package name, data directories, and configuration files are untouched by the
-rename. The built-in updater still follows the upstream npm channel described below, whose installs keep
-the upstream `mcode` launcher name.
+rename. The built-in updater installs releases published by this fork, see [Updating](#updating).
 
 ## Install a GitHub release archive
 
@@ -44,14 +43,46 @@ validated on Linux and macOS; Windows package acceptance is currently not run.
 This archive uses the same `@minimax-ai/code` package name, `kcode` command and
 default user data directory as the official npm CLI. Installing it globally into
 the same npm prefix replaces that npm installation. Update to another GitHub
-version by explicitly installing its archive; the built-in updater follows the
-official npm registry channel and does not select GitHub release assets — after
-any updater run, reinstall the fork archive to restore fork behavior. To remove
-the package, use `npm uninstall --global @minimax-ai/code`. User data remains in place.
+version either by explicitly installing its archive or by running `kcode update`,
+which selects this fork's releases (see [Updating](#updating)). To remove the
+package, use `npm uninstall --global @minimax-ai/code`. User data remains in place.
 
 Fork release archives are named `kinetick-code-X.Y.Z-fork.N.tar.gz` (the version
 matches the tag, see [Fork release process](releasing.md#fork-release-process-tournierjckinetick-code)); verify and
 install them the same way as the example above.
+
+## Updating
+
+`kcode update` installs the newest release published on this fork's
+[GitHub Releases](https://github.com/tournierjc/kinetick-code/releases). It resolves the release through
+`https://api.github.com/repos/tournierjc/kinetick-code/releases`, downloads
+`kinetick-code-<version>.tar.gz` and its `.sha256`, and refuses to install anything whose size or
+checksum differs from the published values. The verified archive is then installed with the package
+manager that owns the running installation (`npm`, `pnpm`, `yarn`, or `bun`); an npm prefix
+installation keeps its prefix. Restart the CLI to use the installed version.
+
+- The `preview` channel is the default and includes the `-fork.N` prereleases this fork publishes.
+  Set `"channel": "stable"` in `update.json` inside the install data directory to follow only
+  non-prerelease releases.
+- A source checkout has no package manager to update. `kcode update` prints the exact
+  `npm install --global <archive>` command for the newest release instead of running it.
+- An installation that uses the upstream installer's versioned prefix layout (an npm prefix with an
+  installer receipt or a `.minimax-code` package root) is not replaced in place: that launcher, receipt
+  and `bin.mcode` validation belong to the upstream installer, so an in-place install would leave it
+  running the release it already points at. Install a fork archive with `npm install --global`, or set
+  `KCODE_UPDATE_SOURCE=upstream` to keep following the upstream channel.
+- Updating needs network access to the repository (`api.github.com`, `github.com`,
+  `objects.githubusercontent.com`) and to public npm for runtime dependencies. Under
+  `MCODE_EGRESS_MODE=allowlist` these hosts must be declared in `MCODE_ALLOWED_ORIGINS`, otherwise the
+  update fails closed.
+- Windows installations are refused: this fork's release workflow validates package archives on Linux
+  and macOS only. Install the archive by hand on Windows.
+- What the check proves: the archive matches the checksum published beside it in the same release, over
+  TLS, from the repository above — the same assurance as verifying a download by hand. The fork
+  publishes no signed manifest, so the updater cannot prove authorship beyond access control on that
+  repository and its releases.
+- `KCODE_UPDATE_SOURCE=upstream` restores the previous behaviour, where an installation follows the
+  upstream npm registry channel and `@minimax-ai/code` packages instead.
 
 ## Install from source
 
@@ -162,6 +193,8 @@ If it still fails, record `kcode --version`, Ghostty's version, active keyboard 
 
 ## Update or remove
 
-Save your changes, fetch a reviewed revision with Git, then repeat the frozen install and build. A source installation does not automatically become an official npm installation.
+A source checkout is not updated by the built-in updater, which prints the release install command
+instead (see [Updating](#updating)). Save your changes, fetch a reviewed revision with Git, then repeat
+the frozen install and build. A source installation does not automatically become an official npm installation.
 
 To uninstall a source build, save any work and remove the source directory you created. Separately stored user data remains in place. See [Uninstall](../README.md#uninstall) for official installer and npm removal, shell PATH cleanup, and optional user-data deletion.

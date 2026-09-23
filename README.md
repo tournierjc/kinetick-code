@@ -69,9 +69,9 @@ lines before publication, and its release notes carry the source commit and SHA-
 - npm: `npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3`
 
 These install into `~/.minimax-code` (POSIX) or `%USERPROFILE%\.minimax-code` (Windows) with launchers `bin/kcode` /
-`bin/mcode-tools`. Use them only when you explicitly want an upstream build without this fork's changes; the
-built-in updater follows the official npm channel and will replace a fork archive, so keep it disabled or reinstall
-from a fork release after an update. See [Uninstall](#uninstall) to remove the CLI.
+`bin/mcode-tools`. Use them only when you explicitly want an upstream build without this fork's changes; installing
+through them replaces a fork installation. The built-in updater installs this fork's releases only, see
+[Updating](docs/installation.md#updating). See [Uninstall](#uninstall) to remove the CLI.
 
 Reopen your terminal and check the installation:
 

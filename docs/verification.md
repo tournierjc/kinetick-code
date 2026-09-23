@@ -44,6 +44,18 @@ GitHub Actions passed Source verification on ubuntu-latest, macos-latest and win
 
 The connector adds 61 tests: 23 for the sign-in manager, 18 for the catalog reader, 3 for the composition, 1 for the per-model API override, 9 for the TUI sign-in panel, 6 for the `/provider` row and its snapshot, and 1 for the `/model` entry in the existing feature-flow suite. The discovery tests run against a captured `/models` response; their values are the API's, but they are not live-service acceptance. Live calls were made outside CI with a real account: completions on `openai-responses`, `anthropic-messages` and `openai-completions`, and `kcode exec` end to end on all three protocols and in all four egress modes (`managed-deny`, explicit `managed-deny`, `allowlist`, `off`). The TUI panel is covered by unit tests only: an interactive device-flow sign-in in a real terminal, enterprise-account hosts, and credential removal through provider management were not run.
 
+### Fork update channel, 2026-09-23
+
+Verification results for the fork update source added in PR #40 at revision `8b41098` (the documentation commit that follows changes no code).
+
+Individual gates were run on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,233 files), generated paths (127 package exports), typecheck, build, standalone boundary, egress boundary, release tooling, built artifacts, status contract, CLI/ACP smoke, offline BYOK, and permission policy. `test:capabilities` reports the same 8 `packages/tui/test/unit/update-service.test.ts` failures with `Unsupported KCode update host: linux-arm64` that an unmodified `origin/main` worktree reports in this environment; no CI platform fails them.
+
+The new source is covered by 18 cases in `packages/tui/test/unit/update-fork-release.test.ts` — release selection per channel, checksum parsing, size and digest verification, one install command per owning package manager, and the download/verify/install path with its refusals — plus 6 routing cases in `update-application.test.ts` (fork channel routing, the manual command for a source checkout, the fallback to the releases page, the refusal of the upstream installer's prefix layout, the registry opt-in, and the managed channel). The pre-existing application cases cover the upstream registry and installer paths, which a fork installation now reaches only through `KCODE_UPDATE_SOURCE=upstream`; they state that opt-in explicitly.
+
+The channel was read back against the live repository: `https://api.github.com/repos/tournierjc/kinetick-code/releases` resolves to `v0.5.2-fork.1`, whose archive `minimax-code-0.5.2-fork.1.tar.gz` (13,144,451 bytes — the pre-rename asset name, addressed through its public download URL) matches its published `.sha256`, and no stable release is published, so the `stable` channel reports that it has no release to install instead of installing anything.
+
+Not run: an actual upgrade of an installed CLI (no installation is replaced on this machine), the Windows refusal path on Windows, and an update through a proxy. The archive and its checksum come from the same release over TLS, so the updater proves integrity and provenance-by-access-control, not authorship: the fork publishes no signed manifest, unlike the upstream managed channel.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.

@@ -56,6 +56,16 @@ cloud tools, hub) or the Aliyun Shanghai bucket the managed file service writes
 through. A third-party service does not belong there, however central it looks:
 the policy is about what this fork refuses to contact, not about what it offers.
 
+The built-in updater `kcode update` reads this fork's releases from
+`api.github.com` and downloads the archive from `github.com` /
+`objects.githubusercontent.com`; installing that archive also reaches the public
+npm registry for runtime dependencies. Under `allowlist`, declare those origins in
+`MCODE_ALLOWED_ORIGINS` — for example
+`MCODE_ALLOWED_ORIGINS=https://api.github.com,https://github.com,https://objects.githubusercontent.com,https://registry.npmjs.org`
+— or the update fails closed with the refused origin named. The default `off`
+mode reaches them without extra configuration; an installation that should follow
+the upstream npm channel instead sets `KCODE_UPDATE_SOURCE=upstream`.
+
 Refused unless the user declared a provider on that origin: `api.minimax.io`,
 `api.minimaxi.com` — the MiniMax model API is treated as an ordinary BYOK
 endpoint. Declaring it never re-opens a managed-service host.
