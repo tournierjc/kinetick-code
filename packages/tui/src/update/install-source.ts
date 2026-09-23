@@ -7,8 +7,6 @@ import { KCODE_NPM_REGISTRY } from './release.js';
 const MCODE_PACKAGE_BASENAME = 'code';
 const MCODE_INTERNAL_SCOPE = '@minimax';
 const MCODE_PUBLIC_SCOPE = '@minimax-ai';
-// Public packaging rewrites this marker together with the bundled package identity.
-const MCODE_EMBEDDED_PACKAGE_NAME = '@minimax-ai/code' as McodeNpmPackageName;
 
 export type McodeNpmPackageName = '@minimax/code' | '@minimax-ai/code';
 export type McodePackageManagerInstallSource =
