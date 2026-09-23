@@ -182,6 +182,12 @@ export class TuiSessionFlow {
     if (this.stopped) return;
     const current = this.visibleSessionId();
     if (!current) return;
+    if (this.options.hasLiveRun?.()) {
+      // Closing would detach the turn with nothing left on the bar to return to.
+      this.options.append('Stop the running turn before closing its tab.', 'warning');
+      this.options.onChanged();
+      return;
+    }
     const neighbour = selectTuiTabAfterClose(this.openTabOrder(), current);
     if (neighbour) {
       await this.activateSessionById(neighbour);
@@ -315,13 +321,15 @@ export class TuiSessionFlow {
   async activateSessionById(
     sessionId: string,
     options: {
-      readonly allowDuringLiveRun?: boolean;
       /** Internal parent/side projection switch; keep the pair alive. */
       readonly preserveSideConversation?: boolean;
     } = {},
   ): Promise<void> {
     if (this.stopped) return;
-    if (!options.allowDuringLiveRun && !this.allowUserSessionNavigation('/sessions')) return;
+    // Switching leaves the previous Session's turn running: the controller aborts
+    // only its own delivery stream and detaches the run, and the tab keeps showing
+    // the state from the Runtime events, so no navigation gate is needed here.
+    const previousHadLiveRun = Boolean(this.options.hasLiveRun?.());
     if (!options.preserveSideConversation) await this.disposeSideConversation();
     const sessionSequence = ++this.sessionSequence;
     const requestedSessionId = sessionId;
@@ -381,6 +389,13 @@ export class TuiSessionFlow {
     }
     this.options.followBottom?.();
     this.options.onChanged();
+    if (previousHadLiveRun && previousSessionId && previousSessionId !== targetSessionId) {
+      // The turn was detached, not cancelled: say so, because the composer and the
+      // status line now describe the Session on screen.
+      this.options.append(
+        'The previous Session keeps running in the background; switch back to its tab to watch it.',
+      );
+    }
     if (requestedSessionId !== targetSessionId) {
       this.options.append(
         'Sub-agent Sessions are internal. Opened the parent Session instead.',
@@ -438,7 +453,8 @@ export class TuiSessionFlow {
     reference: string,
     options: { silent?: boolean } = {},
   ): Promise<boolean> {
-    if (!this.allowUserSessionNavigation('/sessions')) return true;
+    // A reference resolves to a switch, which is allowed while a turn runs: the
+    // previous Session keeps running in the background.
     const normalized = reference.trim();
     const index = Number(normalized);
     if (Number.isInteger(index) && index >= 1) {
@@ -557,7 +573,6 @@ export class TuiSessionFlow {
     };
     try {
       await this.activateSessionById(side.sessionId, {
-        allowDuringLiveRun: true,
         preserveSideConversation: true,
       });
     } catch (error) {
@@ -599,7 +614,6 @@ export class TuiSessionFlow {
         ? sideConversation.parentSessionId
         : sideConversation.sideSessionId;
     await this.activateSessionById(targetSessionId, {
-      allowDuringLiveRun: true,
       preserveSideConversation: true,
     });
     return true;
@@ -627,7 +641,6 @@ export class TuiSessionFlow {
     }
 
     await this.activateSessionById(sideConversation.parentSessionId, {
-      allowDuringLiveRun: true,
       preserveSideConversation: true,
     });
     this.sideConversation = undefined;
@@ -733,7 +746,7 @@ export class TuiSessionFlow {
       }
       await this.options.controller.whenIdle();
       if (this.stopped) return;
-      await this.activateSessionById(event.newSessionId, { allowDuringLiveRun: true });
+      await this.activateSessionById(event.newSessionId);
       return;
     }
     if (event.type === 'session.deleted' && currentSessionId === event.sessionId) {

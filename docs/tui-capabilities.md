@@ -160,13 +160,25 @@ Closing a tab only closes the tab: the Session keeps its history and reappears i
 the bar the next time it is opened from `/sessions`. The visible Session is always
 an open tab, so a tab cannot be closed without showing another one first.
 
-Tab switching still honours the live-run rule that `/sessions` follows: the
-transcript projection is per-Session, and opening another Session detaches and
-aborts the running turn. A Run must therefore still be stopped before switching,
-so a background tab shows `unread` but does not keep streaming. Offline tests
-cover the tab reducer, the bar rendering at narrow widths, the key bindings and
-the switch/close ordering; a background tab that keeps streaming is not
-implemented yet.
+Switching tabs does not stop work. A Session whose turn is running keeps running
+in the Runtime when you switch away: the TUI stops watching its stream and lets the
+run continue, the bar keeps showing that Session as running from the Runtime
+events, and the tab turns to `unread` when the turn settles. Switching back reloads
+the Session's saved messages and re-attaches to the live stream, so a run that is
+still going picks up where it is.
+
+The pane is rebuilt from saved history rather than replayed from a buffer: output
+produced while you were elsewhere appears once the Runtime has persisted it. A
+permission or questionnaire prompt raised by a background Session is recorded
+against that Session and shows when you switch to its tab.
+
+Some commands still require a stopped Session, because they end or rebind its
+context: `/new`, `/rename`, `/parent`, and archiving or deleting a Session from
+`/sessions`. Closing the tab of a running Session is refused too, so a live Session
+is never left without a tab to return to. Offline tests cover the tab reducer, the
+bar rendering at narrow widths, the key bindings, the switch/close ordering and the
+allowances above; a background pane that buffers its own transcript is not
+implemented.
 
 ## Copying a Session
 
