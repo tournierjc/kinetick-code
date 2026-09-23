@@ -168,7 +168,9 @@
       "packages/local-runtime-v2/src/service/model-system/initialize.test.ts",
       "packages/local-runtime-v2/src/service/model-system/connectivity/copilot-model-discovery.test.ts",
       "packages/local-runtime-v2/src/service/model-system/catalog/provider-families.test.ts",
-      "packages/tui/test/unit/headless-exit-policy.test.ts"
+      "packages/tui/test/unit/headless-exit-policy.test.ts",
+      "packages/tui/test/unit/application/session-cost.test.ts",
+      "packages/tui/test/unit/tui/controller/projection/status-metrics-flow.test.ts"
     ],
     "status-contract": [
       "packages/tui/test/unit/tui-build-mode-contract.test.ts"

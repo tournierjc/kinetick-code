@@ -305,6 +305,56 @@ describe('cache-read-ratio item', () => {
   });
 });
 
+describe('session-cost item', () => {
+  it('renders the dollar glyph and formatted cost when usage reports one', () => {
+    const line = render({ ...BASE_STATE, statusLineItems: ['session-cost'], sessionCostUsd: 0.42 });
+
+    expect(line).toContain('💰$0.4200');
+  });
+
+  it('uses two decimals from one dollar up', () => {
+    const line = render({ ...BASE_STATE, statusLineItems: ['session-cost'], sessionCostUsd: 3.5 });
+
+    expect(line).toContain('$3.50');
+    expect(line).not.toContain('$3.5000');
+  });
+
+  it('marks the total approximate when unpriced rows were folded in', () => {
+    const line = render({
+      ...BASE_STATE,
+      statusLineItems: ['session-cost'],
+      sessionCostUsd: 0.02,
+      sessionCostUnpriced: true,
+    });
+
+    expect(line).toContain('💰~$0.0200');
+  });
+
+  it('renders nothing before the Runtime supplies a cost', () => {
+    expect(render({ ...BASE_STATE, statusLineItems: ['session-cost'] }).trim()).toBe('');
+    expect(
+      render({ ...BASE_STATE, statusLineItems: ['session-cost'], sessionCostUsd: 0 }).trim(),
+    ).toBe('');
+  });
+
+  it('shrinks to the bare amount without the glyph', () => {
+    const state: TuiShellState = { ...BASE_STATE, statusLineItems: ['session-cost'], sessionCostUsd: 0.42 };
+
+    expect(render(state)).toContain('💰$0.4200');
+    let width = 12;
+    for (; width >= 8; width -= 1) {
+      const line = render(state, width);
+      if (line.includes('$0.4200') && !line.includes('\u{1F4B0}')) break;
+    }
+    expect(width).toBeGreaterThanOrEqual(8);
+  });
+
+  it('resolves aliases', () => {
+    expect(parseTuiStatusLineItem('cost')).toBe('session-cost');
+    expect(parseTuiStatusLineItem('$')).toBe('session-cost');
+  });
+});
+
 describe('custom-command block display', () => {
   const blockState: TuiShellState = {
     ...BASE_STATE,
@@ -596,7 +646,7 @@ describe('context meter item', () => {
     expect(TUI_STATUS_LINE_DEFAULT_ITEMS).toEqual([
       'current-dir', 'session-title', 'git-branch', 'review-link', 'plan-mode',
       'approval-mode', 'model-with-reasoning', 'context-window', 'subagent',
-      'token-quota', 'context-remaining',
+      'token-quota', 'session-cost', 'context-remaining',
     ]);
     const state = {
       ...BASE_STATE,

@@ -203,6 +203,28 @@ describe("visible presentation selector", () => {
     ).toBe(0.8);
   });
 
+  it("projects the session-tree cost total into the status shell", () => {
+    const breakdown = {
+      root: { model: "all models", costUsd: 0.002, inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 15, cacheReadRatio: 0, turns: 1, unpricedRows: 0, scopes: new Set(["agent"]) },
+      total: { model: "all models", costUsd: 0.007, inputTokens: 18, outputTokens: 9, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 27, cacheReadRatio: 0, turns: 2, unpricedRows: 1, scopes: new Set(["agent", "subagent"]) },
+      models: [],
+      split: {
+        agent: { model: "all models", costUsd: 0.002, inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 15, cacheReadRatio: 0, turns: 1, unpricedRows: 0, scopes: new Set(["agent"]) },
+        subagent: { model: "all models", costUsd: 0.005, inputTokens: 8, outputTokens: 4, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 12, cacheReadRatio: 0, turns: 1, unpricedRows: 1, scopes: new Set(["subagent"]) },
+      },
+      hasUnpricedRows: true,
+    };
+    const shell = resolve({
+      snapshot: {
+        ...idleChat,
+        session: { sessionId: "session-1", workspaceDir: "/workspace" },
+        sessionCost: breakdown,
+      },
+    }).shell;
+    expect(shell.sessionCostUsd).toBe(0.007);
+    expect(shell.sessionCostUnpriced).toBe(true);
+  });
+
   it("shows one aggregate Loading line before the first concrete Turn activity", () => {
     const presentation = resolve({
       snapshot: { ...idleChat, status: "starting", activeTurnId: "turn-1" },

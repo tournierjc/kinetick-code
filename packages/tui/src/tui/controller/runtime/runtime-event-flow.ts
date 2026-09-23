@@ -413,6 +413,11 @@ export class TuiRuntimeEventFlow {
       );
       if (terminalSettled) this.options.delegationFlow.handleSettledRuntimeEvent(event);
       await this.notifyTerminalEvent(event, currentSessionId);
+      if (event.sessionId && event.sessionId !== currentSessionId) {
+        // A delegated child Session just settled: its cost belongs to the
+        // parent session total, so recompute without waiting for the next turn.
+        this.options.controller.refreshSessionCostNow();
+      }
     }
   }
 

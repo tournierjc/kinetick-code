@@ -156,6 +156,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
       this.context,
       defaultAgentName,
       options.workspaceDir,
+      this.sessionAccess,
     );
     this.interactionAccess = new TuiInteractionAccess(
       options.createQueueRequestId ?? createTuiQueueRequestId,
@@ -520,6 +521,12 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   }
   getSessionUsageSummary(sessionId: string) {
     return this.productAccess.getSessionUsageSummary(sessionId);
+  }
+  getSessionUsageWithRows(sessionId: string): Promise<TuiSessionUsage> {
+    return this.productAccess.getSessionUsageWithRows(sessionId);
+  }
+  getSessionTree(agentName?: string): Promise<readonly TuiSession[]> {
+    return this.productAccess.getSessionTree(agentName);
   }
   watchSessionUsageCommits(signal: AbortSignal): AsyncGenerator<string> {
     return this.eventAccess.watchSessionUsageCommits(signal);
