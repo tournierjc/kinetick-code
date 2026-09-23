@@ -84,6 +84,26 @@ Coverage: `packages/local-runtime/test/unit/infra/kcode-path-integration-markers
 
 Not run: the Windows PATH branch beyond its platform stub, macOS runner behaviour, an interactive TUI session on this change, and an upgrade of a real installation.
 
+### Package identity, 2026-09-23
+
+The released archive installs under this product's own name. Asked for by the maintainer: keep the licence and the README credit for the upstream project, but stop distributing under an upstream package name.
+
+Renamed: the built manifest (`scripts/build.mjs`) and the release manifest (`scripts/package-cli-release.mjs`) write `name: kinetick-code`, and the release verification script expects that directory in the installed prefix. `packages/tui/src/package-identity.ts` is a new module holding the accepted identities — the product's own, the workspace package `@mavis/code`, and the historical `@minimax-ai/code` and `@minimax/code` — with `scripts/lib/package-identity.mjs` mirroring it for the build and release scripts.
+
+Defect found and fixed on the way: `resolveKcodeNpmPrefixInstall` reached `node_modules` by taking `dirname` twice from the package root, which only lands in the right directory while the identity carries a scope. It now finds the containing `node_modules` at either depth. Without that fix an installation under the unscoped name resolved to no owner and was reported as unsupported — two receipt tests caught it.
+
+Still recognized and never written: install-source classification, the npm-prefix receipt and prefix-journal validation, the version resolver (`build-info.ts`), the updater's install command (`--allow-scripts=kinetick-code,@minimax-ai/code,better-sqlite3`) and `isKcodePackageName` accept the historical names, so an installation made by an earlier release stays classified and keeps updating instead of being reported as a foreign package.
+
+Documented behaviour: installing an archive adds the new package beside an older one and the `kcode` command resolves to the new package, so the previous `@minimax-ai/code` package stays on disk until it is removed with `npm uninstall --global @minimax-ai/code`; user data is untouched because the data directory does not change. `docs/open-source-status.md#product-identity` records the identity and the recognized legacy names, and the installation guide, both READMEs and the archive's own README state the migration. Upstream references are unchanged: the licence and notices, the README's upstream section, the audit notes, `docs/releasing.md`, and the pinned `mcode-tools` artifact URL still name MiniMax.
+
+`pnpm verify` passed 14 gates on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0 at revision `5c45ec1`: source inventory (4,237 files), generated paths (127 package exports), source preview, release tooling, typecheck, build, standalone and egress boundaries, built artifacts, capabilities (174 files, 4,610 passed, 15 skipped, 0 failed), status contract, smoke, BYOK, and permission policy. `test:windows`, `test:sandbox` and `test:release-package` were skipped as not applicable on the platform or as needing a published archive.
+
+Packaging was exercised end to end on the commit: `MCODE_RELEASE_TAG=v0.5.2-fork.1 pnpm build` followed by `node scripts/package-cli-release.mjs v0.5.2-fork.1 <out>` produced `kinetick-code-0.5.2-fork.1.tar.gz` (13,149,344 bytes) with its `.sha256` (`4a26a7f973ae3a12b3d6789391284cc63a0258e95dd6ed671829a7f671d4b424`). The packaged manifest reads `name: kinetick-code`, `bin: { kcode: cli.js }`, `license: MIT`, and the archive README carries the new identity with the legacy-package removal line. `node dist/cli.js --version` prints `0.5.2-fork.1` from the built bundle.
+
+Coverage: new `packages/tui/test/unit/package-identity.test.ts` adds 17 cases — the identity list and its order, acceptance of the current, workspace and historical names, rejection of near misses (`@minimax-ai/mcode-tools`, `@mavis/other`, `minimax-code`, `kcode`), non-string input, internal-identity classification, the installable-name list, the package-directory pattern for both shapes, and agreement with the build scripts and `build-info.ts`. `update-application.test.ts` now resolves the current identity from `node_modules/kinetick-code` for every package manager, adds a table that keeps the historical names classified, a foreign-package negative case, a legacy receipt case and a legacy end-to-end identity case; `update-release.test.ts` asserts the install command's identity list.
+
+Not run: installing the archive under the new name on a real host (it was packaged and inspected, not installed), the Windows install path, and upgrading an existing `@minimax-ai/code` installation to the new identity.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.
