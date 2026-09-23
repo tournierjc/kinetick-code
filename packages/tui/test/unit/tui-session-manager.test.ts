@@ -57,6 +57,7 @@ function createManager(
       return { ...(session ?? { sessionId }), title };
     }),
     onSetArchived: vi.fn(async () => undefined),
+    onDelete: vi.fn(async () => undefined),
     onCancel: vi.fn(),
     requestRender: vi.fn(),
   };
@@ -630,5 +631,61 @@ describe('TuiSessionManager', () => {
 
     expect(requestRender).toHaveBeenCalledTimes(rendersBeforeDispose);
     expect(renderPlain(manager)).not.toContain('Loaded after disposal');
+  });
+});
+
+describe('TuiSessionManager delete', () => {
+  it('opens on Ctrl+X, defaults to archiving and keeps the history', async () => {
+    const { manager, callbacks } = createManager();
+
+    manager.handleInput('\x18');
+
+    const confirmation = renderPlain(manager);
+    expect(confirmation).toContain('Delete this session?');
+    expect(confirmation).toContain('Fix the login flow');
+    expect(confirmation).toContain('Deleting cannot be undone.');
+    expect(confirmation).toContain('› Archive instead');
+    expect(confirmation).toContain('Delete permanently');
+
+    manager.handleInput('\r');
+    await vi.waitFor(() =>
+      expect(callbacks.onSetArchived).toHaveBeenCalledWith('session-current', true),
+    );
+    expect(callbacks.onDelete).not.toHaveBeenCalled();
+  });
+
+  it('deletes the Session with its history only after choosing the permanent row', async () => {
+    const { manager, callbacks } = createManager();
+
+    manager.handleInput('\x18');
+    manager.handleInput('\u001b[B');
+    expect(renderPlain(manager)).toContain('› Delete permanently');
+    manager.handleInput('\r');
+
+    await vi.waitFor(() => expect(callbacks.onDelete).toHaveBeenCalledWith('session-current'));
+    await flushActions();
+    expect(callbacks.onSetArchived).not.toHaveBeenCalled();
+    const after = renderPlain(manager);
+    expect(after).toContain('Session deleted with its history files. This cannot be undone.');
+    expect(after).not.toContain('Fix the login flow');
+  });
+
+  it('cancels without touching the Session or the list', () => {
+    const { manager, callbacks } = createManager();
+
+    manager.handleInput('\x18');
+    manager.handleInput('\u001b');
+    manager.handleInput('\u001b[B');
+
+    expect(renderPlain(manager)).not.toContain('Delete this session?');
+    expect(callbacks.onDelete).not.toHaveBeenCalled();
+    expect(callbacks.onSetArchived).not.toHaveBeenCalled();
+    expect(renderPlain(manager)).toContain('Fix the login flow');
+  });
+
+  it('advertises the delete binding next to archive', () => {
+    const { manager } = createManager();
+
+    expect(renderPlain(manager)).toContain('Ctrl+X delete');
   });
 });

@@ -39,6 +39,8 @@ function createHarness(
   const refreshCurrentSessionHistory = vi.fn();
   const editor = { setText: vi.fn() };
   const onOpenSession = vi.fn(async () => undefined);
+  const deleteSession = vi.fn(async () => undefined);
+  const onCurrentSessionClosed = vi.fn();
   const runtime = {
     listModels: vi.fn(),
     getAccountStatus: vi.fn(async () => ({
@@ -125,6 +127,7 @@ function createHarness(
       }),
       refreshCurrentSessionHistory,
       refreshStatusMetricsNow: vi.fn(),
+      deleteSession,
     } as never,
     surface: {
       show: (panel: unknown) => shown.push(panel),
@@ -167,7 +170,7 @@ function createHarness(
     ...(options.hasLiveRun ? { hasLiveRun: options.hasLiveRun } : {}),
     onNewSession: vi.fn(),
     onOpenSession,
-    onArchivedCurrentSession: vi.fn(),
+    onCurrentSessionClosed,
     refreshAutocomplete: vi.fn(),
     ...(options.loadProviderTemplates
       ? { loadProviderTemplates: options.loadProviderTemplates }
@@ -185,6 +188,8 @@ function createHarness(
     transcript,
     refreshCurrentSessionHistory,
     onOpenSession,
+    deleteSession,
+    onCurrentSessionClosed,
     shown,
     switchSession: (sessionId: string) => {
       activeSessionId = sessionId;
@@ -231,6 +236,66 @@ describe("TuiFeatureFlow", () => {
       ),
     );
     login.dispose();
+  });
+
+  it("deletes a Session from /sessions and resets the shell when it was visible", async () => {
+    const harness = createHarness();
+    harness.runtime.listSessionPage.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "session-a",
+          title: "Runtime review",
+          workspaceDir: "/workspace",
+        },
+      ],
+      hasMore: false,
+      nextCursor: undefined,
+    });
+
+    await harness.flow.showSessionManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    manager.handleInput("\x18");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(harness.deleteSession).toHaveBeenCalledWith("session-a"));
+    await vi.waitFor(() =>
+      expect(harness.onCurrentSessionClosed).toHaveBeenCalledWith("session-a"),
+    );
+  });
+
+  it("refuses to delete a Session while a Turn is running", async () => {
+    let live = false;
+    const harness = createHarness({ hasLiveRun: () => live });
+    harness.runtime.listSessionPage.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "session-a",
+          title: "Runtime review",
+          workspaceDir: "/workspace",
+        },
+      ],
+      hasMore: false,
+      nextCursor: undefined,
+    });
+
+    await harness.flow.showSessionManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    live = true;
+    manager.handleInput("\x18");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(harness.setHint).toHaveBeenCalledWith("Stop the running turn before using /sessions."),
+    );
+    expect(harness.deleteSession).not.toHaveBeenCalled();
   });
 
   it("does not open a Session manager when a Turn starts during its async load", async () => {

@@ -2704,6 +2704,55 @@ describe('TuiChatController', () => {
     );
   });
 
+  it('deletes a Session and clears the projection when it was the visible one', async () => {
+    const deleteSession = vi.fn(async (_sessionId: string): Promise<void> => undefined);
+    const runtime = {
+      listSessions: vi.fn(async () => [
+        {
+          sessionId: 'session-1',
+          title: 'First',
+          workspaceDir: '/workspace',
+          updatedAt: 200,
+        },
+        {
+          sessionId: 'session-2',
+          title: 'Second',
+          workspaceDir: '/workspace',
+          updatedAt: 100,
+        },
+      ]),
+      getSession: vi.fn(async (sessionId: string) => ({
+        sessionId,
+        workspaceDir: '/workspace',
+      })),
+      getMessages: vi.fn(async () => []),
+      deleteSession,
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const controller = new TuiChatController({
+      runtime,
+      transcript: new TranscriptStore(),
+      workspaceDir: '/workspace',
+    });
+
+    await controller.initialize();
+    await controller.loadSessionProjection('session-1');
+
+    await controller.deleteSession('session-2');
+    expect(deleteSession).toHaveBeenCalledWith('session-2');
+    expect(controller.snapshot().sessions.map((session) => session.sessionId)).not.toContain(
+      'session-2',
+    );
+    expect(controller.snapshot().session?.sessionId).toBe('session-1');
+
+    await controller.deleteSession('session-1');
+    expect(controller.snapshot().session).toBeUndefined();
+    expect(
+      controller.snapshot().sessions.map((session) => session.sessionId),
+    ).toEqual([]);
+  });
+
   it('clears input-adjacent tasks when starting a new session', () => {
     const onTodoChange = vi.fn();
     const controller = new ProductionTuiChatController({

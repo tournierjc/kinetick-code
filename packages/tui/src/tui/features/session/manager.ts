@@ -25,7 +25,7 @@ import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 
 type SessionManagerView = 'active' | 'archived';
 type SessionManagerScope = 'workspace' | 'all';
-type SessionManagerMode = 'list' | 'rename' | 'confirm-archive';
+type SessionManagerMode = 'list' | 'rename' | 'confirm-archive' | 'confirm-delete';
 type SessionRecencySection = 'today' | 'yesterday' | 'previous-7-days' | 'older';
 const SESSION_LIST_VISIBLE_LIMIT = 10;
 const SESSION_SEARCH_DEBOUNCE_MS = 200;
@@ -49,6 +49,11 @@ export interface TuiSessionManagerOptions {
   onNew(): Promise<void> | void;
   onRename(sessionId: string, title: string): Promise<TuiSession>;
   onSetArchived(sessionId: string, archived: boolean): Promise<void> | void;
+  /**
+   * Permanently removes the Session and its history files. There is no trash:
+   * offer the archive path beside it, never a bare delete.
+   */
+  onDelete(sessionId: string): Promise<void> | void;
   onCancel(): void;
   requestRender(): void;
   now?: () => number;
@@ -68,6 +73,8 @@ export class TuiSessionManager implements Component, Focusable {
   private selectedIndex = 0;
   private selectedSessionId?: string;
   private actionTargetId?: string;
+  /** `/sessions` delete has no trash, so the safe choice is selected first. */
+  private deleteChoice: 'archive' | 'delete' = 'archive';
   private busy = false;
   private hasMore: boolean;
   private loadingMore = false;
@@ -138,6 +145,16 @@ export class TuiSessionManager implements Component, Focusable {
       else if (getKeybindings().matches(data, 'tui.select.cancel')) this.exitActionMode();
       return;
     }
+    if (this.mode === 'confirm-delete') {
+      if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
+        this.deleteChoice = this.deleteChoice === 'delete' ? 'archive' : 'delete';
+        this.requestRender();
+        return;
+      }
+      if (matchesKey(data, Key.enter)) this.confirmDelete();
+      else if (getKeybindings().matches(data, 'tui.select.cancel')) this.exitActionMode();
+      return;
+    }
 
     if (matchesKey(data, Key.up)) {
       this.moveSelection(-1);
@@ -179,6 +196,10 @@ export class TuiSessionManager implements Component, Focusable {
     }
     if (!searchActive && matchesKey(data, Key.ctrl('d'))) {
       this.toggleSelectedArchived();
+      return;
+    }
+    if (!searchActive && matchesKey(data, Key.ctrl('x'))) {
+      this.openDeleteConfirmation();
       return;
     }
     if (matchesKey(data, Key.enter)) {
@@ -239,6 +260,12 @@ export class TuiSessionManager implements Component, Focusable {
         safeWidth,
       );
     }
+    if (this.mode === 'confirm-delete') {
+      return this.fitLines(
+        this.fitToRows(this.renderDeleteConfirmation(safeWidth, maxRows), maxRows),
+        safeWidth,
+      );
+    }
     return this.fitLines(this.fitToRows(this.renderList(safeWidth, maxRows), maxRows), safeWidth);
   }
 
@@ -280,7 +307,9 @@ export class TuiSessionManager implements Component, Focusable {
       ? undefined
       : `Ctrl+A ${this.scope === 'workspace' ? 'all' : 'current'} · Ctrl+N new · Ctrl+R rename · Ctrl+D ${
           this.view === 'active' ? 'archive' : 'restore'
-        }${this.hasMore ? ' · More sessions available · Ctrl+L more' : ''} · Esc close`;
+        } · Ctrl+X delete${
+          this.hasMore ? ' · More sessions available · Ctrl+L more' : ''
+        } · Esc close`;
     const footerRows = renderPanelFooter(
       [primaryFooter, ...(secondaryFooter ? [secondaryFooter] : [])],
       Math.max(1, width - 4),
@@ -607,6 +636,33 @@ export class TuiSessionManager implements Component, Focusable {
     );
   }
 
+  private renderDeleteConfirmation(width: number, height?: number): string[] {
+    const target = this.findActionTarget();
+    const choices = [
+      ['archive', 'Archive instead · history stays available under Archived'],
+      ['delete', 'Delete permanently · removes the Session and its history files'],
+    ] as const;
+    return renderPanelFrame(
+      {
+        title: 'Delete this session?',
+        body: [
+          sanitizeTerminalText(target?.title?.trim() || target?.sessionId || 'Unknown session'),
+          chalk.hex(colors.muted)('Deleting cannot be undone. Archiving keeps the Session.'),
+          '',
+          ...choices.map(([choice, label]) =>
+            choice === this.deleteChoice
+              ? chalk.hex(colors.accent)(`› ${label}`)
+              : `  ${chalk.hex(colors.muted)(label)}`,
+          ),
+        ],
+        footer: '↑↓ choose · Enter confirm · Esc cancel',
+      },
+      width,
+      height,
+      this.deleteChoice === 'delete' ? 'error' : 'warning',
+    );
+  }
+
   private visibleSessions(): TuiSession[] {
     const queryTokens = this.searchInput
       .getValue()
@@ -889,6 +945,40 @@ export class TuiSessionManager implements Component, Focusable {
       this.exitActionMode(false);
       this.clampSelection();
       this.setStatus('Session archived.', 'info');
+    });
+  }
+
+  private openDeleteConfirmation(): void {
+    const target = this.selectedSession();
+    if (!target) return;
+    this.mode = 'confirm-delete';
+    this.actionTargetId = target.sessionId;
+    // Archive is the default: a delete has no undo.
+    this.deleteChoice = 'archive';
+    this.status = undefined;
+    this.syncInputFocus();
+    this.requestRender();
+  }
+
+  private confirmDelete(): void {
+    const target = this.findActionTarget();
+    if (!target) {
+      this.exitActionMode();
+      return;
+    }
+    if (this.deleteChoice === 'archive') {
+      this.confirmArchive();
+      return;
+    }
+    void this.runAction(async () => {
+      await this.options.onDelete(target.sessionId);
+      if (this.disposed) return;
+      this.sessions = this.sessions.filter((session) => session.sessionId !== target.sessionId);
+      if (this.activeSessionId === target.sessionId) this.activeSessionId = undefined;
+      if (this.selectedSessionId === target.sessionId) this.selectedSessionId = undefined;
+      this.exitActionMode(false);
+      this.clampSelection();
+      this.setStatus('Session deleted with its history files. This cannot be undone.', 'info');
     });
   }
 
