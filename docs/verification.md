@@ -130,6 +130,18 @@ One failure to note: `release:cli` pushed the release branch and tag, then its o
 
 Not run: Windows installation validation (paused repository-wide), any live provider or service call, and an upgrade of a real `@minimax-ai/code` installation to this release — the archive's install path was validated by package-manager installation in CI and by inspection here, not by upgrading a user's machine. `main` carries `0.5.2` since the version PR merged (`f28fd49`).
 
+### /login with a provider argument, 2026-09-23
+
+Verification results for the `/login <provider>` argument at code revision `16aa7fe` (the documentation commit that follows changes no code).
+
+`pnpm verify` passed all 14 gates on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,237 files), generated paths (127 package exports), source export, release tooling (44 tests), typecheck, build, standalone boundary, egress boundary, built artifacts (4 tests), capabilities (4,623 tests in 174 files), status contract (9 tests), CLI/ACP smoke (21 tests), offline BYOK (3 tests), and permission policy (142 tests). `test:windows`, `test:sandbox` and `test:release-package` are skipped on this platform.
+
+The change adds 3 tests: the command catalogue offers `minimax` as the argument, its hint and its completion; `/login minimax` opens the region picker without signing anything in; and an unsupported name is refused with `/provider` named and no picker shown.
+
+A real PTY session of the built CLI against an isolated data directory showed both paths: `/login openrouter` printed `Warning  /login signs in to minimax. Run /provider to connect openrouter.` and left the command in the composer, while `/login minimax` and bare `/login` opened the `Choose account region` picker (China (CN) / Global), which Escape cancelled. Nothing was signed in, no model was called, and no browser was opened.
+
+NOT RUN: a completed MiniMax sign-in through the argument form (the session stopped at the region picker), and Windows or macOS execution. `kcode login`, `kcode logout` and the ACP `minimax-code-login` method are unchanged, so their existing coverage stands.
+
 ### Provider connection surface, 2026-09-23
 
 Verification results for the `/provider` connection surface at code revision `3289a51` (the documentation commit that follows changes no code).
