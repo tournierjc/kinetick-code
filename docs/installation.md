@@ -58,19 +58,21 @@ install them the same way as the example above.
 `https://api.github.com/repos/tournierjc/kinetick-code/releases`, downloads
 `kinetick-code-<version>.tar.gz` and its `.sha256`, and refuses to install anything whose size or
 checksum differs from the published values. The verified archive is then installed with the package
-manager that owns the running installation (`npm`, `pnpm`, `yarn`, or `bun`); an npm prefix
-installation keeps its prefix. Restart the CLI to use the installed version.
+manager that owns the running installation (`npm`, `pnpm`, `yarn`, or `bun`). Restart the CLI to use
+the installed version.
 
 - The `preview` channel is the default and includes the `-fork.N` prereleases this fork publishes.
   Set `"channel": "stable"` in `update.json` inside the install data directory to follow only
   non-prerelease releases.
 - A source checkout has no package manager to update. `kcode update` prints the exact
   `npm install --global <archive>` command for the newest release instead of running it.
-- An installation that uses the upstream installer's versioned prefix layout (an npm prefix with an
-  installer receipt or a `.minimax-code` package root) is not replaced in place: that launcher, receipt
-  and `bin.mcode` validation belong to the upstream installer, so an in-place install would leave it
-  running the release it already points at. Install a fork archive with `npm install --global`, or set
-  `KCODE_UPDATE_SOURCE=upstream` to keep following the upstream channel.
+- An installation the upstream installer owns is not replaced in place. That is either a data root
+  carrying the installer's `install.json` receipt (`product: minimax-code`, `updateOwner:
+  mcode-installer`) or an npm prefix carrying the installer's versioned layout (receipt,
+  `.minimax-code` package root, launcher pairs). Its launcher, receipts and metadata describe the
+  upstream product, and the versioned launcher would keep pointing at the release it already runs, so
+  `kcode update` says so and stops instead of half-replacing it. Install a fork archive with
+  `npm install --global`, or keep that installation on the distribution it came from.
 - Updating needs network access to the repository (`api.github.com`, `github.com`,
   `objects.githubusercontent.com`) and to public npm for runtime dependencies. Under
   `MCODE_EGRESS_MODE=allowlist` these hosts must be declared in `MCODE_ALLOWED_ORIGINS`, otherwise the
@@ -81,8 +83,6 @@ installation keeps its prefix. Restart the CLI to use the installed version.
   TLS, from the repository above — the same assurance as verifying a download by hand. The fork
   publishes no signed manifest, so the updater cannot prove authorship beyond access control on that
   repository and its releases.
-- `KCODE_UPDATE_SOURCE=upstream` restores the previous behaviour, where an installation follows the
-  upstream npm registry channel and `@minimax-ai/code` packages instead.
 
 ## Install from source
 

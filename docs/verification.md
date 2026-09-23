@@ -56,6 +56,18 @@ The channel was read back against the live repository: `https://api.github.com/r
 
 Not run: an actual upgrade of an installed CLI (no installation is replaced on this machine), the Windows refusal path on Windows, and an update through a proxy. The archive and its checksum come from the same release over TLS, so the updater proves integrity and provenance-by-access-control, not authorship: the fork publishes no signed manifest, unlike the upstream managed channel.
 
+### Single release model, 2026-09-23
+
+Verification results for the update-module consolidation added in PR #44, at revision `78d2b5a` (the code commit the documentation commit that follows describes).
+
+`kcode update` carries one release model and one channel again. `packages/tui/src/update/release.ts` is that model: it resolves this repository's GitHub Releases through `api.github.com`, verifies the archive against the published size and `.sha256`, and installs it with the package manager that owns the running installation. The upstream signed CDN channel (`update/service.ts`, its manifest and signature model, `McodeUpdateService`), the npm-prefix staging module (`update/versioned-prefix.ts`), the upstream npm registry path (dist tags, `@minimax-ai/code` version lookups, the package-manager command builders and the `__TUI_NPM_DIST_TAG__` define) and the `KCODE_UPDATE_SOURCE=upstream` routing are removed, together with the separate `fork-release.ts` module the release module replaced. `prefix-update.ts` remains for the startup path that schedules a pending update an older installation left in its prefix.
+
+Individual gates were run on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,232 files), generated paths (127 package exports), typecheck, build, standalone boundary, egress boundary, release tooling, built artifacts, status contract, CLI/ACP smoke, offline BYOK, permission policy, and capabilities — 171 files, 4,561 tests passed, 15 skipped, none failed. The eight `Unsupported KCode update host: linux-arm64` failures this environment used to report came from `update-service.test.ts`, which disappears with the channel it tested, so the full suite is green on arm64 here for the first time.
+
+Coverage: 24 cases in `packages/tui/test/unit/update-release.test.ts` (release selection per channel and pinned version, pre-rename archive-name compatibility, checksum parsing, size and digest verification, one install command per owning package manager, channel configuration read from `update.json`, download/verify/install with its refusals, Windows refusal, cancellation, and version ordering) and 73 cases in `update-application.test.ts` (install-source classification and detection ordering, installer receipts, install-root and managed-receipt resolution, the prefix journal, plan mapping per installation layout with the artifact URL, refusals for the two upstream-installer layouts, apply delegation with its progress options, and channel labelling).
+
+Not run: an actual upgrade of an installed CLI (no installation is replaced on this machine), the Windows refusal path on Windows, and an update through a proxy. The live channel read-back in the previous entry still applies — the API and asset URLs are unchanged.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.

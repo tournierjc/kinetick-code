@@ -10,6 +10,4 @@ export const ZH_HANS_RUNTIME_TRANSLATIONS = {
   'plan.implementation.display': '实施此计划',
   'questionnaire.noAnswer': '未回答',
   'questionnaire.others': '其他',
-  'update.versionedInstalled':
-    'KCode {version} 已安装。新启动的 KCode 会话将使用新版本，当前运行中的会话可以继续使用。',
 } as const satisfies RuntimeTranslations;
