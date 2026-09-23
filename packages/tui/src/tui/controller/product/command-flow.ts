@@ -960,7 +960,14 @@ export class TuiCommandFlow {
       help: async () => this.options.activeRunFlow.showHelp(),
       update: async () => this.options.updateFlow.show(),
       changelog: async () => this.options.featureFlow.showChangelog(),
-      new: () => this.options.sessionFlow.startNew(),
+      new: ({ raw }) => {
+        const workspaceDir = this.options.workspaceDir;
+        // `/clear` starts the fresh conversation in the tab that is already there;
+        // `/new` opens it in a tab of its own. Both create the Session up front.
+        return /^\/clear(?:\s|$)/iu.test(raw)
+          ? this.options.sessionFlow.replaceSessionInTab({ workspaceDir })
+          : this.options.sessionFlow.openNewSessionTab({ workspaceDir });
+      },
       sessions: async ({ raw, args }) => {
         if (
           /^\/resume(?:\s|$)/iu.test(raw) &&

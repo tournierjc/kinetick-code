@@ -43,6 +43,7 @@ function createReadinessCommandFlow(options: {
   sessionMutationFlow?: unknown;
   interactionFlow?: unknown;
   queuedCount?: number;
+  liveRunId?: () => string | undefined;
 }) {
   return new TuiCommandFlow({
     workspaceDir: "/workspace",
@@ -86,7 +87,7 @@ function createReadinessCommandFlow(options: {
     showStatusLine: options.showStatusLine,
     reloadTui: options.reloadTui,
     queueEnabled: true,
-    liveRunId: () => undefined,
+    liveRunId: options.liveRunId ?? (() => undefined),
     runtimeStopping: () => false,
     abortLiveTurn: vi.fn(async () => false),
     leaveUi: vi.fn(async () => undefined),
@@ -499,7 +500,7 @@ describe("TuiCommandFlow", () => {
     };
     const reserveSubmission = vi.fn();
     const restoreSubmission = vi.fn();
-    const startNew = vi.fn();
+    const openNewSessionTab = vi.fn();
     const projectOptimisticUserMessage = vi.fn();
     const flow = new TuiCommandFlow({
       workspaceDir: "/workspace",
@@ -519,7 +520,7 @@ describe("TuiCommandFlow", () => {
         handleCommand: vi.fn(async () => false),
         hasPending: vi.fn(() => false),
       } as never,
-      sessionFlow: { startNew } as never,
+      sessionFlow: { openNewSessionTab } as never,
       queueFlow: {} as never,
       composerDraft: {
         capture: vi.fn(() => resources),
@@ -556,7 +557,7 @@ describe("TuiCommandFlow", () => {
     expect(reserveSubmission).toHaveBeenCalledWith(resources);
     expect(restoreSubmission).toHaveBeenCalledWith(resources);
     expect(restoreSubmission.mock.invocationCallOrder[0]).toBeLessThan(
-      startNew.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      openNewSessionTab.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
     expect(projectOptimisticUserMessage).not.toHaveBeenCalled();
   });
@@ -1792,6 +1793,39 @@ describe("TuiCommandFlow /clone", () => {
     await expect(flow.submit("/clone")).resolves.toBe("retained");
 
     expect(startClone).not.toHaveBeenCalled();
+  });
+});
+
+describe("TuiCommandFlow /new", () => {
+  it("opens a new Session tab, and does so while a turn is live", async () => {
+    const openNewSessionTab = vi.fn(async () => undefined);
+    const replaceSessionInTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionFlow: { openNewSessionTab, replaceSessionInTab },
+      liveRunId: () => "turn-live",
+    });
+
+    await expect(flow.submit("/new")).resolves.toBe("consumed");
+
+    expect(openNewSessionTab).toHaveBeenCalledWith({ workspaceDir: "/workspace" });
+    expect(replaceSessionInTab).not.toHaveBeenCalled();
+  });
+
+  it("starts the fresh conversation in the visible tab on /clear", async () => {
+    const openNewSessionTab = vi.fn(async () => undefined);
+    const replaceSessionInTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionFlow: { openNewSessionTab, replaceSessionInTab },
+    });
+
+    await expect(flow.submit("/clear")).resolves.toBe("consumed");
+
+    expect(replaceSessionInTab).toHaveBeenCalledWith({ workspaceDir: "/workspace" });
+    expect(openNewSessionTab).not.toHaveBeenCalled();
   });
 });
 

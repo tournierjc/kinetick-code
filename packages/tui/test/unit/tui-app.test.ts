@@ -1412,8 +1412,10 @@ describe("createTuiApp", () => {
     );
 
     await app.submit("/new");
-    expect(app.getSurface()).toBe("welcome");
-    expect(app.tui.render(80).join("\n")).toContain(
+    // `/new` opens a Session in a new tab rather than returning to Welcome, so the
+    // startup notice is gone from here on: it belongs to the Welcome surface.
+    expect(app.getSurface()).toBe("conversation");
+    expect(app.tui.render(80).join("\n")).not.toContain(
       "A new version of KCode is available",
     );
     await app.stop();
@@ -3188,7 +3190,7 @@ describe("createTuiApp", () => {
     await app.stop();
   });
 
-  it("returns from the conversation surface to Welcome after /new", async () => {
+  it("opens a new Session in a new tab after /new", async () => {
     const terminal = new FakeTerminal();
     const runtime = createRuntime();
     const app = createTuiApp({
@@ -3204,11 +3206,21 @@ describe("createTuiApp", () => {
 
     await app.submit("/new");
 
-    expect(app.getSurface()).toBe("welcome");
-    expect(app.transcript.snapshot()).toEqual([]);
+    // The tab is a Session: it exists before the first prompt, and the Session that
+    // was on screen keeps its place in the list. This Runtime hands out one id, so
+    // the pane is the same one — what matters is that no durable history is in it;
+    // only the ephemeral turn-duration marker of the finished turn stays.
+    expect(app.getSurface()).toBe("conversation");
+    expect(app.transcript.snapshot().filter((cell) => !cell.ephemeral)).toEqual([]);
+    expect(app.controller.snapshot()).toMatchObject({
+      status: "idle",
+      session: expect.objectContaining({ sessionId: expect.any(String) }),
+    });
+    expect(runtime.createSession).toHaveBeenCalledTimes(2);
+    expect(runtime.archiveSession).not.toHaveBeenCalled();
   });
 
-  it("clears into a fresh conversation while keeping the previous session resumable", async () => {
+  it("keeps the previous session resumable after /clear", async () => {
     const terminal = new FakeTerminal();
     const runtime = createRuntime();
     const app = createTuiApp({
@@ -3224,13 +3236,12 @@ describe("createTuiApp", () => {
 
     await app.submit("/clear");
 
-    expect(app.getSurface()).toBe("welcome");
-    expect(app.transcript.snapshot()).toEqual([]);
-    expect(app.controller.snapshot()).toMatchObject({
-      status: "idle",
-      session: undefined,
-      sessions: [expect.objectContaining({ sessionId: "session-1" })],
-    });
+    expect(app.getSurface()).toBe("conversation");
+    expect(app.transcript.snapshot().filter((cell) => !cell.ephemeral)).toEqual([]);
+    expect(app.controller.snapshot().status).toBe("idle");
+    expect(app.controller.snapshot().sessions).toEqual([
+      expect.objectContaining({ sessionId: "session-1" }),
+    ]);
     expect(runtime.archiveSession).not.toHaveBeenCalled();
   });
 
@@ -13014,7 +13025,7 @@ describe("createTuiApp", () => {
     }
   });
 
-  it("moves to the new-session Draft namespace after archiving the current Session", async () => {
+  it("carries a draft typed with no Session on screen into the Session /new opens", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "mcode-app-draft-"));
     try {
       const app = createTuiApp({
@@ -13029,12 +13040,17 @@ describe("createTuiApp", () => {
       app.editor.setText("Archived Session Draft");
 
       await app.submit("/archive");
-      app.editor.setText("Fresh Session Draft");
-      await app.openSession("session-a");
-      expect(app.editor.getText()).toBe("Archived Session Draft");
+      expect(app.getSurface()).toBe("welcome");
 
+      // Nothing is on screen, so this text is a draft for a conversation that does
+      // not exist yet: `/new` opens that conversation and the text follows into it.
+      app.editor.setText("Fresh Session Draft");
       await app.submit("/new");
-      expect(app.editor.getText()).toBe("Fresh Session Draft");
+      await vi.waitFor(() => expect(app.editor.getText()).toBe("Fresh Session Draft"));
+
+      // The archived Session still owns the draft that belonged to it.
+      await app.openSession("session-a");
+      await vi.waitFor(() => expect(app.editor.getText()).toBe("Archived Session Draft"));
       await app.stop();
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -13202,7 +13218,9 @@ describe("interactive CLI model startup", () => {
           }
           await vi.waitFor(() => expect(app?.controller.snapshot().status).toBe("idle"));
           await app?.submit("/new");
-          expect(app?.controller.snapshot().session).toBeUndefined();
+          // A fresh Session is open in a new tab; the startup model override belongs
+          // to the Session it was applied to, so nothing selects it again.
+          expect(app?.controller.snapshot().session).toBeDefined();
           expect(runtime.selectSessionModel).toHaveBeenCalledOnce();
         }
         expect(runtime.selectModel).not.toHaveBeenCalled();

@@ -567,7 +567,8 @@ export class TuiFeatureFlow {
         this.options.surface.close(manager);
       },
       onNew: async () => {
-        if (this.rejectLiveSessionNavigation('/new')) return;
+        // Opening a Session in a new tab is navigation: the Session on screen
+        // keeps its tab and a running turn keeps streaming into its pane.
         this.options.onNewSession();
         this.options.surface.close(manager);
       },

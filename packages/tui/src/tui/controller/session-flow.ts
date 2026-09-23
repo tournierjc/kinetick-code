@@ -300,6 +300,89 @@ export class TuiSessionFlow {
     this.options.onChanged();
   }
 
+  /**
+   * Open a fresh Session as another tab.
+   *
+   * The Session is created before the first prompt: an empty Session with an empty
+   * composer is what a new tab is, so `/new` does not leave an untitled blank view
+   * waiting for a prompt to become a tab. The Session being left keeps its tab, its
+   * pane and a running turn — this is navigation, not a clear — which is why there
+   * is no idle gate here: switching away from a live turn is allowed, and the run
+   * goes on streaming into its own pane. `/btw` opens its side session the same way.
+   */
+  async openNewSessionTab(input: { readonly workspaceDir: string }): Promise<void> {
+    if (this.stopped) return;
+    const current = this.options.controller.snapshot().session;
+    let opened: TuiSession;
+    try {
+      opened = await this.options.runtime.createSession({
+        workspaceDir: current?.workspaceDir ?? input.workspaceDir,
+      });
+    } catch {
+      this.options.append("Couldn't open a new Session. Try again.", 'error');
+      this.options.onChanged();
+      return;
+    }
+    if (this.stopped) return;
+    await this.activateSessionById(opened.sessionId, {
+      // With no Session on screen the Composer holds a draft for a conversation that
+      // does not exist yet: leave it in place so the app adopts it into the Session
+      // this navigation just created, instead of loading that Session's empty draft.
+      carryComposerDraft: current === undefined,
+    });
+    if (this.stopped) return;
+    if (this.options.controller.snapshot().session?.sessionId !== opened.sessionId) return;
+    this.options.onChanged();
+  }
+
+  /**
+   * Start a fresh Session in the tab that is already on screen.
+   *
+   * `/clear` keeps the tab: the bar keeps its length and the new Session takes the
+   * replaced tab's position, and with it its direct slot, so this is a fresh
+   * conversation where you were rather than one more tab at the end. The Session
+   * being replaced keeps its history and stays resumable from `/sessions` — nothing
+   * is archived or deleted. A running turn is refused here for the same reason
+   * closing its tab is: the live Session would be left with nothing on the bar to
+   * return to.
+   */
+  async replaceSessionInTab(input: { readonly workspaceDir: string }): Promise<void> {
+    if (this.stopped) return;
+    const current = this.options.controller.snapshot().session;
+    if (this.options.hasLiveRun?.()) {
+      this.options.append('Stop the running turn before clearing its tab.', 'warning');
+      this.options.onChanged();
+      return;
+    }
+    let opened: TuiSession;
+    try {
+      opened = await this.options.runtime.createSession({
+        workspaceDir: current?.workspaceDir ?? input.workspaceDir,
+      });
+    } catch {
+      this.options.append("Couldn't open a new Session. Try again.", 'error');
+      this.options.onChanged();
+      return;
+    }
+    if (this.stopped) return;
+    const previousSessionId = current?.sessionId;
+    await this.activateSessionById(opened.sessionId);
+    if (this.stopped) return;
+    if (this.options.controller.snapshot().session?.sessionId !== opened.sessionId) return;
+    if (previousSessionId && previousSessionId !== opened.sessionId) {
+      this.options.stateStore.dispatch({
+        type: 'tabs/replace',
+        sessionId: previousSessionId,
+        replacementId: opened.sessionId,
+      });
+      // The replaced Session has no tab left, so its pane is released with it.
+      this.options.controller.releaseSessionTranscript(previousSessionId);
+      await this.options.preparePluginHookSessionSwitch?.(previousSessionId, 'clear');
+      if (this.stopped) return;
+    }
+    this.options.onChanged();
+  }
+
   async startNew(
     options: {
       readonly endPreviousSession?: boolean;
@@ -346,6 +429,13 @@ export class TuiSessionFlow {
     options: {
       /** Internal parent/side projection switch; keep the pair alive. */
       readonly preserveSideConversation?: boolean;
+      /**
+       * The Composer text already belongs to this navigation: with no Session on
+       * screen it is a draft for a conversation that does not exist yet, so the app
+       * adopts it into the Session being opened instead of loading that Session's
+       * own empty draft.
+       */
+      readonly carryComposerDraft?: boolean;
     } = {},
   ): Promise<void> {
     if (this.stopped) return;
@@ -361,8 +451,10 @@ export class TuiSessionFlow {
     const targetSessionId = resolvedSession.sessionId;
     const previousSessionId = this.options.controller.snapshot().session?.sessionId;
     const previousSessionKey = previousSessionId ?? 'new-session';
-    await this.options.switchComposerDraft?.(targetSessionId);
-    if (this.stopped || sessionSequence !== this.sessionSequence) return;
+    if (!options.carryComposerDraft) {
+      await this.options.switchComposerDraft?.(targetSessionId);
+      if (this.stopped || sessionSequence !== this.sessionSequence) return;
+    }
     try {
       await this.options.controller.loadSessionProjection(targetSessionId);
     } catch (error) {

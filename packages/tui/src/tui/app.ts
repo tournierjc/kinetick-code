@@ -325,7 +325,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       chromeFlow?.setHint(message);
     },
     onChanged: updateChromeAndRequestRender,
-    onNewSession: () => sessionFlow.startNew(),
+    onNewSession: () => sessionFlow.openNewSessionTab({ workspaceDir: options.workspaceDir }),
     onOpenSession: (sessionId) => sessionFlow.activateSessionById(sessionId),
     onCurrentSessionClosed: (sessionId) => sessionFlow.archiveCurrentProjection(sessionId),
     refreshAutocomplete: () => activeRunFlow?.refreshAutocomplete(),

@@ -48,6 +48,35 @@ export function openTuiTab(order: readonly string[], sessionId: string): readonl
 }
 
 /**
+ * Swap the Session a tab shows, leaving the tab where it is.
+ *
+ * `/clear` starts a fresh conversation in the tab that is already there rather
+ * than opening another one, so the bar keeps its length and the new Session takes
+ * the replaced tab's position — and with it its direct `Alt+<n>` slot. A Session
+ * is one tab: a replacement that is somehow already open loses its other slot.
+ *
+ * Returns the same list when there is nothing to replace, so the reducer can skip
+ * a state update — the same contract `openTuiTab` and `closeTuiTab` follow.
+ */
+export function replaceTuiTab(
+  order: readonly string[],
+  sessionId: string,
+  replacementId: string,
+): readonly string[] {
+  if (sessionId === replacementId) return order;
+  const index = order.indexOf(sessionId);
+  if (index < 0) return order;
+  const withoutReplacement = order.filter((id) => id !== replacementId);
+  const target = withoutReplacement.indexOf(sessionId);
+  if (target < 0) return order;
+  return [
+    ...withoutReplacement.slice(0, target),
+    replacementId,
+    ...withoutReplacement.slice(target + 1),
+  ];
+}
+
+/**
  * Move one tab by `delta` positions, leaving every other tab where it is.
  *
  * The bar's direct slots are positional (`Alt+<n>`), so moving a tab is how a

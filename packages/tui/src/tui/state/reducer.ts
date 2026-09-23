@@ -3,6 +3,7 @@ import {
   closeTuiTab,
   moveTuiTab,
   openTuiTab,
+  replaceTuiTab,
   setTuiTabGrouping,
   toggleTuiTabGroupCollapsed,
 } from './tabs.js';
@@ -54,6 +55,11 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
     // neighbour first, so this branch never has to move visibility.
     if (action.sessionId === state.activeSessionId) return { state, effects: [] };
     const order = closeTuiTab(state.tabs.order, action.sessionId);
+    if (order === state.tabs.order) return { state, effects: [] };
+    return { state: { ...state, tabs: { ...state.tabs, order } }, effects: [] };
+  }
+  if (action.type === 'tabs/replace') {
+    const order = replaceTuiTab(state.tabs.order, action.sessionId, action.replacementId);
     if (order === state.tabs.order) return { state, effects: [] };
     return { state: { ...state, tabs: { ...state.tabs, order } }, effects: [] };
   }

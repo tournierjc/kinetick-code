@@ -10,7 +10,9 @@ export const TUI_COMMAND_DESCRIPTORS = {
   },
   new: {
     name: 'new',
-    description: 'Start a fresh session in the current workspace',
+    // Shared with the ACP command list, where the client opens the thread: the TUI
+    // catalog states the tab, which is what it opens there.
+    description: 'Open a new Session',
   },
   model: {
     name: 'model',
