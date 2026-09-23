@@ -1,0 +1,206 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  TranscriptStore,
+  UNSCOPED_TRANSCRIPT_SESSION,
+} from '../../src/tui/transcript/store.js';
+import type { TranscriptCellUpdate } from '../../src/tui/transcript/model.js';
+
+function cell(id: string, content: string, turnId = 'turn-1'): TranscriptCellUpdate {
+  return {
+    id,
+    kind: 'assistant',
+    status: 'succeeded',
+    content,
+    turnId,
+    createdAtMs: 1,
+    updatedAtMs: 1,
+  };
+}
+
+describe('TranscriptStore session dimension', () => {
+  it('keeps writes without a Session in the unscoped Session, like before', () => {
+    const store = new TranscriptStore();
+
+    store.upsert(cell('a', 'hello'));
+
+    expect(store.activeSessionId).toBe(UNSCOPED_TRANSCRIPT_SESSION);
+    expect(store.length).toBe(1);
+    expect(store.cellAt(0)?.content).toBe('hello');
+    expect(store.hasSession(UNSCOPED_TRANSCRIPT_SESSION)).toBe(true);
+  });
+
+  it('writes a named Session without disturbing the one on screen', () => {
+    const store = new TranscriptStore();
+    store.setActiveSession('session-a');
+    store.upsert(cell('a1', 'A content'));
+
+    store.upsert(cell('b1', 'B content'), 'session-b');
+
+    expect(store.snapshot().map((entry) => entry.id)).toEqual(['a1']);
+    expect(store.revision).toBe(2);
+
+    store.setActiveSession('session-b');
+    expect(store.snapshot().map((entry) => entry.content)).toEqual(['B content']);
+  });
+
+  it('keeps both Sessions when the active one changes', () => {
+    const store = new TranscriptStore();
+    store.setActiveSession('session-a');
+    store.upsert(cell('a1', 'A'));
+    store.setActiveSession('session-b');
+    store.upsert(cell('b1', 'B'));
+
+    store.setActiveSession('session-a');
+
+    expect(store.length).toBe(1);
+    expect(store.cellAt(0)?.content).toBe('A');
+    expect(store.sessionIds()).toEqual(['session-a', 'session-b']);
+    expect(store.hasSession('session-b')).toBe(true);
+  });
+
+  it('counts revisions per Session', () => {
+    const store = new TranscriptStore();
+    store.setActiveSession('session-a');
+    store.upsert(cell('a1', 'A'));
+    const aRevision = store.revision;
+    expect(aRevision).toBe(2);
+
+    store.upsert(cell('b1', 'B'), 'session-b');
+
+    // A background write is not a change to the pane on screen.
+    expect(store.revision).toBe(aRevision);
+    store.setActiveSession('session-b');
+    expect(store.revision).toBe(2);
+  });
+
+  it('keeps identical cell ids apart across Sessions', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('shared', 'A copy'), 'session-a');
+    store.upsert(cell('shared', 'B copy'), 'session-b');
+
+    store.setActiveSession('session-a');
+    expect(store.get('shared')?.content).toBe('A copy');
+    expect(store.length).toBe(1);
+    store.setActiveSession('session-b');
+    expect(store.get('shared')?.content).toBe('B copy');
+  });
+
+  it('clears and drops one Session at a time', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a1', 'A'), 'session-a');
+    store.upsert(cell('b1', 'B'), 'session-b');
+
+    store.clear('session-b');
+    expect(store.hasSession('session-b')).toBe(true);
+    store.setActiveSession('session-b');
+    expect(store.length).toBe(0);
+    store.setActiveSession('session-a');
+    expect(store.length).toBe(1);
+
+    expect(store.dropSession('session-b')).toBe(true);
+    expect(store.dropSession('session-b')).toBe(false);
+    expect(store.hasSession('session-b')).toBe(false);
+    expect(store.hasSession('session-a')).toBe(true);
+  });
+
+  it('queues and flushes text deltas per Session', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a1', 'A'), 'session-a');
+    store.upsert(cell('b1', 'B'), 'session-b');
+
+    store.queueTextDelta('b1', ' more', 'session-b');
+    store.queueTextDelta('a1', ' on screen', 'session-a');
+
+    expect(store.flushTextDeltas(5, 'session-b')).toEqual(['b1']);
+    store.setActiveSession('session-b');
+    expect(store.cellAt(0)?.content).toBe('B more');
+    expect(store.cellAt(0)?.updatedAtMs).toBe(5);
+
+    expect(store.flushTextDeltas(6, 'session-a')).toEqual(['a1']);
+    store.setActiveSession('session-a');
+    expect(store.cellAt(0)?.content).toBe('A on screen');
+  });
+
+  it('refuses a delta for a cell of another Session', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a1', 'A'), 'session-a');
+
+    expect(() => store.queueTextDelta('a1', 'x', 'session-b')).toThrow(
+      'Cannot queue transcript delta for unknown cell: a1',
+    );
+  });
+
+  it('replaces the durable projection of one Session and keeps its ephemeral cells', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a-durable', 'durable A'), 'session-a');
+    store.upsert({ ...cell('a-local', 'local note'), ephemeral: true }, 'session-a');
+    store.upsert(cell('b-durable', 'durable B'), 'session-b');
+
+    store.replaceDurableProjection(() => {
+      store.upsert(cell('a-durable', 'durable A re-projected'), 'session-a');
+    }, 'session-a');
+
+    store.setActiveSession('session-a');
+    expect(store.snapshot().map((entry) => entry.id)).toEqual(['a-durable', 'a-local']);
+    expect(store.cellAt(0)?.content).toBe('durable A re-projected');
+    expect(store.cellAt(1)?.content).toBe('local note');
+
+    // The other Session is untouched.
+    store.setActiveSession('session-b');
+    expect(store.snapshot().map((entry) => entry.content)).toEqual(['durable B']);
+  });
+
+  it('locates cells and turn ranges per Session', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a1', 'A1', 'turn-a'), 'session-a');
+    store.upsert(cell('a2', 'A2', 'turn-b'), 'session-a');
+    store.upsert(cell('b1', 'B1', 'turn-b'), 'session-b');
+
+    expect(store.locateCell('b1')).toBeUndefined();
+    expect(store.turnCount).toBe(0);
+
+    store.setActiveSession('session-a');
+    expect(store.locateCell('a2')).toEqual({ index: 1, turnIndex: 1 });
+    expect(store.turnRange(0)).toEqual({ start: 0, end: 1 });
+    expect(store.turnRange(1)).toEqual({ start: 1, end: 2 });
+    expect(store.turnCount).toBe(2);
+  });
+
+  it('removes and moves cells inside one Session only', () => {
+    const store = new TranscriptStore();
+    store.upsert(cell('a1', 'A1', 'turn-a'), 'session-a');
+    store.upsert(cell('a2', 'A2', 'turn-b'), 'session-a');
+    store.upsert(cell('b1', 'B1', 'turn-a'), 'session-b');
+    store.upsert(cell('b2', 'B2', 'turn-b'), 'session-b');
+
+    expect(store.remove('b1', 'session-b')).toBe(true);
+    store.setActiveSession('session-b');
+    expect(store.snapshot().map((entry) => entry.id)).toEqual(['b2']);
+
+    store.setActiveSession('session-a');
+    expect(store.moveToEnd('a1', 'session-a')).toBe(true);
+    expect(store.snapshot().map((entry) => entry.id)).toEqual(['a2', 'a1']);
+    expect(store.remove('b1')).toBe(false);
+  });
+
+  it('reports activity from the active Session only', () => {
+    const store = new TranscriptStore();
+    store.upsert(
+      { ...cell('a1', 'working', 'turn-a'), status: 'running', kind: 'tool' },
+      'session-a',
+    );
+    store.upsert(
+      { ...cell('b1', 'B error', 'turn-b'), kind: 'error', status: 'failed' },
+      'session-b',
+    );
+
+    store.setActiveSession('session-a');
+    expect(store.hasConcreteTurnActivity('turn-a')).toBe(true);
+    expect(store.findVisibleError('B error')).toBeUndefined();
+
+    store.setActiveSession('session-b');
+    expect(store.hasConcreteTurnActivity('turn-a')).toBe(false);
+    expect(store.findVisibleError('B error')).toEqual({ turnId: 'turn-b' });
+  });
+});
