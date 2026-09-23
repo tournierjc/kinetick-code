@@ -15,6 +15,7 @@ import { truncateToWidth, visibleWidth } from '../../rendering/text.js';
 import { Input } from '../../widgets/input.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
 import type { TuiSession } from '../../../runtime/port.js';
+import type { TuiSessionHistoryMatch } from './prompt-search.js';
 import {
   isTuiDelegatedSession,
   isTuiInternalSubagentSession,
@@ -29,6 +30,8 @@ type SessionManagerMode = 'list' | 'rename' | 'confirm-archive' | 'confirm-delet
 type SessionRecencySection = 'today' | 'yesterday' | 'previous-7-days' | 'older';
 const SESSION_LIST_VISIBLE_LIMIT = 10;
 const SESSION_SEARCH_DEBOUNCE_MS = 200;
+/** Sessions sent to the saved-prompt search in one query. */
+const SESSION_CONTENT_SEARCH_LIMIT = 50;
 
 export interface TuiSessionManagerOptions {
   sessions: readonly TuiSession[];
@@ -54,6 +57,15 @@ export interface TuiSessionManagerOptions {
    * offer the archive path beside it, never a bare delete.
    */
   onDelete(sessionId: string): Promise<void> | void;
+  /**
+   * Saved-prompt search. Called only when the query matches no title, path,
+   * Agent or model, and only with the Sessions the manager has loaded, so the
+   * host can bound the work. Matches list those Sessions.
+   */
+  onSearchHistory?(
+    query: string,
+    sessionIds: readonly string[],
+  ): Promise<readonly TuiSessionHistoryMatch[]>;
   onCancel(): void;
   requestRender(): void;
   now?: () => number;
@@ -80,6 +92,11 @@ export class TuiSessionManager implements Component, Focusable {
   private loadingMore = false;
   private pageLoad?: Promise<boolean>;
   private searchLoadTimer?: ReturnType<typeof setTimeout>;
+  private contentSearchTimer?: ReturnType<typeof setTimeout>;
+  /** Session id → the saved prompt that matched it. Empty for title matches. */
+  private contentMatches = new Map<string, string>();
+  private contentSearchSequence = 0;
+  private contentSearching = false;
   private status?: { tone: 'info' | 'error'; text: string };
   private _focused = false;
   private disposed = false;
@@ -95,6 +112,7 @@ export class TuiSessionManager implements Component, Focusable {
     this.actionInput.onEscape = () => this.exitActionMode();
     this.clampSelection();
     if (this.searchInput.getValue()) this.scheduleRemainingSearchLoad();
+    if (this.searchInput.getValue()) this.scheduleContentSearch();
     if (options.initialRenameSessionId) {
       this.startRename(options.initialRenameSessionId);
     }
@@ -221,6 +239,7 @@ export class TuiSessionManager implements Component, Focusable {
     if (this.searchInput.getValue() !== previousQuery) {
       this.resetSelection();
       this.scheduleRemainingSearchLoad();
+      this.scheduleContentSearch();
     } else this.requestRender();
   }
 
@@ -233,6 +252,8 @@ export class TuiSessionManager implements Component, Focusable {
     this.disposed = true;
     if (this.searchLoadTimer) clearTimeout(this.searchLoadTimer);
     this.searchLoadTimer = undefined;
+    if (this.contentSearchTimer) clearTimeout(this.contentSearchTimer);
+    this.contentSearchTimer = undefined;
     this.searchInput.focused = false;
     this.actionInput.focused = false;
   }
@@ -345,7 +366,7 @@ export class TuiSessionManager implements Component, Focusable {
     if (!compact) {
       lines.push(
         frameRow(
-          chalk.hex(colors.dim)('Filter title, ID, workspace, model, status, or branch'),
+          chalk.hex(colors.dim)('Filter title, ID, workspace, model, status, branch, or prompt'),
           width,
         ),
       );
@@ -358,7 +379,9 @@ export class TuiSessionManager implements Component, Focusable {
             this.searchInput.getValue()
               ? this.loadingMore || this.hasMore
                 ? 'Searching saved sessions…'
-                : 'No matching sessions.'
+                : this.contentSearching
+                  ? 'Searching saved prompts…'
+                  : 'No matching sessions.'
               : `No ${viewLabel.toLowerCase()} sessions in this workspace.`,
           ),
           width,
@@ -443,15 +466,27 @@ export class TuiSessionManager implements Component, Focusable {
         }
       }
       if (detailRowBudget >= 6) {
-        const updated = formatSessionTime(selected.updatedAt, this.now());
-        const created = formatSessionTime(selected.createdAt, this.now());
-        const timestamps = [
-          updated ? `Updated ${updated}` : undefined,
-          created ? `Created ${created}` : undefined,
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        if (timestamps) lines.push(frameRow(chalk.hex(colors.dim)(timestamps), width));
+        const snippet = this.contentMatches.get(selected.sessionId);
+        if (snippet) {
+          lines.push(
+            frameRow(
+              chalk.hex(colors.accent)(
+                `Matched “${truncateToWidth(sanitizeTerminalText(snippet), Math.max(1, width - 14), '…')}”`,
+              ),
+              width,
+            ),
+          );
+        } else {
+          const updated = formatSessionTime(selected.updatedAt, this.now());
+          const created = formatSessionTime(selected.createdAt, this.now());
+          const timestamps = [
+            updated ? `Updated ${updated}` : undefined,
+            created ? `Created ${created}` : undefined,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          if (timestamps) lines.push(frameRow(chalk.hex(colors.dim)(timestamps), width));
+        }
       }
     }
     if (this.status) {
@@ -486,7 +521,9 @@ export class TuiSessionManager implements Component, Focusable {
     const emptyMessage = query
       ? this.loadingMore || this.hasMore
         ? 'Searching saved sessions…'
-        : 'No matching sessions.'
+        : this.contentSearching
+          ? 'Searching saved prompts…'
+          : 'No matching sessions.'
       : `No ${viewLabel.toLowerCase()} sessions in this workspace.`;
     const selectedLine = selected
       ? this.renderSessionLine(selected, true, width - 4)
@@ -517,6 +554,7 @@ export class TuiSessionManager implements Component, Focusable {
       : title;
     const status = formatSessionStatus(session.status);
     const suffix = [
+      this.contentMatches.has(session.sessionId) ? 'prompt match' : undefined,
       formatSessionTime(session.updatedAt, this.now()),
       isCurrent ? 'current' : undefined,
       status,
@@ -664,18 +702,100 @@ export class TuiSessionManager implements Component, Focusable {
   }
 
   private visibleSessions(): TuiSession[] {
+    const matched = this.fieldMatchedSessions();
+    if (matched.length > 0) return matched;
+    if (this.contentMatches.size === 0) return matched;
+    return this.viewScopedSessions().filter((session) =>
+      this.contentMatches.has(session.sessionId),
+    );
+  }
+
+  /** Sessions in the current view, before the query is applied. */
+  private viewScopedSessions(): TuiSession[] {
+    return this.scopedSessions().filter(
+      (session) => Boolean(session.archived) === (this.view === 'archived'),
+    );
+  }
+
+  private fieldMatchedSessions(): TuiSession[] {
     const queryTokens = this.searchInput
       .getValue()
       .trim()
       .toLocaleLowerCase()
       .split(/\s+/u)
       .filter(Boolean);
-    return this.scopedSessions().filter((session) => {
-      if (Boolean(session.archived) !== (this.view === 'archived')) return false;
+    return this.viewScopedSessions().filter((session) => {
       if (queryTokens.length === 0) return true;
       const fields = sessionSearchFields(session);
       return queryTokens.every((token) => matchesSessionQueryToken(fields, token));
     });
+  }
+
+  /**
+   * Titles, paths, Agents and models match locally. A query that matches none
+   * of them asks the host for a saved-prompt search, because prompt text is not
+   * part of the session catalog the TUI holds.
+   */
+  private scheduleContentSearch(): void {
+    if (this.contentSearchTimer) clearTimeout(this.contentSearchTimer);
+    this.contentSearchTimer = undefined;
+    if (!this.options.onSearchHistory || !this.searchInput.getValue().trim()) {
+      this.clearContentMatches();
+      return;
+    }
+    this.contentSearchTimer = setTimeout(() => {
+      this.contentSearchTimer = undefined;
+      this.runContentSearch();
+    }, SESSION_SEARCH_DEBOUNCE_MS);
+  }
+
+  private runContentSearch(): void {
+    const onSearchHistory = this.options.onSearchHistory;
+    const query = this.searchInput.getValue().trim();
+    if (!onSearchHistory || !query) return;
+    if (this.hasMore || this.loadingMore || this.pageLoad) {
+      // A hit may live in a page that is still loading; retry once it settles.
+      this.scheduleContentSearch();
+      return;
+    }
+    if (this.fieldMatchedSessions().length > 0) {
+      this.clearContentMatches();
+      return;
+    }
+    const candidates = this.viewScopedSessions().slice(0, SESSION_CONTENT_SEARCH_LIMIT);
+    if (candidates.length === 0) return;
+    const sequence = ++this.contentSearchSequence;
+    this.contentSearching = true;
+    this.requestRender();
+    void onSearchHistory(query, candidates.map((session) => session.sessionId)).then(
+      (matches) => {
+        if (this.disposed || sequence !== this.contentSearchSequence) return;
+        this.contentSearching = false;
+        this.contentMatches = new Map(matches.map((match) => [match.sessionId, match.snippet]));
+        this.clampSelection();
+        this.status = {
+          tone: 'info',
+          text:
+            matches.length === 0
+              ? 'No title or saved prompt matched.'
+              : `${String(matches.length)} Session${matches.length === 1 ? '' : 's'} matched a saved prompt.`,
+        };
+        this.requestRender();
+      },
+      () => {
+        if (this.disposed || sequence !== this.contentSearchSequence) return;
+        this.contentSearching = false;
+        this.contentMatches = new Map();
+        this.status = { tone: 'error', text: "Couldn't search saved prompts." };
+        this.requestRender();
+      },
+    );
+  }
+
+  private clearContentMatches(): void {
+    if (this.contentMatches.size === 0) return;
+    this.contentMatches = new Map();
+    this.requestRender();
   }
 
   private scopedSessions(): TuiSession[] {

@@ -186,6 +186,26 @@ sends, the confirmation card in both modes, the running-turn guard and the
 unavailable reason; whether the clone keeps MCP connections and queued messages
 is not covered.
 
+## Finding a Session by what was said in it
+
+`/sessions <query>` matches a Session's title, ID, workspace, Agent, model, status
+and branch without reading any history. When a query matches none of those, the
+manager searches the saved user prompts of the Sessions it has loaded and lists
+the Sessions whose prompts contain every token, marked `prompt match` with the
+matching prompt quoted in the detail block.
+
+This is not a full-text index. The TUI reads the persisted user-prompts list of
+each candidate Session — head-truncated to 200 characters by the runtime — so
+Assistant replies, tool output and file contents are not searched, and a match
+beyond the first 50 prompts of a Session is invisible. One query reads at most 50
+Sessions, eight at a time, chosen from the current view (active or archived) and
+workspace scope, so widen the scope with `Ctrl+A` before searching across
+everything. A Session whose history cannot be read is skipped rather than failing
+the search, and a search that matched nothing says so.
+
+The prompt search only starts when a title match would leave the list empty, so a
+query that names a Session never pays for it.
+
 ## Deleting a Session
 
 `/sessions` can remove a Session for good: select the row, press `Ctrl+X` and
