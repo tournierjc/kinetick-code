@@ -186,6 +186,21 @@ sends, the confirmation card in both modes, the running-turn guard and the
 unavailable reason; whether the clone keeps MCP connections and queued messages
 is not covered.
 
+## Grouping the Session list by project
+
+`Ctrl+G` in `/sessions` swaps the recency headers (Today, Yesterday, …) for one
+header per project, ordered by their newest Session, so a project's Sessions stay
+together. `Ctrl+O` folds every other project or unfolds them all again.
+
+Folding never makes a Session unreachable: the project holding the selected
+Session always stays open, and a folded header counts what it hides
+(`▸ other-workspace (2 folded)`). Moving the selection into a folded project
+opens it again. Both keys are ignored while a query is active, where the list is
+flat and matched by search instead.
+
+Grouping is a view state of the open panel: it is not persisted, and it does not
+change the Session order outside the panel.
+
 ## Finding a Session by what was said in it
 
 `/sessions <query>` matches a Session's title, ID, workspace, Agent, model, status
