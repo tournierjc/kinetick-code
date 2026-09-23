@@ -53,6 +53,19 @@ function versionPullRequestNumber(cli, root, branch) {
   } catch { return 0; }
 }
 
+// `gh pr create` has failed on this repository with
+// "GraphQL: … does not have the correct permissions to execute CreatePullRequest"
+// — for the v0.5.2-fork.2 release — while the REST endpoint of the same
+// authenticated client created the pull request without complaint. The fallback
+// keeps the release from ending in a manual step.
+function createVersionPullRequestViaApi(cli, root, { branch, title, body }) {
+  const { nameWithOwner } = JSON.parse(execFileSync(cli, ['repo', 'view', '--json', 'nameWithOwner'],
+    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+  execFileSync(cli, ['api', '-X', 'POST', `repos/${nameWithOwner}/pulls`, '-f', `title=${title}`,
+    '-f', `head=${branch}`, '-f', 'base=main', '-F', `body=@${body}`],
+  { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
 // The tag and the release branch are already pushed when this runs, so a
 // failure here must never read as a failed release. `gh pr create` can also
 // fail on a transient API error when it runs immediately after the push,
@@ -86,6 +99,19 @@ export function createVersionPullRequest({ root, branch, version, tag, attempts 
     }
     // The retries may have succeeded without reporting a URL, and the PR may
     // pre-date this run when a maintainer re-runs the release command.
+    if (versionPullRequestNumber(cli, root, branch) > 0) {
+      console.error(`Version PR for ${branch} already exists; continuing.`);
+      return;
+    }
+    // `gh pr create` can be refused on this repository while the same client's
+    // REST endpoint works, so try that before asking for a hand.
+    try {
+      createVersionPullRequestViaApi(cli, root, { branch, title, body });
+      console.error(`Created the version PR for ${branch} through the REST endpoint.`);
+      return;
+    } catch (error) {
+      failure = `${failure}\nvia the API: ${`${error.stderr || error.message}`.trim()}`;
+    }
     if (versionPullRequestNumber(cli, root, branch) > 0) {
       console.error(`Version PR for ${branch} already exists; continuing.`);
       return;
