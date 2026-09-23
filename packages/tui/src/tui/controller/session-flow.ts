@@ -66,7 +66,6 @@ export interface TuiSessionFlowOptions {
   readonly followBottom?: () => void;
   readonly requestWelcomeRebuild: () => void;
   readonly switchComposerDraft?: (sessionKey: string) => Promise<void>;
-  readonly detachForegroundObserver?: () => void;
   readonly adoptForegroundRun?: () => void;
   readonly preparePluginHookSessionSwitch?: (
     sessionId: string,
@@ -296,7 +295,6 @@ export class TuiSessionFlow {
       await this.options.composerDraft.discard();
     }
     if (this.stopped || sessionSequence !== this.sessionSequence) return;
-    this.options.detachForegroundObserver?.();
     this.options.interactionFlow.deactivate();
     this.options.featureFlow.resetSessionState();
     try {
@@ -342,7 +340,6 @@ export class TuiSessionFlow {
     const previousSessionKey = previousSessionId ?? 'new-session';
     await this.options.switchComposerDraft?.(targetSessionId);
     if (this.stopped || sessionSequence !== this.sessionSequence) return;
-    this.options.detachForegroundObserver?.();
     try {
       await this.options.controller.loadSessionProjection(targetSessionId);
     } catch (error) {
