@@ -64,6 +64,14 @@ export type {
  */
 const MAX_RETAINED_TRANSCRIPT_SESSIONS = 6;
 
+function backgroundTurnKey(sessionId: string, turnId: string): string {
+  return `${sessionId}\u0000${turnId}`;
+}
+
+function streamEventTimestamp(event: TuiStreamEvent): number | undefined {
+  return 'timestamp' in event && typeof event.timestamp === 'number' ? event.timestamp : undefined;
+}
+
 export class TuiChatController {
   private readonly runtime: TuiChatRuntimeLike;
   private readonly transcript: TranscriptStore;
@@ -91,6 +99,8 @@ export class TuiChatController {
   private durableMessageAnchor?: string;
   private pendingHistoryRefresh = false;
   private readonly retainedTranscriptSessions = new Set<string>();
+  private readonly backgroundTurnProjections = new Map<string, TuiTurnProjection>();
+  private readonly backgroundTurnAnchors = new Set<string>();
   private readonly idleWaiters = new Set<() => void>();
   private notificationBatchDepth = 0;
   private notificationPending = false;
@@ -274,6 +284,8 @@ export class TuiChatController {
    */
   private projectSessionIntoPane(sessionId: string, messages: readonly TuiMessage[]): void {
     this.transcript.setActiveSession(sessionId);
+    // This Session is the pane now, so the visible projection owns its turn again.
+    this.releaseBackgroundTurnProjection(sessionId);
     if (this.retainedTranscriptSessions.has(sessionId)) {
       this.transcript.replaceDurableProjection(() => this.turnProjection.hydrateHistory(messages));
       return;
@@ -316,8 +328,88 @@ export class TuiChatController {
    * history again, so nothing stale can outlive it.
    */
   releaseSessionTranscript(sessionId: string): void {
+    this.releaseBackgroundTurnProjection(sessionId);
     this.retainedTranscriptSessions.delete(sessionId);
     this.transcript.dropSession(sessionId);
+  }
+
+  /**
+   * The projection a background Session's live turn writes through. It targets that
+   * Session's pane and nothing else: a background turn never touches the visible
+   * Session's state — usage, cost, output throughput, the todo panel and the
+   * interaction panel all belong to the Session on screen.
+   */
+  private backgroundTurnProjection(sessionId: string): TuiTurnProjection {
+    const existing = this.backgroundTurnProjections.get(sessionId);
+    if (existing) return existing;
+    const projection = new TuiTurnProjection({
+      transcript: this.transcript.scoped(sessionId),
+      now: this.now,
+      onChange: () => this.notify(),
+    });
+    this.backgroundTurnProjections.set(sessionId, projection);
+    return projection;
+  }
+
+  /**
+   * Anchor a background turn in its own pane, once per Session and Turn: the cells a
+   * watcher streams into need a turn to belong to, and the visible projection is not
+   * the one writing them.
+   */
+  beginBackgroundTurn(sessionId: string, turnId: string, startedAtMs: number): void {
+    const key = backgroundTurnKey(sessionId, turnId);
+    if (this.backgroundTurnAnchors.has(key)) return;
+    this.backgroundTurnAnchors.add(key);
+    this.backgroundTurnProjection(sessionId).beginTurn(turnId, startedAtMs);
+    this.notify();
+  }
+
+  /**
+   * Apply one event of a turn whose Session is not the one on screen. A Session that
+   * became visible mid-turn goes back through the visible projection, so a turn never
+   * has two writers.
+   */
+  applyBackgroundTurnEvent(
+    sessionId: string,
+    turnId: string,
+    event: TuiStreamEvent,
+  ): string | undefined {
+    if (this.state.session?.sessionId === sessionId) {
+      return this.applyRuntimeTurnEvent(turnId, event);
+    }
+    try {
+      this.beginBackgroundTurn(sessionId, turnId, streamEventTimestamp(event) ?? this.now());
+      return this.backgroundTurnProjection(sessionId).applyStreamEvent(turnId, event);
+    } catch (error) {
+      return formatTuiActionFailure(error, {
+        summary: "Couldn't show a background Session's output.",
+        nextStep: 'Reopen that Session to load its saved messages.',
+        preservation: 'Its saved messages are unchanged.',
+      });
+    }
+  }
+
+  /** Settle a background turn in its own pane, leaving the visible Session alone. */
+  settleBackgroundTurn(
+    sessionId: string,
+    turnId: string,
+    status: TuiSettledTurn['status'],
+    durationMs?: number,
+  ): void {
+    if (this.state.session?.sessionId === sessionId) return;
+    const projection = this.backgroundTurnProjections.get(sessionId);
+    this.backgroundTurnAnchors.delete(backgroundTurnKey(sessionId, turnId));
+    if (!projection) return;
+    projection.markTurn(turnId, status, durationMs);
+    projection.clearTurn(turnId);
+    this.notify();
+  }
+
+  private releaseBackgroundTurnProjection(sessionId: string): void {
+    this.backgroundTurnProjections.delete(sessionId);
+    for (const key of [...this.backgroundTurnAnchors]) {
+      if (key.startsWith(`${sessionId}\u0000`)) this.backgroundTurnAnchors.delete(key);
+    }
   }
 
   async refreshCurrentSessionHistory(): Promise<void> {

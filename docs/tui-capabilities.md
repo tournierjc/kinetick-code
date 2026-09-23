@@ -171,11 +171,16 @@ running, and its saved messages are reconciled into them.
 The TUI keeps a pane per Session on the bar — the visible one plus the most recently
 opened others — and drops a Session's pane when its tab closes, or when the Session
 is archived or deleted, so a Session that comes back is projected from its saved
-messages again. What the pane still cannot do is accumulate output while you are
-elsewhere: the Runtime's stream for a background Session is not watched, so output
-produced during that time appears once it has been persisted. A permission or
-questionnaire prompt raised by a background Session is recorded against that Session
-and shows when you switch to its tab.
+messages again. A turn you started keeps streaming into its own tab after you switch
+away: the TUI goes on watching that Session's turn and projects it into that
+Session's pane, and the pane shows the output when you come back. Three limits are
+worth knowing: a turn that started while you were looking at another Session is not
+watched, so its output appears once the Runtime has persisted it; a background turn's
+usage, cost and todo panel are not updated (those belong to the Session on screen);
+and if a background stream is lost, its pane is dropped rather than patched, so its
+next visit reloads saved messages. A permission or questionnaire prompt raised by a
+background Session is recorded against that Session and shows when you switch to its
+tab.
 
 Some commands still require a stopped Session, because they end or rebind its
 context: `/new`, `/rename`, `/parent`, and archiving or deleting a Session from

@@ -372,6 +372,78 @@ describe('TuiChatController', () => {
     expect(transcript.snapshot().some((cell) => cell.content.includes('Question two'))).toBe(false);
   });
 
+  it('streams a background turn into its own pane, not the visible one', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-a');
+    await controller.loadSessionProjection('session-b');
+
+    controller.applyBackgroundTurnEvent('session-a', 'turn-a', {
+      type: 'delta',
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      content: 'background output',
+      timestamp: 5,
+    });
+
+    // Nothing of a background turn reaches the pane on screen…
+    expect(transcript.snapshot().some((cell) => cell.content.includes('background output'))).toBe(
+      false,
+    );
+    // …and the background Session's pane has it, settled in place.
+    expect(
+      transcript.snapshot('session-a').some((cell) => cell.content.includes('background output')),
+    ).toBe(true);
+
+    controller.settleBackgroundTurn('session-a', 'turn-a', 'succeeded', 120);
+
+    const backgroundCell = transcript
+      .snapshot('session-a')
+      .find((cell) => cell.content.includes('background output'));
+    expect(backgroundCell?.status).toBe('succeeded');
+    // The visible Session's state is untouched by a background turn.
+    expect(controller.snapshot().lastSettledTurn).toBeUndefined();
+  });
+
+  it('hands a turn back to the visible projection when its Session is opened again', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-a');
+
+    controller.applyBackgroundTurnEvent('session-a', 'turn-a', {
+      type: 'delta',
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      content: 'visible output',
+      timestamp: 5,
+    });
+
+    // The Session is the pane, so the visible projection writes it.
+    expect(transcript.snapshot().some((cell) => cell.content.includes('visible output'))).toBe(true);
+  });
+
   it('keeps a Session pane when the Session is left and revisited', async () => {
     const runtime = {
       createSession: vi.fn(),

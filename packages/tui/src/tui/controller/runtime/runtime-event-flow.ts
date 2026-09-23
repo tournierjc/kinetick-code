@@ -89,21 +89,43 @@ export interface TuiRuntimeEventFlowOptions {
   readonly notify?: (kind: TuiTerminalNotificationKind, key: string) => void;
 }
 
+interface TuiLiveTurn {
+  readonly sessionId: string;
+  readonly turnId: string;
+  readonly controller: AbortController;
+  readonly afterMsgId?: string;
+  readonly startedAtMs?: number;
+  readonly task: Promise<void>;
+}
+
+/** A watcher before its task exists — what `consumeLiveTurn` is handed. */
+type TuiLiveTurnSeed = Omit<TuiLiveTurn, 'task'>;
+
+function streamEventTimestamp(event: TuiStreamEvent): number | undefined {
+  return 'timestamp' in event && typeof event.timestamp === 'number' ? event.timestamp : undefined;
+}
+
+function terminalStreamStatus(event: TuiStreamEvent): 'succeeded' | 'failed' | 'cancelled' {
+  if (event.type === 'done') return 'succeeded';
+  if (event.type === 'error') return 'failed';
+  if (event.type === 'session-status') {
+    if (event.status === 'finished') return 'succeeded';
+    if (event.status === 'aborted' || event.status === 'interrupted') return 'cancelled';
+  }
+  return 'failed';
+}
+
 export class TuiRuntimeEventFlow {
   private abortController: AbortController | undefined;
   private terminalErrorSequence = 0;
   private task: Promise<void> | undefined;
   private usageCommitTask: Promise<void> | undefined;
-  private liveTurn:
-    | {
-        readonly sessionId: string;
-        readonly turnId: string;
-        readonly controller: AbortController;
-        readonly afterMsgId?: string;
-        readonly startedAtMs?: number;
-        readonly task: Promise<void>;
-      }
-    | undefined;
+  /**
+   * One watcher per Session whose live turn is being consumed. Keyed by Session so
+   * that switching away stops *watching* a turn, not *consuming* it: the events keep
+   * flowing into that Session's own pane while another Session is on screen.
+   */
+  private readonly liveTurns = new Map<string, TuiLiveTurn>();
   private readonly llmRetryCalls = new Map<string, TuiLlmRetryEvent>();
 
   constructor(private readonly options: TuiRuntimeEventFlowOptions) {}
@@ -162,11 +184,9 @@ export class TuiRuntimeEventFlow {
   stop(): void {
     this.clearLlmRetry();
     this.abortController?.abort();
-    this.liveTurn?.controller.abort();
+    this.abortLiveTurns();
     void this.task?.catch(() => undefined);
     void this.usageCommitTask?.catch(() => undefined);
-    void this.liveTurn?.task.catch(() => undefined);
-    this.liveTurn = undefined;
   }
 
   restart(): void {
@@ -181,10 +201,17 @@ export class TuiRuntimeEventFlow {
     this.start();
   }
 
-  detachForegroundObserver(): void {
-    this.liveTurn?.controller.abort();
-    this.liveTurn = undefined;
-    this.clearLlmRetry();
+  /**
+   * Stop watching every live turn. A switch no longer calls this: the watcher for the
+   * Session being left keeps consuming its stream into that Session's own pane.
+   */
+  private abortLiveTurns(): void {
+    const turns = [...this.liveTurns.values()];
+    this.liveTurns.clear();
+    for (const turn of turns) {
+      turn.controller.abort();
+      void turn.task.catch(() => undefined);
+    }
   }
 
   applyActiveSessionProjection(): void {
@@ -542,40 +569,36 @@ export class TuiRuntimeEventFlow {
     timestampMs: number | undefined,
     afterMsgId?: string,
   ): void {
-    const previousLiveTurn = this.liveTurn;
-    const isSameTurn =
-      previousLiveTurn?.sessionId === sessionId && previousLiveTurn.turnId === turnId;
-    if (isSameTurn) return;
-    previousLiveTurn?.controller.abort();
-    void previousLiveTurn?.task.catch(() => undefined);
+    const previousLiveTurn = this.liveTurns.get(sessionId);
+    if (previousLiveTurn?.turnId === turnId) return;
+    if (previousLiveTurn) {
+      previousLiveTurn.controller.abort();
+      void previousLiveTurn.task.catch(() => undefined);
+    }
 
     const controller = new AbortController();
-    if (!isSameTurn) {
+    if (this.isVisibleSession(sessionId)) {
       this.options.controller.beginRuntimeTurn(turnId, timestampMs ?? Date.now());
       this.options.runProjection.markRecoveredTurn(turnId);
+    } else {
+      // A turn whose Session is not on screen anchors in that Session's own pane.
+      this.options.controller.beginBackgroundTurn(sessionId, turnId, timestampMs ?? Date.now());
     }
-    const liveTurn = {
+    const liveTurn: TuiLiveTurnSeed = {
       sessionId,
       turnId,
       controller,
       afterMsgId,
       startedAtMs: timestampMs,
-      task: Promise.resolve(),
     };
     // The stream can end before the lifecycle terminal event supplies the end time.
     // Retain the turn until that event settles its projection.
     const task = this.consumeLiveTurn(liveTurn).catch(() => undefined);
-    this.liveTurn = { ...liveTurn, task };
+    this.liveTurns.set(sessionId, { ...liveTurn, task });
     this.options.onChanged();
   }
 
-  private async consumeLiveTurn(liveTurn: {
-    readonly sessionId: string;
-    readonly turnId: string;
-    readonly controller: AbortController;
-    readonly afterMsgId?: string;
-    readonly startedAtMs?: number;
-  }): Promise<void> {
+  private async consumeLiveTurn(liveTurn: TuiLiveTurnSeed): Promise<void> {
     let afterMsgId = liveTurn.afterMsgId;
     let afterCursor: string | undefined;
     let reconnectAttempt = 0;
@@ -601,27 +624,39 @@ export class TuiRuntimeEventFlow {
               liveTurn.controller.signal,
             );
         for await (const event of stream) {
-          if (
-            liveTurn.controller.signal.aborted ||
-            this.options.controller.snapshot().session?.sessionId !== liveTurn.sessionId
-          ) {
-            return;
-          }
+          if (liveTurn.controller.signal.aborted) return;
+          const visible = this.isVisibleSession(liveTurn.sessionId);
           if (event.type === 'resync-required') {
             overflowed = true;
             break;
           }
           receivedEvent = true;
           if (event.cursor) afterCursor = event.cursor;
-          const failure = this.options.controller.applyRuntimeTurnEvent(liveTurn.turnId, event);
+          const failure = visible
+            ? this.options.controller.applyRuntimeTurnEvent(liveTurn.turnId, event)
+            : this.options.controller.applyBackgroundTurnEvent(
+                liveTurn.sessionId,
+                liveTurn.turnId,
+                event,
+              );
           if (failure) this.options.append(failure, 'error');
-          if (isSessionTurnTerminal(event)) return;
+          if (isSessionTurnTerminal(event)) {
+            if (!visible) this.settleBackgroundTurn(liveTurn, event);
+            return;
+          }
         }
       } catch {
         if (liveTurn.controller.signal.aborted) return;
       }
 
       if (overflowed) {
+        if (!this.isVisibleSession(liveTurn.sessionId)) {
+          // The stream position was lost for a Session that is not on screen: drop the
+          // pane it was filling, so the next visit projects its saved messages again.
+          this.liveTurns.delete(liveTurn.sessionId);
+          this.options.controller.releaseSessionTranscript(liveTurn.sessionId);
+          return;
+        }
         try {
           await this.options.controller.reconcileOwnerHistory(false);
         } catch (error) {
@@ -651,20 +686,35 @@ export class TuiRuntimeEventFlow {
     }
   }
 
+  private isVisibleSession(sessionId: string): boolean {
+    return this.options.controller.snapshot().session?.sessionId === sessionId;
+  }
+
+  /**
+   * Settle a turn whose Session is not the one on screen: its own pane gets the
+   * terminal status, and nothing of the visible Session's state is touched.
+   */
+  private settleBackgroundTurn(liveTurn: TuiLiveTurnSeed, event: TuiStreamEvent): void {
+    if (this.isVisibleSession(liveTurn.sessionId)) return;
+    // A stream terminal event carries no timestamp, so the end time is when it arrived.
+    this.options.controller.settleBackgroundTurn(
+      liveTurn.sessionId,
+      liveTurn.turnId,
+      terminalStreamStatus(event),
+      liveTurn.startedAtMs === undefined ? undefined : Math.max(0, Date.now() - liveTurn.startedAtMs),
+    );
+    this.liveTurns.delete(liveTurn.sessionId);
+  }
+
   private async settleLiveTurn(event: TuiSessionLifecycleEvent): Promise<number | undefined> {
-    const liveTurn = this.liveTurn;
-    if (!liveTurn || !event.turnId || liveTurn.turnId !== event.turnId) return undefined;
+    const liveTurn = event.turnId
+      ? [...this.liveTurns.values()].find((turn) => turn.turnId === event.turnId)
+      : undefined;
+    if (!liveTurn) return undefined;
     liveTurn.controller.abort();
     await liveTurn.task;
-    if (this.options.controller.snapshot().session?.sessionId !== liveTurn.sessionId) {
-      return undefined;
-    }
-    if (
-      this.liveTurn &&
-      (this.liveTurn.sessionId !== liveTurn.sessionId || this.liveTurn.turnId !== liveTurn.turnId)
-    ) {
-      return undefined;
-    }
+    this.liveTurns.delete(liveTurn.sessionId);
+    if (!this.isVisibleSession(liveTurn.sessionId)) return undefined;
     // An interaction can keep the user-visible turn open after Runtime stops.
     const durationMs =
       liveTurn.startedAtMs === undefined
@@ -681,7 +731,6 @@ export class TuiRuntimeEventFlow {
       terminalTurnStatus(event),
       settledDurationMs,
     );
-    this.liveTurn = undefined;
     return settledDurationMs;
   }
 

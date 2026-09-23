@@ -472,7 +472,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     requestWelcomeRebuild: () => tui.requestImmediateRender(),
     switchComposerDraft: (sessionKey) =>
       draftLifecycle?.switchSession(sessionKey) ?? Promise.resolve(),
-    detachForegroundObserver: () => runtimeEventFlow?.detachForegroundObserver(),
     adoptForegroundRun: () =>
       sessionLifecycle.adoptForegroundRun(
         controller.snapshot().session?.sessionId,
