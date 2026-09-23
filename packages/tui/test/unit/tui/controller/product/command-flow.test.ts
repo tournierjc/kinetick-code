@@ -39,6 +39,8 @@ function createReadinessCommandFlow(options: {
   reloadTui?: () => Promise<void>;
   append?: (text: string, kind?: "info" | "warning" | "error") => void;
   sessionFlow?: unknown;
+  sessionMutationFlow?: unknown;
+  interactionFlow?: unknown;
   queuedCount?: number;
 }) {
   return new TuiCommandFlow({
@@ -64,8 +66,10 @@ function createReadinessCommandFlow(options: {
     interactionFlow: {
       handleCommand: vi.fn(async () => false),
       hasPending: vi.fn(() => false),
+      ...((options.interactionFlow ?? {}) as object),
     } as never,
     sessionFlow: (options.sessionFlow ?? {}) as never,
+    sessionMutationFlow: (options.sessionMutationFlow ?? {}) as never,
     queueFlow: {} as never,
     composerDraft: { hasContent: vi.fn(() => false) } as never,
     workspaceRoots: { additionalDirectories: () => [] } as never,
@@ -1748,5 +1752,34 @@ describe("TuiCommandFlow /tabs", () => {
       "warning",
     );
     expect(append).toHaveBeenCalledWith("Usage: /tabs group <on | off>.", "warning");
+  });
+});
+
+describe("TuiCommandFlow /clone", () => {
+  it("starts the clone pipeline on the visible Session", async () => {
+    const startClone = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionMutationFlow: { startClone },
+    });
+
+    await expect(flow.submit("/clone")).resolves.toBe("consumed");
+
+    expect(startClone).toHaveBeenCalledOnce();
+  });
+
+  it("never starts a clone while an interaction is waiting for an answer", async () => {
+    const startClone = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionMutationFlow: { startClone },
+      interactionFlow: { hasPending: () => true, showPending: vi.fn() },
+    });
+
+    await expect(flow.submit("/clone")).resolves.toBe("retained");
+
+    expect(startClone).not.toHaveBeenCalled();
   });
 });

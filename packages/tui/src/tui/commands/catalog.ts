@@ -240,6 +240,15 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     unavailableReason: sessionMutationText('sessionMutation.command.fork.unavailable', 'en'),
   },
   {
+    name: 'clone',
+    description: sessionMutationText('sessionMutation.command.clone.description', 'en'),
+    category: 'Session',
+    discoverability: 'contextual',
+    runAvailability: 'idle',
+    visibleWhen: (context) => context.hasSession,
+    unavailableReason: sessionMutationText('sessionMutation.command.clone.unavailable', 'en'),
+  },
+  {
     name: 'rewind',
     description: sessionMutationText('sessionMutation.command.rewind.description', 'en'),
     category: 'Session',

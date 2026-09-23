@@ -121,6 +121,8 @@ interface TuiSessionMutationForkInvocation {
   readonly sequence: number;
   readonly sourceSessionId: string;
   readonly mode: 'fork';
+  /** `/clone` reuses this invocation: same runtime call, no boundary prompt. */
+  readonly clone?: boolean;
   readonly operationId: string;
   readonly token: number;
   readonly screenHandle: TuiFeatureScreenHandle | undefined;
@@ -1128,21 +1130,73 @@ export class TuiSessionMutationFlow {
     void this.loadSummaries(sequence);
   }
 
-  private createOperationId(mode: TuiSessionMutationMode, previous?: string): string {
+  private createOperationId(mode: TuiSessionMutationMode | 'clone', previous?: string): string {
     const generated = this.options.createOperationId?.() ?? createDefaultOperationId();
-    const operationId =
-      mode === 'rewind'
-        ? generated.replace('tui-fork_', 'tui-rewind_')
-        : mode === 'edit'
-          ? generated.replace('tui-fork_', 'tui-edit_')
-          : generated;
+    const operationId = applyOperationPrefix(generated, mode);
     if (operationId !== previous) return operationId;
-    const fallback = createDefaultOperationId();
-    return mode === 'rewind'
-      ? fallback.replace('tui-fork_', 'tui-rewind_')
-      : mode === 'edit'
-        ? fallback.replace('tui-fork_', 'tui-edit_')
-        : fallback;
+    return applyOperationPrefix(createDefaultOperationId(), mode);
+  }
+
+  /**
+   * Copy the visible Session into a new Session holding the same conversation,
+   * without asking for a boundary: the runtime uses the latest reply, so this
+   * matches "duplicate this Session" rather than "/fork" (which picks a prompt).
+   */
+  startClone(): void {
+    if (this.options.hasLiveRun()) {
+      // Same rationale as /fork: keep the draft, never start a pipeline mid-turn.
+      this.options.editor.setText('/clone');
+      this.options.surfaceHost.setChatFocus(this.options.editor);
+      this.options.setHint(sessionMutationText('sessionMutation.hint.cloneRunning'));
+      this.options.onChanged();
+      return;
+    }
+    const sourceSessionId = this.options.controller.snapshot().session?.sessionId;
+    if (!sourceSessionId) {
+      this.options.setHint(sessionMutationText('sessionMutation.hint.cloneNoSession'));
+      this.options.onChanged();
+      return;
+    }
+    this.options.setHint(sessionMutationText('sessionMutation.hint.loadingClone'));
+    this.options.onChanged();
+    const sequence = this.beginMutationInvocation();
+    const invocation: TuiSessionMutationForkInvocation = {
+      sequence,
+      sourceSessionId,
+      mode: 'fork',
+      clone: true,
+      operationId: this.createOperationId('clone'),
+      token: sequence,
+      screenHandle: undefined,
+      phase: 'options',
+    };
+    this.invocations.set(sequence, invocation);
+    void this.loadCloneOptions(sequence, invocation);
+  }
+
+  private async loadCloneOptions(
+    sequence: number,
+    invocation: TuiSessionMutationForkInvocation,
+  ): Promise<void> {
+    const options = await this.fetchForkOptions(sequence, invocation, undefined);
+    if (!options) {
+      if (this.getForkInvocation(sequence)) this.invalidateMutation(sequence);
+      this.options.setHint(undefined);
+      this.options.onChanged();
+      return;
+    }
+    if (!this.isCurrentMutation(invocation)) {
+      this.invalidateMutation(sequence);
+      return;
+    }
+    this.options.setHint(undefined);
+    if (!options.canFork) {
+      this.invocations.delete(sequence);
+      this.options.append(cloneUnavailableMessage(options), 'warning');
+      this.options.onChanged();
+      return;
+    }
+    this.openConfirmation(sequence, invocation, undefined, options);
   }
 
   private async loadSummaries(sequence: number): Promise<void> {
@@ -1262,7 +1316,7 @@ export class TuiSessionMutationFlow {
   private openConfirmation(
     sequence: number,
     invocation: TuiSessionMutationForkInvocation,
-    summary: TuiSessionInputSummary,
+    summary: TuiSessionInputSummary | undefined,
     options: TuiSessionForkOptions,
   ): void {
     if (!this.isCurrentMutation(invocation)) {
@@ -1274,6 +1328,7 @@ export class TuiSessionMutationFlow {
     const confirmation = new TuiSessionMutationForkConfirmation({
       summary,
       options,
+      mode: invocation.clone ? 'clone' : 'fork',
       onConfirm: () => this.confirmFork(sequence),
       onCancel: () => this.handleCancel(sequence),
       requestRender: this.options.onChanged,
@@ -1295,7 +1350,13 @@ export class TuiSessionMutationFlow {
 
   private async confirmFork(sequence: number): Promise<void> {
     const invocation = this.getForkInvocation(sequence);
-    if (!invocation || invocation.phase !== 'confirming' || !invocation.selectedSummary) return;
+    if (
+      !invocation ||
+      invocation.phase !== 'confirming' ||
+      (!invocation.selectedSummary && !invocation.clone)
+    ) {
+      return;
+    }
     if (!this.isCurrentMutation(invocation)) {
       this.invalidateMutation(sequence);
       return;
@@ -1317,8 +1378,16 @@ export class TuiSessionMutationFlow {
       }
       this.options.append(
         formatTuiActionFailure(forkError ?? new Error('Runtime fork request failed.'), {
-          summary: sessionMutationText('sessionMutation.error.forkRequest'),
-          nextStep: sessionMutationText('sessionMutation.error.forkRetry'),
+          summary: sessionMutationText(
+            invocation.clone
+              ? 'sessionMutation.error.cloneRequest'
+              : 'sessionMutation.error.forkRequest',
+          ),
+          nextStep: sessionMutationText(
+            invocation.clone
+              ? 'sessionMutation.error.cloneRetry'
+              : 'sessionMutation.error.forkRetry',
+          ),
           preservation: sessionMutationText('sessionMutation.error.sourceUnchanged'),
         }),
         'warning',
@@ -1326,13 +1395,21 @@ export class TuiSessionMutationFlow {
       current.confirmation?.setBusy(false);
       current.confirmation?.setError(
         rewindErrorCode(forkError)
-          ? sessionMutationText('sessionMutation.error.forkRetry')
-          : sessionMutationText('sessionMutation.error.forkRetrySameOperation'),
+          ? sessionMutationText(
+              current.clone
+                ? 'sessionMutation.error.cloneRetry'
+                : 'sessionMutation.error.forkRetry',
+            )
+          : sessionMutationText(
+              current.clone
+                ? 'sessionMutation.error.cloneRetrySameOperation'
+                : 'sessionMutation.error.forkRetrySameOperation',
+            ),
       );
       this.invocations.set(sequence, {
         ...current,
         ...(rewindErrorCode(forkError)
-          ? { operationId: this.createOperationId('fork', current.operationId) }
+          ? { operationId: this.createOperationId(current.clone ? 'clone' : 'fork', current.operationId) }
           : {}),
         phase: 'confirming',
       });
@@ -1350,10 +1427,17 @@ export class TuiSessionMutationFlow {
     } catch (error) {
       this.options.append(
         formatTuiActionFailure(error, {
-          summary: sessionMutationText('sessionMutation.error.activateFork'),
-          nextStep: sessionMutationTemplate('sessionMutation.error.openForkManually', {
-            sessionId: result.session.sessionId,
-          }),
+          summary: sessionMutationText(
+            invocation.clone
+              ? 'sessionMutation.error.activateClone'
+              : 'sessionMutation.error.activateFork',
+          ),
+          nextStep: sessionMutationTemplate(
+            invocation.clone
+              ? 'sessionMutation.error.openCloneManually'
+              : 'sessionMutation.error.openForkManually',
+            { sessionId: result.session.sessionId },
+          ),
           preservation: sessionMutationText('sessionMutation.error.sourceUnchanged'),
         }),
         'warning',
@@ -1364,7 +1448,7 @@ export class TuiSessionMutationFlow {
   private async fetchForkOptions(
     sequence: number,
     invocation: TuiSessionMutationForkInvocation,
-    summary: TuiSessionInputSummary,
+    summary: TuiSessionInputSummary | undefined,
   ): Promise<TuiSessionForkOptions | undefined> {
     const getOptions = this.options.runtime.getSessionForkOptions;
     if (!getOptions) {
@@ -1378,7 +1462,7 @@ export class TuiSessionMutationFlow {
       return await getOptions.call(
         this.options.runtime,
         invocation.sourceSessionId,
-        summary.assistantMessageId,
+        summary?.assistantMessageId,
       );
     } catch (error) {
       if (this.mutationSequence !== sequence) return undefined;
@@ -1406,13 +1490,14 @@ export class TuiSessionMutationFlow {
 
   private async forkSession(
     invocation: TuiSessionMutationForkInvocation,
-    summary: TuiSessionInputSummary,
+    summary: TuiSessionInputSummary | undefined,
   ): Promise<TuiSessionForkResult | undefined> {
     const forkSession = this.options.runtime.forkSession;
     if (!forkSession) return undefined;
+    const assistantMessageId = summary?.assistantMessageId;
     return await forkSession.call(this.options.runtime, {
       sessionId: invocation.sourceSessionId,
-      ...(summary.assistantMessageId ? { assistantMessageId: summary.assistantMessageId } : {}),
+      ...(assistantMessageId ? { assistantMessageId } : {}),
       clientRequestId: invocation.operationId,
       useSuggestedTitle: true,
       createIsolatedWorktree: false,
@@ -1487,8 +1572,11 @@ export class TuiSessionMutationFlow {
 export const TUI_SESSION_MUTATION_FORK_CONFIRMATION_SCREEN_ID = 'session-mutation:fork-confirm';
 
 interface TuiSessionMutationForkConfirmationOptions {
-  readonly summary: TuiSessionInputSummary;
+  /** Absent for `/clone`, which copies up to the latest reply instead of a chosen prompt. */
+  readonly summary?: TuiSessionInputSummary;
   readonly options: TuiSessionForkOptions;
+  /** `clone` swaps the copy and hides the boundary line. Defaults to `fork`. */
+  readonly mode?: 'fork' | 'clone';
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
   readonly requestRender: () => void;
@@ -1525,16 +1613,21 @@ export class TuiSessionMutationForkConfirmation implements TuiFeatureScreen, Com
     const width = Math.max(0, Math.floor(rawWidth));
     const height = Math.max(1, Math.floor(rawHeight));
     if (width === 0) return [];
+    const clone = this.options.mode === 'clone';
     const title = sanitizeTerminalText(
       this.options.options.suggestedTitle?.trim() ||
-        sessionMutationText('sessionMutation.confirm.fork.suggestedTitle'),
+        sessionMutationText(
+          clone
+            ? 'sessionMutation.confirm.clone.suggestedTitle'
+            : 'sessionMutation.confirm.fork.suggestedTitle',
+        ),
     );
     const source = sanitizeTerminalText(
       this.options.options.sourceTitle?.trim() ||
         sessionMutationText('sessionMutation.confirm.fork.currentSession'),
     );
     const prompt = sanitizeTerminalText(
-      this.options.summary.contentHead?.trim() ||
+      this.options.summary?.contentHead?.trim() ||
         sessionMutationText('sessionMutation.format.noPrompt'),
     );
     const worktree = this.options.options.worktreeVisible
@@ -1547,15 +1640,33 @@ export class TuiSessionMutationForkConfirmation implements TuiFeatureScreen, Com
           })
       : sessionMutationText('sessionMutation.confirm.fork.workspaceCurrent');
     const status = this.busy
-      ? chalk.hex(colors.signal)(sessionMutationText('sessionMutation.confirm.fork.busy'))
+      ? chalk.hex(colors.signal)(
+          sessionMutationText(
+            clone
+              ? 'sessionMutation.confirm.clone.busy'
+              : 'sessionMutation.confirm.fork.busy',
+          ),
+        )
       : renderTuiActionHint(sessionMutationText('sessionMutation.confirm.confirmHint'));
     const content = [
-      chalk.bold.hex(colors.signal)(sessionMutationText('sessionMutation.confirm.fork.title')),
-      chalk.hex(colors.muted)(sessionMutationText('sessionMutation.confirm.fork.helper')),
+      chalk.bold.hex(colors.signal)(
+        sessionMutationText(
+          clone ? 'sessionMutation.confirm.clone.title' : 'sessionMutation.confirm.fork.title',
+        ),
+      ),
+      chalk.hex(colors.muted)(
+        sessionMutationText(
+          clone ? 'sessionMutation.confirm.clone.helper' : 'sessionMutation.confirm.fork.helper',
+        ),
+      ),
       '',
       `${chalk.hex(colors.muted)(sessionMutationText('sessionMutation.confirm.titleLabel'))}  ${chalk.hex(colors.text)(title)}`,
       `${chalk.hex(colors.muted)(sessionMutationText('sessionMutation.confirm.sourceLabel'))} ${chalk.hex(colors.text)(source)}`,
-      `${chalk.hex(colors.muted)(sessionMutationText('sessionMutation.confirm.fromLabel'))}   ${chalk.hex(colors.text)(prompt)}`,
+      clone
+        ? chalk.hex(colors.muted)(
+            sessionMutationText('sessionMutation.confirm.clone.scope'),
+          )
+        : `${chalk.hex(colors.muted)(sessionMutationText('sessionMutation.confirm.fromLabel'))}   ${chalk.hex(colors.text)(prompt)}`,
       chalk.hex(colors.muted)(sanitizeTerminalText(worktree)),
       ...(this.error ? ['', chalk.hex(colors.warning)(sanitizeTerminalText(this.error))] : []),
     ];
@@ -1892,6 +2003,25 @@ function forkUnavailableMessage(options: TuiSessionForkOptions): string {
     return sessionMutationTemplate('sessionMutation.fork.unavailableReason', { reason });
   }
   return sessionMutationText('sessionMutation.fork.unavailableDefault');
+}
+
+function cloneUnavailableMessage(options: TuiSessionForkOptions): string {
+  const reason = options.unavailableReason?.trim();
+  if (reason) {
+    return sessionMutationTemplate('sessionMutation.clone.unavailableReason', { reason });
+  }
+  return sessionMutationText('sessionMutation.clone.unavailableDefault');
+}
+
+/** `/clone` reuses the fork call but keeps its own operation-id prefix. */
+function applyOperationPrefix(
+  operationId: string,
+  mode: TuiSessionMutationMode | 'clone',
+): string {
+  if (mode === 'rewind') return operationId.replace('tui-fork_', 'tui-rewind_');
+  if (mode === 'edit') return operationId.replace('tui-fork_', 'tui-edit_');
+  if (mode === 'clone') return operationId.replace('tui-fork_', 'tui-clone_');
+  return operationId;
 }
 
 function mutationTarget(summary: TuiSessionInputSummary): string {
