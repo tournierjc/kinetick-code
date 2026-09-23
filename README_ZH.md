@@ -91,6 +91,8 @@ npm install -g @minimax-ai/code@0.4.12 --registry=https://registry.npmjs.org/ --
 
 该命令使用公共 registry，包含可选的 SQLite 依赖，并允许执行主包和 SQLite 的安装脚本。固定版本和 Node.js 兼容范围见[安装指南](docs/installation.md)。
 
+内置更新命令 `kcode update` 只安装本分叉 GitHub Releases 上发布的归档（校验随归档发布的 `.sha256`），不会替换为上游构建；详见[更新](docs/installation.md#updating)。源码检出不会被自动更新，该命令会改为打印最新归档的安装命令。
+
 重新打开终端后检查安装：
 
 ```bash

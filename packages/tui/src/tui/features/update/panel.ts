@@ -420,9 +420,9 @@ function phaseLabel(phase: McodeUpdatePhase): string {
 }
 
 function sourceLabel(plan: ActionableMcodeUpdatePlan): string {
-  return plan.source === 'managed-installer'
-    ? 'Official installer'
-    : plan.source.replace('-global', '');
+  if (plan.source === 'managed-installer') return 'Official installer';
+  if (plan.source === 'fork-release') return 'GitHub releases';
+  return plan.source.replace('-global', '');
 }
 
 function renderAction(label: string, selected: boolean, width: number): string {

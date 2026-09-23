@@ -26,6 +26,14 @@ import {
   type McodePackageManagerRunOptions,
 } from './install-source.js';
 import { compareMcodeVersions } from './release.js';
+import {
+  KCODE_FORK_RELEASES_URL,
+  KcodeForkReleaseService,
+  usesKcodeForkUpdateSource,
+  type KcodeForkReleaseApplyResult,
+  type KcodeForkReleaseCheckResult,
+  type KcodeForkReleaseRequest,
+} from './fork-release.js';
 import { reportMcodeUpdatePhase } from './progress.js';
 import {
   mcodePrefixNonPrefixPlanMessage,
@@ -57,6 +65,12 @@ interface ManagedUpdateService {
   apply(request?: McodeUpdateRequest): Promise<McodeUpdateApplyResult>;
 }
 
+interface ForkReleaseUpdateService {
+  check(request?: KcodeForkReleaseRequest): Promise<KcodeForkReleaseCheckResult>;
+  apply(request?: KcodeForkReleaseRequest): Promise<KcodeForkReleaseApplyResult>;
+  resolveInstallCommand(request?: KcodeForkReleaseRequest): Promise<string>;
+}
+
 interface McodeManagedUpdatePlan {
   readonly source: 'managed-installer';
   readonly currentVersion: string;
@@ -71,10 +85,26 @@ interface McodePackageManagerVersionPlan {
   readonly packageTag: McodeNpmDistTag;
 }
 
+/**
+ * Plan for an installation that belongs to this fork. The release, the archive
+ * and its checksum come from the fork's GitHub Releases (see `fork-release.ts`).
+ */
+export interface McodeForkReleasePlan {
+  readonly source: 'fork-release';
+  readonly currentVersion: string;
+  readonly latestVersion: string;
+  readonly channel: 'stable' | 'preview';
+  readonly installSource: McodePackageManagerInstallSource;
+  readonly artifactUrl: string;
+}
+
 export type McodeUpdatePlan =
   | (McodeManagedUpdatePlan & { readonly kind: 'current' })
   | (McodeManagedUpdatePlan & { readonly kind: 'ahead' })
   | (McodeManagedUpdatePlan & { readonly kind: 'available' })
+  | (McodeForkReleasePlan & { readonly kind: 'current' })
+  | (McodeForkReleasePlan & { readonly kind: 'ahead' })
+  | (McodeForkReleasePlan & { readonly kind: 'available' })
   | (McodePackageManagerVersionPlan & { readonly kind: 'current' })
   | (McodePackageManagerVersionPlan & { readonly kind: 'ahead' })
   | {
@@ -115,6 +145,7 @@ export interface McodeUpdateApplicationOptions {
 export interface McodeUpdateApplicationDependencies {
   readonly detectInstallSource: () => Promise<McodeInstallSource>;
   readonly createManagedService: () => ManagedUpdateService;
+  readonly createForkReleaseService: (source: McodeInstallSource) => ForkReleaseUpdateService;
   readonly resolveLatestPackageVersion: (tag: McodeNpmDistTag) => Promise<string>;
   readonly runPackageManager: (
     command: McodePackageManagerCommand,
@@ -188,6 +219,19 @@ export class McodeUpdateApplication {
             installRoot,
             environment,
           })),
+      createForkReleaseService:
+        dependencies.createForkReleaseService ??
+        ((source) =>
+          new KcodeForkReleaseService({
+            currentVersion: options.currentVersion,
+            installSource: source,
+            ...(this.prefixInstall ? { prefixInstall: this.prefixInstall } : {}),
+            environment,
+            platform,
+            dependencies: {
+              readInstalledPackageVersion: this.dependencies.readInstalledPackageVersion,
+            },
+          })),
       resolveLatestPackageVersion:
         dependencies.resolveLatestPackageVersion ??
         ((tag) =>
@@ -248,6 +292,12 @@ export class McodeUpdateApplication {
         latestVersion: result.latestVersion,
         channel: result.channel,
       };
+    }
+    // Every other installation belongs to this fork: it updates from the fork's
+    // own releases instead of the upstream registry. `KCODE_UPDATE_SOURCE=upstream`
+    // keeps the registry paths below available.
+    if (usesKcodeForkUpdateSource(source, this.environment)) {
+      return this.inspectForkRelease(source);
     }
     if (source === 'unsupported') {
       return {
@@ -326,6 +376,7 @@ export class McodeUpdateApplication {
       throw new Error(`KCode update plan ${plan.kind} cannot be applied automatically.`);
     }
     if (plan.kind === 'available') {
+      if (plan.source === 'fork-release') return this.applyForkReleasePlan(plan, options);
       const result = await this.dependencies.createManagedService().apply({
         channel: plan.channel,
         version: plan.latestVersion,
@@ -363,6 +414,76 @@ export class McodeUpdateApplication {
         `KCode ${plan.latestVersion} was installed through ${packageManagerName(plan.source)}. ` +
         'Restart KCode to use the installed version.',
     };
+  }
+
+  private async inspectForkRelease(
+    source: Exclude<McodeInstallSource, 'managed-installer'>,
+  ): Promise<McodeUpdatePlan> {
+    // An npm prefix here carries an installer receipt or a `.minimax-code`
+    // package root: that is the upstream installer's versioned layout, whose
+    // launcher, receipt and `bin.mcode` validation a fork archive does not
+    // satisfy. Installing in place would leave the versioned launcher on the
+    // release it already points at, so the fork does not attempt it.
+    if (source === 'npm-prefix') {
+      throw new Error(
+        'This installation uses the upstream installer layout, which KCode does not ' +
+          `replace in place. Install a release archive from ${KCODE_FORK_RELEASES_URL} with ` +
+          'npm install --global, or set KCODE_UPDATE_SOURCE=upstream to keep updating it ' +
+          'through the upstream channel.',
+      );
+    }
+    const service = this.dependencies.createForkReleaseService(source);
+    // A source checkout has no package manager to install into, so the plan is
+    // the exact command that installs the newest release by hand.
+    if (source === 'unsupported') {
+      let command: string;
+      try {
+        command = await service.resolveInstallCommand();
+      } catch {
+        command =
+          `download the newest archive from ${KCODE_FORK_RELEASES_URL} ` +
+          'and install it with npm install --global';
+      }
+      return {
+        kind: 'manual',
+        source,
+        currentVersion: this.currentVersion,
+        command,
+      };
+    }
+    const result = await service.check();
+    return {
+      kind: result.status,
+      source: 'fork-release',
+      currentVersion: result.currentVersion,
+      latestVersion: result.latestVersion,
+      channel: result.channel,
+      installSource: source,
+      artifactUrl: result.release.artifact.downloadUrl,
+    };
+  }
+
+  private async applyForkReleasePlan(
+    plan: Extract<McodeUpdatePlan, { source: 'fork-release' }>,
+    options: McodeUpdateApplyOptions,
+  ): Promise<McodeUpdateOutcome> {
+    const result = await this.dependencies.createForkReleaseService(plan.installSource).apply({
+      channel: plan.channel,
+      version: plan.latestVersion,
+      ...options,
+    });
+    return result.applied
+      ? {
+          applied: true,
+          restartRequired: result.restartRequired,
+          message:
+            `KCode ${result.latestVersion} is installed from ${KCODE_FORK_RELEASES_URL}. ` +
+            'Restart running KCode sessions to use it.',
+        }
+      : {
+          applied: false,
+          message: `KCode ${result.currentVersion} is already active.`,
+        };
   }
 
   private async applyNpmPrefixUpdate(
@@ -463,6 +584,14 @@ export class McodeUpdateApplication {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Channel a plan belongs to, for user-facing update messages. */
+export function mcodeUpdateChannelLabel(plan: McodeUpdatePlan): string {
+  if (plan.kind === 'manual') return 'the fork release channel';
+  if (plan.source === 'managed-installer') return plan.channel;
+  if (plan.source === 'fork-release') return `the fork ${plan.channel} channel`;
+  return `@${plan.packageTag}`;
 }
 
 function packageManagerName(source: McodePackageManagerInstallSource): string {

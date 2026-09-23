@@ -2,8 +2,9 @@
 
 ## Fork release process (tournierjc/kinetick-code)
 
-This repository is a private fork. Its release channel is **GitHub Releases on
-`tournierjc/kinetick-code` only**. Nothing else on the MiniMax side — the npm package
+This repository is a public fork; its released archives are downloadable by
+anyone, and `kcode update` reads them. Its release channel is **GitHub Releases
+on `tournierjc/kinetick-code` only**. Nothing else on the MiniMax side — the npm package
 `@minimax-ai/code`, the `filecdn.minimax.chat` installers, the `agent.minimax.io`
 site, or the desktop app — is built from this fork, and no fork release may publish
 to any of them. The repository's `package.json` and TUI manifests stay
@@ -58,6 +59,17 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    authoritative install instructions for this fork. Upstream installer/npm
    commands that appear in mirrored docs are labeled as upstream-product-only;
    keep those labels when re-syncing docs.
+8. **Assets the updater consumes.** `kcode update` reads this repository's
+   releases through `https://api.github.com/repos/tournierjc/kinetick-code/releases` and installs the
+   asset named `kinetick-code-X.Y.Z-fork.N.tar.gz` together with its `.sha256`
+   (`<digest>  <archive name>`). A release it cannot read or verify is a release
+   the updater refuses. Therefore: publish the release as a published release,
+   not a draft (drafts are ignored); keep both assets in every release; never
+   replace an asset under a published tag — publish a new version instead. The
+   `-fork.N` prerelease marker is expected by the default `preview` channel;
+   only a bare `v<X.Y.Z>` stable promotion is invisible to it. Archives published
+   under the pre-rename `minimax-code-X.Y.Z.tar.gz` name stay installable by an
+   installation that predates the rename.
 
 Rollback: a released tag is immutable. To retract a bad release, unlist the GitHub
 Release and publish a new patch version; do not move or delete the tag.

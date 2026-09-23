@@ -1,7 +1,8 @@
-import type {
-  McodeUpdateApplyOptions,
-  McodeUpdateOutcome,
-  McodeUpdatePlan,
+import {
+  mcodeUpdateChannelLabel,
+  type McodeUpdateApplyOptions,
+  type McodeUpdateOutcome,
+  type McodeUpdatePlan,
 } from '../../../update/application.js';
 import { disposeComponents, type Component } from '../../rendering/component.js';
 import { TuiUpdatePanel } from '../../features/update/panel.js';
@@ -105,23 +106,21 @@ export class TuiUpdateFlow {
 
     if (plan.kind === 'current') {
       this.options.append(
-        plan.source === 'managed-installer'
-          ? `KCode ${plan.currentVersion} is current on ${plan.channel}.`
-          : `KCode ${plan.currentVersion} is current on @${plan.packageTag}.`,
+        `KCode ${plan.currentVersion} is current on ${mcodeUpdateChannelLabel(plan)}.`,
       );
       return;
     }
     if (plan.kind === 'ahead') {
       this.options.append(
-        `KCode ${plan.currentVersion} is newer than ${
-          plan.source === 'managed-installer' ? plan.channel : `@${plan.packageTag}`
-        } ${plan.latestVersion}.`,
+        `KCode ${plan.currentVersion} is newer than ${mcodeUpdateChannelLabel(plan)} ` +
+          `${plan.latestVersion}.`,
       );
       return;
     }
     if (plan.kind === 'manual') {
       this.options.append(
-        `Automatic update is unavailable for this installation. Update manually with: ${plan.command}`,
+        `This installation is not managed by a package manager. ` +
+          `Update manually with: ${plan.command}`,
         'warning',
       );
       return;
