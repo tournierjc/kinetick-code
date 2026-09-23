@@ -25,6 +25,23 @@ export type KcodeProviderKind =
 export const KCODE_COPILOT_PROVIDER_ID = 'github-copilot';
 
 /**
+ * Sign-ins `/login` can start, named the way the user types them. MiniMax is the
+ * only one the auth command runs today; the argument completions and the runtime
+ * check both read this list, so a sign-in cannot be offered without being
+ * accepted, or accepted without being offered. Every other connection is
+ * configured in `/provider`, which is where `/login` points when it is handed
+ * one of their ids.
+ */
+export const KCODE_LOGIN_PROVIDERS: readonly {
+  readonly providerId: string;
+  readonly name: string;
+}[] = [{ providerId: 'minimax', name: 'MiniMax' }];
+
+export function isKcodeLoginProviderId(providerId: string): boolean {
+  return KCODE_LOGIN_PROVIDERS.some((provider) => provider.providerId === providerId);
+}
+
+/**
  * Runtime prefixes the id of every configured provider, so the id a snapshot
  * receives is not the key the connector writes. Mirrors `CUSTOM_PROVIDER_ID_PREFIX`
  * in the model system's `resolution/model-key.ts`.

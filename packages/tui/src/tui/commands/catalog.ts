@@ -2,6 +2,7 @@ import type { SlashCommand } from '../widgets/autocomplete.js';
 import { fuzzyFilter } from '../engine/public.js';
 import { TuiContributionRegistry } from '../../contributions/index.js';
 import { TUI_COMMAND_DESCRIPTORS } from '../../application/command-descriptors.js';
+import { KCODE_LOGIN_PROVIDERS } from '../../provider/contract.js';
 import { sessionHistoryText, sessionMutationText } from '../features/session-mutation/copy.js';
 
 export type TuiCommandCategory =
@@ -338,8 +339,15 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'login',
-    description: 'Sign in to use Kinetick Code Agent features',
+    description: 'Sign in to MiniMax; /provider connects the rest',
     category: 'Runtime',
+    argumentHint: `[${KCODE_LOGIN_PROVIDERS.map((provider) => provider.providerId).join(' | ')}]`,
+    getArgumentCompletions: argumentCompleter(
+      KCODE_LOGIN_PROVIDERS.map((provider) => [
+        provider.providerId,
+        `Sign in to ${provider.name}`,
+      ]),
+    ),
     discoverability: 'contextual',
     visibleWhen: (context) => !context.managedTokenPresent,
   },

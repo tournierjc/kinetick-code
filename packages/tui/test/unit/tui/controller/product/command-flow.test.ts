@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { TuiCommandFlow } from "../../../../../src/tui/controller/product/command-flow.js";
+import { KCODE_COMMANDS } from "../../../../../src/tui/commands/catalog.js";
 import {
   KCODE_TUI_LOGIN_REQUIRED_MESSAGE,
   TuiLoginRequiredError,
@@ -42,6 +43,7 @@ function createReadinessCommandFlow(options: {
   sessionFlow?: unknown;
   sessionMutationFlow?: unknown;
   interactionFlow?: unknown;
+  auth?: unknown;
   queuedCount?: number;
 }) {
   return new TuiCommandFlow({
@@ -96,11 +98,56 @@ function createReadinessCommandFlow(options: {
       : {}),
     append: options.append ?? vi.fn(),
     setHint: options.setHint ?? vi.fn(),
+    ...(options.auth ? { auth: options.auth } : {}),
     onChanged: vi.fn(),
   });
 }
 
 describe("TuiCommandFlow", () => {
+  it("offers the supported sign-in providers as /login arguments", () => {
+    const login = KCODE_COMMANDS.find((command) => command.name === "login");
+
+    expect(login?.argumentHint).toBe("[minimax]");
+    expect(login?.getArgumentCompletions?.("")).toEqual([
+      { value: "minimax", label: "minimax", description: "Sign in to MiniMax" },
+    ]);
+  });
+
+  it("signs in to the named provider through the same region picker as /provider", async () => {
+    const show = vi.fn();
+    const auth = { login: vi.fn() };
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      surface: { show, close: vi.fn(() => true) } as never,
+      auth,
+    });
+
+    await expect(flow.submit("/login minimax")).resolves.toBe("consumed");
+
+    expect(show).toHaveBeenCalledTimes(1);
+    // Nothing was signed in until the picker's own callback fires.
+    expect(auth.login).not.toHaveBeenCalled();
+  });
+
+  it("sends an unsupported /login provider to /provider instead of signing in to MiniMax", async () => {
+    const append = vi.fn();
+    const show = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      append,
+      surface: { show, close: vi.fn(() => true) } as never,
+      auth: {},
+    });
+
+    await expect(flow.submit("/login OpenRouter")).resolves.toBe("retained");
+
+    expect(show).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      "/login signs in to minimax. Run /provider to connect openrouter.",
+      "warning",
+    );
+  });
+
   it("opens /statusline locally without waiting for hydration or submitting a model turn", async () => {
     const showStatusLine = vi.fn();
     const whenReady = vi.fn(() => new Promise<void>(() => undefined));

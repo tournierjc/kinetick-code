@@ -9,6 +9,7 @@ import {
 import type { TuiComposerDraft } from '../../features/composer/draft.js';
 import type { TuiWorkspaceRoots } from '../../features/composer/workspace-roots.js';
 import { TuiLoginRegionPicker } from '../../features/auth/login-region-picker.js';
+import { KCODE_LOGIN_PROVIDERS, isKcodeLoginProviderId } from '../../../provider/contract.js';
 import { TuiPermissionModePicker } from '../../features/interaction/permission-mode-picker.js';
 import { TuiSettingsPicker } from '../../features/settings/picker.js';
 import { TuiHotkeysPicker } from '../../features/settings/hotkeys-picker.js';
@@ -1253,7 +1254,20 @@ export class TuiCommandFlow {
         }
         await this.options.permissionModeFlow.set(mode);
       },
-      login: () => this.showLoginRegionPicker(),
+      login: ({ args }) => {
+        const requested = args.trim().toLowerCase();
+        if (requested && !isKcodeLoginProviderId(requested)) {
+          // Every other connection is configured in `/provider`, which is also
+          // where MiniMax's credential source is chosen. Naming it keeps a
+          // mistyped provider actionable instead of silently signing in to MiniMax.
+          this.options.append(
+            `/login signs in to ${KCODE_LOGIN_PROVIDERS.map((provider) => provider.providerId).join(', ')}. Run /provider to connect ${requested}.`,
+            'warning',
+          );
+          return 'retained';
+        }
+        this.showLoginRegionPicker();
+      },
       logout: () => this.runAuthCommand('logout'),
       doctor: async () => this.options.featureFlow.showConfigurationInspection(false),
       context: async () => this.options.activeRunFlow.showContext(),
