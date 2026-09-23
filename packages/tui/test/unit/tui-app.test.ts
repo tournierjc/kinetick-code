@@ -1590,10 +1590,14 @@ describe("createTuiApp", () => {
   it("routes /update through the in-process update confirmation flow", async () => {
     const plan = {
       kind: "available" as const,
-      source: "managed-installer" as const,
+      source: "release" as const,
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
       channel: "stable" as const,
+      installSource: "npm-global" as const,
+      artifactUrl:
+        "https://github.com/tournierjc/kinetick-code/releases/download/v1.2.4/" +
+        "kinetick-code-1.2.4.tar.gz",
     };
     const inspectUpdate = vi.fn(async () => plan);
     const applyUpdate = vi.fn(async () => ({
@@ -1636,18 +1640,17 @@ describe("createTuiApp", () => {
     await app.stop();
   });
 
-  it("leaves the current TUI after /update stages an npm-prefix replacement", async () => {
+  it("leaves the current TUI after /update installs a release that asks for a restart", async () => {
     const plan = {
-      kind: "package-manager" as const,
-      source: "npm-prefix" as const,
+      kind: "available" as const,
+      source: "release" as const,
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
-      packageTag: "latest" as const,
-      command: {
-        executable: "npm",
-        args: ["install"],
-        display: "npm install",
-      },
+      channel: "preview" as const,
+      installSource: "pnpm-global" as const,
+      artifactUrl:
+        "https://github.com/tournierjc/kinetick-code/releases/download/v1.2.4/" +
+        "kinetick-code-1.2.4.tar.gz",
     };
     const requestRestart = vi.fn();
     const app = createTuiApp({

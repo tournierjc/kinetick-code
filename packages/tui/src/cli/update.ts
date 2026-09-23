@@ -5,11 +5,8 @@ import {
   mcodeUpdateChannelLabel,
   type McodeUpdatePlan,
 } from '../update/application.js';
-import { KCODE_FORK_RELEASES_URL } from '../update/fork-release.js';
-import {
-  mcodePrefixActivationScheduledMessage,
-  mcodePrefixJournalScheduleFailedMessage,
-} from '../update/messages.js';
+import { mcodePrefixActivationScheduledMessage } from '../update/messages.js';
+import { KCODE_RELEASES_URL } from '../update/release.js';
 import { schedulePendingMcodePrefixUpdate } from '../update/prefix-update.js';
 import type { McodeUpdatePhase } from '../update/progress.js';
 
@@ -62,7 +59,7 @@ export async function runMcodeUpdate(
 
   write(renderAvailableUpdate(plan));
   if (!interactive) {
-    write(`${renderNonInteractiveInstruction(plan)}\n`);
+    write(`${renderNonInteractiveInstruction()}\n`);
     return;
   }
 
@@ -81,9 +78,6 @@ export async function runMcodeUpdate(
     });
     progress.stop();
     write(`${outcome.message}\n`);
-    if (outcome.restartRequired && !(await schedulePendingPrefixUpdate())) {
-      throw new Error(mcodePrefixJournalScheduleFailedMessage());
-    }
   } catch (error) {
     progress.stop();
     throw error;
@@ -184,14 +178,8 @@ function phaseLabel(phase: McodeUpdatePhase): string {
   return 'Completing update';
 }
 
-function updateProcessLabel(
-  plan: Extract<McodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
-): string {
-  if (plan.kind === 'available') {
-    return plan.source === 'fork-release' ? 'update' : 'installer';
-  }
-  if (plan.source === 'npm-prefix') return 'npm';
-  return plan.source.replace('-global', '');
+function updateProcessLabel(plan: Extract<McodeUpdatePlan, { kind: 'available' }>): string {
+  return plan.installSource.replace('-global', '');
 }
 
 function truncateOutput(value: string): string {
@@ -199,34 +187,16 @@ function truncateOutput(value: string): string {
   return `${value.slice(0, UPDATE_OUTPUT_MAX_LENGTH - 1)}…`;
 }
 
-function renderAvailableUpdate(
-  plan: Extract<McodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
-): string {
-  if (plan.kind === 'available') {
-    if (plan.source === 'fork-release') {
-      return (
-        `KCode ${plan.latestVersion} is available from ${KCODE_FORK_RELEASES_URL} ` +
-        `(current ${plan.currentVersion}, ${plan.installSource.replace('-global', '')} installation).\n`
-      );
-    }
-    return (
-      `KCode ${plan.latestVersion} is available on ${plan.channel} ` +
-      `(current ${plan.currentVersion}).\n`
-    );
-  }
+function renderAvailableUpdate(plan: Extract<McodeUpdatePlan, { kind: 'available' }>): string {
   return (
-    `KCode ${plan.latestVersion} is available on @${plan.packageTag} ` +
-    `(current ${plan.currentVersion}, installed through ${plan.source.replace('-global', '')}).\n` +
-    `Command: ${plan.command.display}\n`
+    `KCode ${plan.latestVersion} is available from ${KCODE_RELEASES_URL} ` +
+    `(current ${plan.currentVersion}, ${plan.installSource.replace('-global', '')} installation, ` +
+    `${mcodeUpdateChannelLabel(plan)}).\n`
   );
 }
 
-function renderNonInteractiveInstruction(
-  plan: Extract<McodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
-): string {
-  return plan.kind === 'package-manager'
-    ? `No interactive confirmation is available. Run: ${plan.command.display}`
-    : 'No interactive confirmation is available. Run `kcode update` from a terminal to install it.';
+function renderNonInteractiveInstruction(): string {
+  return 'No interactive confirmation is available. Run `kcode update` from a terminal to install it.';
 }
 
 async function confirmInTerminal(message: string): Promise<boolean> {

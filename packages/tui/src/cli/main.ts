@@ -199,13 +199,12 @@ async function formatTuiCliError(error: unknown): Promise<string> {
     return diagnostic;
   }
 
-  const { buildMcodePackageManagerCommand } = await import('../update/install-source.js');
-  const command = buildMcodePackageManagerCommand('npm-global', MINIMAX_CODE_VERSION);
+  const { KCODE_RELEASES_URL } = await import('../update/release.js');
   return [
     'KCode could not load its native SQLite dependency.',
     'If npm reported blocked install scripts, the installation needs explicit script approval.',
-    'Reinstall with the original installer. For npm installations, run:',
-    `  ${command.display} --foreground-scripts`,
+    `Reinstall the release archive from ${KCODE_RELEASES_URL}. For an npm installation, run:`,
+    '  npm install --global ./kinetick-code-<version>.tar.gz --ignore-scripts=false --foreground-scripts',
     '',
     `Original error: ${diagnostic}`,
   ].join('\n');

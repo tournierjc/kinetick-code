@@ -7,7 +7,7 @@ export interface McodeStartupUpdateNotice {
 export function resolveMcodeStartupUpdateNotice(
   plan: McodeUpdatePlan,
 ): McodeStartupUpdateNotice | undefined {
-  if (plan.kind !== 'available' && plan.kind !== 'package-manager') return undefined;
+  if (plan.kind !== 'available') return undefined;
   const latestVersion = plan.latestVersion.trim();
   return latestVersion ? { latestVersion } : undefined;
 }

@@ -29,10 +29,7 @@ const UPDATE_ANIMATION_INTERVAL_MS = 80;
 const UPDATE_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 const UPDATE_RECENT_OUTPUT_LINES = 4;
 
-type ActionableMcodeUpdatePlan = Extract<
-  McodeUpdatePlan,
-  { kind: 'available' | 'package-manager' }
->;
+type ActionableMcodeUpdatePlan = Extract<McodeUpdatePlan, { kind: 'available' }>;
 
 type McodeUpdatePanelState =
   | { status: 'review' }
@@ -162,8 +159,8 @@ export class TuiUpdatePanel implements Component, Focusable {
     this.setState({
       status: 'applying',
       startedAtMs: this.now(),
-      phase: this.options.plan.kind === 'package-manager' ? 'installing' : 'checking',
-      cancellable: this.options.plan.kind !== 'package-manager',
+      phase: 'checking',
+      cancellable: true,
       cancelRequested: false,
     });
     try {
@@ -344,10 +341,7 @@ export class TuiUpdatePanel implements Component, Focusable {
 
   private renderDetails(width: number): string[] {
     if (!this.detailsExpanded) return [];
-    const command =
-      this.options.plan.kind === 'package-manager'
-        ? this.options.plan.command.display
-        : 'Signature + checksum + staging + atomic activation';
+    const command = `Archive: ${this.options.plan.artifactUrl}`;
     return ['', chalk.hex(colors.dim)('Details'), ...renderWrapped(command, width, colors.muted)];
   }
 
@@ -420,9 +414,7 @@ function phaseLabel(phase: McodeUpdatePhase): string {
 }
 
 function sourceLabel(plan: ActionableMcodeUpdatePlan): string {
-  if (plan.source === 'managed-installer') return 'Official installer';
-  if (plan.source === 'fork-release') return 'GitHub releases';
-  return plan.source.replace('-global', '');
+  return `${plan.installSource.replace('-global', '')} global installation`;
 }
 
 function renderAction(label: string, selected: boolean, width: number): string {

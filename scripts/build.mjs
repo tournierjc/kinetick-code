@@ -104,7 +104,6 @@ const result = await build({
     __BUILD_PROFILE__: '"tui"',
     __TUI_BUILD_ENV__: '"prod"',
     __TUI_BUILD_VARIANT__: '"standard"',
-    __TUI_NPM_DIST_TAG__: '"latest"',
   },
   logLevel: "info",
 });
