@@ -105,7 +105,7 @@ function createHarness(
       state: "pending" as const,
       providerId: "github-copilot" as const,
     })),
-    listUserModelProviders: vi.fn(async () => []),
+    listModelProviders: vi.fn(async () => []),
     getMiniMaxApiKeyStatus: vi.fn(async () => ({ hasApiKey: false })),
     getMiniMaxModelSource: vi.fn(async () => "token_plan" as const),
     deleteUserModelProvider: vi.fn(async () => undefined),
@@ -203,6 +203,41 @@ function createHarness(
 }
 
 describe("TuiFeatureFlow", () => {
+  it("connects a provider from the panel and hands the list back", async () => {
+    const harness = createHarness({
+      loadProviderTemplates: async () => [
+        {
+          providerId: "openrouter",
+          name: "OpenRouter",
+          apiFormat: "openai-completions",
+          baseUrl: "https://openrouter.ai/api/v1",
+          models: [{ modelId: "openai/gpt-5-mini", displayName: "GPT-5 Mini" }],
+        },
+      ] as never,
+    });
+
+    await harness.flow.showProviderManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    expect(stripAnsi(manager.render(110).join("\n"))).toContain("a add provider");
+    manager.handleInput("a");
+
+    await vi.waitFor(() => expect(harness.shown).toHaveLength(2));
+    const catalogue = harness.shown[1] as {
+      render(width: number): string[];
+      handleInput(data: string): void;
+    };
+    await vi.waitFor(() =>
+      expect(stripAnsi(catalogue.render(90).join("\n"))).toContain("OpenRouter"),
+    );
+
+    // Backing out of the catalogue returns to the panel that opened it.
+    catalogue.handleInput("\u001b");
+    await vi.waitFor(() => expect(harness.shown).toHaveLength(3));
+  });
+
   it("opens the Codex OAuth URL from the independent /provider row", async () => {
     const openExternalTarget = vi.fn(async () => undefined);
     const harness = createHarness({ openExternalTarget });

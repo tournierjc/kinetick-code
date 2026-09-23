@@ -139,8 +139,8 @@ export function createProcessLocalApplication(
       startCopilotOAuthLogin: () => options.modelProvider.copilotOAuth.startLogin(),
       cancelCopilotOAuthLogin: async (loginId) =>
         options.modelProvider.copilotOAuth.cancelLogin(loginId),
-      listUser: async () =>
-        options.modelProvider.providers.listUserProviders().map(toProviderRecord),
+      listProviders: async () =>
+        options.modelProvider.providers.listProviders().map(toProviderRecord),
       getMiniMaxApiKeyStatus: async () => options.modelProvider.providers.getMinimaxApiKeyStatus(),
       getMiniMaxModelSource: async () => options.modelProvider.providers.getMinimaxModelSource(),
       setMiniMaxModelSource: async ({ source }) => {

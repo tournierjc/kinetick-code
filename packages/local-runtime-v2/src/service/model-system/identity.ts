@@ -18,6 +18,24 @@ export const OPENAI_CODEX_PROVIDER_ID = 'openai-codex';
  */
 export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot';
 
+/**
+ * Provider ids whose connection a dedicated surface owns: the managed MiniMax
+ * identity, its BYOK API-key twin, and the two OAuth connectors. The generic
+ * BYOK paths — listing a connection in `/provider`, testing one, offering a
+ * config entry as an editable custom connection — must leave them alone, or one
+ * connection would be reachable twice with two different behaviours.
+ */
+export const DEDICATED_CONNECTION_PROVIDER_IDS: ReadonlySet<string> = new Set([
+  MANAGED_MINIMAX_PROVIDER_ID,
+  MINIMAX_API_PROVIDER_ID,
+  OPENAI_CODEX_PROVIDER_ID,
+  GITHUB_COPILOT_PROVIDER_ID,
+]);
+
+export function hasDedicatedConnectionSurface(providerId: string): boolean {
+  return DEDICATED_CONNECTION_PROVIDER_IDS.has(providerId);
+}
+
 export const MODEL_PROVIDER_SOURCES = ['provider', 'minimax_api', 'custom_provider'] as const;
 export type ModelProviderSource = (typeof MODEL_PROVIDER_SOURCES)[number];
 

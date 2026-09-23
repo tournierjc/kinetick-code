@@ -130,6 +130,20 @@ One failure to note: `release:cli` pushed the release branch and tag, then its o
 
 Not run: Windows installation validation (paused repository-wide), any live provider or service call, and an upgrade of a real `@minimax-ai/code` installation to this release — the archive's install path was validated by package-manager installation in CI and by inspection here, not by upgrading a user's machine. `main` carries `0.5.2` since the version PR merged (`f28fd49`).
 
+### Provider connection surface, 2026-09-23
+
+Verification results for the `/provider` connection surface at code revision `3289a51` (the documentation commit that follows changes no code).
+
+`pnpm verify` passed all 14 gates on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0: source inventory (4,237 files), generated paths (127 package exports), source export, release tooling (43 tests), typecheck, build, standalone boundary, egress boundary, built artifacts (4 tests), capabilities (4,620 tests in 174 files), status contract (9 tests), CLI/ACP smoke (21 tests), offline BYOK (3 tests), and permission policy (142 tests). `test:windows`, `test:sandbox` and `test:release-package` are skipped on this platform.
+
+The change adds 10 tests: 4 in the model-system service suite (the builtin tree is listed, the four identities that own a dedicated row are skipped, a builtin connection is tested against its own endpoint and key, and those identities stay refused by the generic test path), 1 in the provider application suite (a builtin entry normalizes to a read-only row), 4 in the `/provider` panel suite (the row renders with its endpoint and model roster, `t` tests it, `e` points at `config.yaml`, `a` runs the connect action and is absent from a host that cannot save one), and 1 in the feature-flow suite (the connect action opens the catalogue and backing out returns to the panel).
+
+The data path was proven with the built CLI against an isolated data directory whose config declares `provider.openrouter`: `kcode provider list` reports the openrouter row beside the two MiniMax rows and no duplicate, and `kcode provider test openrouter` answered `success: true, state: available` after dialling a loopback stand-in that logged `POST /v1/chat/completions` carrying that entry's own key. `kcode provider test minimax` still answers `Model provider not found`, and the config file was byte-identical afterwards, so nothing in the new path writes the builtin tree.
+
+A real PTY session of the built CLI with the same isolated config showed the panel itself: the list renders `○ OpenRouter  Enabled · 1 model` beside the two MiniMax rows, and selecting it prints `Enabled · openai-completions · sk-o****onal · 1 model`, `http://127.0.0.1:8099/v1` and `openai/gpt-5-mini`, under the footer `↑↓ move · Space use · r refresh models · e edit · t test · a add provider · Esc close`. Enter on that row answers `OpenRouter comes from config.yaml. Press t to test it, or choose one of its models in /model.` The session was offline: nothing was signed in, no model was called, and the panel's own connect flow was left to the feature-flow tests.
+
+NOT RUN: a real OpenRouter call (the endpoint above is a local stand-in, so the resolution path is proven, not the service), and Windows or macOS execution.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.

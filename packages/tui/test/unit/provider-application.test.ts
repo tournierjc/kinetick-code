@@ -28,7 +28,7 @@ function createPort() {
       state: 'disconnected' as const,
       providerId: 'github-copilot' as const,
     })),
-    listUserModelProviders: vi.fn(async () => [
+    listModelProviders: vi.fn(async () => [
       {
         providerId: 'custom_provider:openai',
         name: 'OpenAI',
@@ -141,7 +141,7 @@ describe('McodeProviderApplication', () => {
       providerId: 'github-copilot',
     });
     // Runtime hands back the prefixed id, not the bare key the connector writes.
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:github-copilot',
         name: 'GitHub Copilot',
@@ -166,6 +166,42 @@ describe('McodeProviderApplication', () => {
       status: { state: 'connected' },
       models: [{ modelId: 'claude-opus-4.8' }],
     });
+  });
+
+  it('lists a connection the builtin tree owns as a read-only row', async () => {
+    const port = createPort();
+    // Runtime hands back the bare id for an entry in the builtin `provider`
+    // tree, and marks the tree it came from.
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'openrouter',
+        name: 'OpenRouter',
+        source: 'provider',
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        hasApiKey: false,
+        maskedApiKey: 'sk-o****MPLE',
+        models: [{ modelId: 'openai/gpt-5-mini', displayName: 'GPT-5 Mini', selected: true }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    const row = snapshot.providers.find((provider) => provider.providerId === 'openrouter');
+    expect(row).toMatchObject({
+      name: 'OpenRouter',
+      kind: 'builtin',
+      // The panel shows and tests it; config.yaml owns the endpoint and key.
+      readOnly: true,
+      active: true,
+      enabled: true,
+      baseUrl: 'https://openrouter.ai/api/v1',
+      models: [{ modelId: 'openai/gpt-5-mini' }],
+    });
+    // No revision means no candidate save may target it.
+    expect(row?.configRevision).toBeUndefined();
   });
 
   it('builds a CLI-owned snapshot without exposing raw API keys', async () => {
@@ -275,7 +311,7 @@ describe('McodeProviderApplication', () => {
 
   it('preserves the Runtime-supported OpenAI Responses protocol', async () => {
     const port = createPort();
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:responses',
         name: 'OpenAI Responses',
@@ -309,7 +345,7 @@ describe('McodeProviderApplication', () => {
 
   it('keeps a disabled provider inactive even when a model is still selected', async () => {
     const port = createPort();
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:byok',
         name: 'BYOK Vendor',
@@ -338,7 +374,7 @@ describe('McodeProviderApplication', () => {
 
   it('keeps an enabled provider active while a model is selected', async () => {
     const port = createPort();
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:byok',
         name: 'BYOK Vendor',

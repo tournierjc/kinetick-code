@@ -418,7 +418,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'provider',
-    description: 'View providers and edit MiniMax credentials',
+    description: 'View, connect, and edit model providers',
     category: 'Runtime',
   },
   {
