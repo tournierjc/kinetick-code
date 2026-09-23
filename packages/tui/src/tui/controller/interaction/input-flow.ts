@@ -123,6 +123,7 @@ export class TuiInputFlow {
       item,
     ) => {
       previousAutocompleteSelect?.(suggestions, item);
+      if ('pluginId' in item) return;
       const imageReference = selectedImageMentionReference(item.value, suggestions.prefix);
       if (!imageReference) return;
       void this.options.composerDraft.queueAttachment(imageReference).catch((error: unknown) =>
@@ -558,6 +559,7 @@ export class TuiInputFlow {
       this.options.editor.restoreDraft({
         ...this.clearedEditorDraft,
         text: '',
+        pluginMentions: [],
         cursor: 0,
         pastes: [],
         attachmentPlaceholders: [],

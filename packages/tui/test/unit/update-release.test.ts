@@ -48,7 +48,7 @@ function asset(name: string, size: number, tag = 'v0.0.0') {
     size,
     url: `https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/${name}`,
     browser_download_url:
-      `https://github.com/tournierjc/kinetick-code/releases/download/${tag}/` + name,
+      `https://github.com/tournierjc/kinetick-code/releases/download/${tag}/${name}`,
   };
 }
 
@@ -244,7 +244,7 @@ describe('KCode release channel', () => {
       artifact: {
         name,
         url: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/archive',
-        downloadUrl: 'https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3/' + name,
+        downloadUrl: `https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3/${name}`,
         size: ARCHIVE_BYTES.length,
         checksumUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/checksum',
       },

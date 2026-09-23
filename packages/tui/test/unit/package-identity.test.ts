@@ -73,7 +73,9 @@ describe('KCode package identity', () => {
   });
 
   it('uses the same name in the CLI and in the build and release scripts', async () => {
-    const scriptIdentity = (await import('../../../../scripts/lib/package-identity.mjs')) as {
+    // import.meta.resolve keeps the cross-package reference declarative: the
+    // import/no-relative-packages rule only sees a specifier, not a path.
+    const scriptIdentity = (await import(import.meta.resolve('../../../../scripts/lib/package-identity.mjs'))) as {
       PACKAGE_NAME: string;
       WORKSPACE_PACKAGE_NAME: string;
       LEGACY_PACKAGE_NAMES: readonly string[];

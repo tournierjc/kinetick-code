@@ -871,6 +871,48 @@ test('candidate rejects mismatched receipts and requires successful same-revisio
 });
 
 
+test('Windows contract profile fails closed off Windows', () => {
+  const result = spawnSync(process.execPath, ['scripts/verify.mjs', '--profile', 'windows', '--list'], {
+    cwd: path.resolve('.'),
+    encoding: 'utf8',
+  });
+  if (process.platform === 'win32') {
+    assert.equal(result.status, 0, result.stderr);
+  } else {
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /requires a Windows host/);
+  }
+});
+
+test('Windows contract profile selects focused gates', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'windows-profile-'));
+  try {
+    const fixture = path.join(root, 'verify.mjs');
+    copyFileSync(new URL('../scripts/verify.mjs', import.meta.url), fixture);
+    const preload = path.join(root, 'platform.cjs');
+    writeFileSync(preload, "Object.defineProperty(process, 'platform', { value: 'win32' });\n");
+    const result = spawnSync(process.execPath, ['--require', preload, fixture, '--profile', 'windows', '--list'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.stdout.trim().split('\n'), [
+      'check:source',
+      'check:tsconfig',
+      'export source preview',
+      'test:release-tools',
+      'lint:tui',
+      'build',
+      'check:standalone',
+      'test:artifact',
+      'test:windows',
+    ]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('source inventory rejects unregistered, missing and duplicate first-party test gates', () => {
   const existing = 'packages/example/src/existing.test.ts';
   const omitted = 'packages/example/test/omitted.spec.tsx';
@@ -1048,5 +1090,42 @@ test('source imports preserve vendored Office schema bytes through Git staging',
   for (const autocrlf of ['true', 'false']) {
     git('-c', `core.autocrlf=${autocrlf}`, 'add', '--', '.gitattributes', schema);
     assert.deepEqual(git('show', `:${schema}`), bytes);
+  }
+});
+
+test('TUI lint rejects semantic regressions in source and tests while preserving engine exceptions', async () => {
+  const { ESLint } = await import('eslint');
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const eslint = new ESLint({ cwd: root });
+  const rulesFor = async (source, filePath) => {
+    const [result] = await eslint.lintText(source, { filePath });
+    assert.equal(result.fatalErrorCount, 0, JSON.stringify(result.messages));
+    return result.messages.filter(message => message.severity === 2).map(message => message.ruleId);
+  };
+  const shadow = 'const value = 1; export function sample(value: number) { return value; }\n';
+  for (const file of ['packages/tui/src/lint-probe.ts', 'packages/tui/test/unit/lint-probe.test.ts']) {
+    assert.ok((await rulesFor(shadow, file)).includes('@typescript-eslint/no-shadow'), file);
+    assert.ok((await rulesFor('export const compare = (value: number) => value == 1;\n', file)).includes('eqeqeq'), file);
+  }
+  assert.ok((await rulesFor('export const compare = (value) => value == 1;\n', 'packages/tui/test/lint-probe.mjs')).includes('eqeqeq'));
+  assert.ok(!(await rulesFor(shadow, 'packages/tui/src/tui/engine/lint-probe.ts')).includes('@typescript-eslint/no-shadow'));
+  assert.ok((await rulesFor(shadow, 'packages/tui/src/tui/engine/public.ts')).includes('@typescript-eslint/no-shadow'));
+  assert.ok((await rulesFor('export const compare = (value: number) => value == 1;\n', 'packages/tui/src/tui/engine/lint-probe.ts')).includes('eqeqeq'));
+  const [formatting] = await eslint.lintText('export const label = "synthetic";\n', { filePath: 'packages/tui/src/lint-probe.ts' });
+  assert.ok(formatting.messages.some(message => message.ruleId === 'prettier/prettier' && message.severity === 1));
+  assert.equal(await eslint.isPathIgnored('packages/tui/test/unit/lint-probe.test.ts'), false);
+  assert.equal(await eslint.isPathIgnored('packages/tui/test/pi-084-upstream/lint-probe.test.ts'), true);
+  assert.equal(await eslint.isPathIgnored('third_party/pi-mono/packages/tui/src/lint-probe.ts'), true);
+});
+
+test('TUI lint failure stops full and platform verification before compilation or build', t => {
+  const fixture = verificationFixture(t);
+  for (const profile of ['full', 'platform', 'archive']) {
+    const result = fixture.run(['--profile', profile], { VERIFY_FIXTURE_FAIL: 'lint:tui' });
+    assert.equal(result.status, 1, result.stderr);
+    const report = fixture.report();
+    assert.equal(report.gates.find(gate => gate.name === 'lint:tui').status, 'FAIL');
+    assert.equal(report.gates.find(gate => gate.name === 'lint:tui').exitCode, 17);
+    assert.equal(report.gates.find(gate => gate.name === 'build').status, 'NOT_RUN');
   }
 });

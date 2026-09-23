@@ -64,43 +64,39 @@ export class KcodeAuthApplication implements KcodeAuthPort {
     onProgress?: (progress: KcodeAuthProgress) => void,
     region: MavisRegion = this.scope.region,
   ): Promise<KcodeAuthResult> {
-    try {
-      const requestedScope = { ...this.scope, region };
-      const switchesRegion = !isSameScope(requestedScope, this.scope);
-      let sharedAuthCore = this.options.sharedAuthCore;
-      if (switchesRegion) {
-        if (!this.options.resolveSharedAuthCore) {
-          throw new Error(formatEnvironmentConflict(this.scope, requestedScope));
-        }
-        sharedAuthCore = this.options.resolveSharedAuthCore(region);
+    const requestedScope = { ...this.scope, region };
+    const switchesRegion = !isSameScope(requestedScope, this.scope);
+    let sharedAuthCore = this.options.sharedAuthCore;
+    if (switchesRegion) {
+      if (!this.options.resolveSharedAuthCore) {
+        throw new Error(formatEnvironmentConflict(this.scope, requestedScope));
       }
-      const wasAuthenticated = (await sharedAuthCore.getStatus()).status === 'authenticated';
-      let deviceFlowStarted = false;
-      await sharedAuthCore.login({
-        onDeviceAuthorization: (authorization: DeviceAuthorizationPrompt) => {
-          deviceFlowStarted = true;
-          onProgress?.({ state: 'device-authorization', ...authorization });
-        },
-      });
-      this.persistRegionPreference(requestedScope);
-      const alreadyAuthenticated = wasAuthenticated && !deviceFlowStarted;
-      const result = {
-        state: alreadyAuthenticated
-          ? ('already-authenticated' as const)
-          : ('authenticated' as const),
-        message: alreadyAuthenticated
-          ? switchesRegion
-            ? `Already signed in with ${formatRegion(requestedScope.region)}.`
-            : 'Already signed in with MiniMax.'
-          : switchesRegion
-            ? `Signed in with ${formatRegion(requestedScope.region)}.`
-            : 'Signed in with MiniMax.',
-        ...(switchesRegion ? { restartRequired: true as const } : {}),
-      };
-      return result;
-    } catch (error) {
-      throw error;
+      sharedAuthCore = this.options.resolveSharedAuthCore(region);
     }
+    const wasAuthenticated = (await sharedAuthCore.getStatus()).status === 'authenticated';
+    let deviceFlowStarted = false;
+    await sharedAuthCore.login({
+      onDeviceAuthorization: (authorization: DeviceAuthorizationPrompt) => {
+        deviceFlowStarted = true;
+        onProgress?.({ state: 'device-authorization', ...authorization });
+      },
+    });
+    this.persistRegionPreference(requestedScope);
+    const alreadyAuthenticated = wasAuthenticated && !deviceFlowStarted;
+    const result = {
+      state: alreadyAuthenticated
+        ? ('already-authenticated' as const)
+        : ('authenticated' as const),
+      message: alreadyAuthenticated
+        ? switchesRegion
+          ? `Already signed in with ${formatRegion(requestedScope.region)}.`
+          : 'Already signed in with MiniMax.'
+        : switchesRegion
+          ? `Signed in with ${formatRegion(requestedScope.region)}.`
+          : 'Signed in with MiniMax.',
+      ...(switchesRegion ? { restartRequired: true as const } : {}),
+    };
+    return result;
   }
 
   async logout(): Promise<KcodeAuthResult> {

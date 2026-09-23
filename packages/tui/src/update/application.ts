@@ -232,8 +232,7 @@ function unsupportedInstallationMessage(source: KcodeInstallSource): string {
       : 'This installation is an npm prefix carrying the upstream installer layout, which this ' +
         'build does not replace in place. ';
   return (
-    layout +
-    `Install a release archive from ${KCODE_RELEASES_URL} with npm install --global, ` +
+    `${layout}Install a release archive from ${KCODE_RELEASES_URL} with npm install --global, ` +
     'or keep this installation on the distribution it came from.'
   );
 }

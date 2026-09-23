@@ -51,7 +51,12 @@ import type { KcodeUpdateApplication } from '../update/application.js';
 import { tuiErrorDiagnostic } from '../user-facing-failure.js';
 import { getConfig, resetConfig, writeTuiStatusLineSetting, type MavisRegion } from '@mavis/config';
 import { markLoginRestartHandoff } from './login-restart-handoff.js';
-import { readTuiModeSetting, writeTuiModeSetting } from '../host/tui-settings.js';
+import {
+  readTuiModeSetting,
+  readTuiThemeSetting,
+  writeTuiModeSetting,
+  writeTuiThemeSetting,
+} from '../host/tui-settings.js';
 import { schedulePendingKcodePrefixUpdate } from '../update/prefix-update.js';
 import { KCODE_TUI_RESULT_PATH_ENV } from './automation/result-writer.js';
 import { startTuiStartupStatus, type TuiStartupStatus } from './startup-status.js';
@@ -70,6 +75,7 @@ export interface LaunchTuiOptions {
   dataDir?: string;
   terminal?: Terminal;
   tuiMode?: TuiMode;
+  theme?: string;
   externalEditorCommand?: string;
   resumeDraftAfterLogin?: boolean;
   lane?: string;
@@ -122,6 +128,8 @@ export interface LaunchTuiDependencies {
   createIncidentReporter?: () => TuiIncidentReporter;
   readTuiMode?: typeof readTuiModeSetting;
   writeTuiMode?: typeof writeTuiModeSetting;
+  readTuiTheme?: typeof readTuiThemeSetting;
+  writeTuiTheme?: typeof writeTuiThemeSetting;
   createSharedAuthSession?: typeof createKcodeSharedAuthSession;
   createAuthApplication?: typeof createDefaultKcodeAuthApplication;
 }
@@ -145,6 +153,7 @@ export async function launchTui(
   const dataDir = options.dataDir ?? (await (dependencies.prepareDataDir ?? prepareTuiDataDir)());
   const baseTerminal = options.terminal ?? new ProcessTerminal();
   const tuiMode = options.tuiMode ?? (dependencies.readTuiMode ?? readTuiModeSetting)(dataDir);
+  const theme = options.theme ?? (dependencies.readTuiTheme ?? readTuiThemeSetting)(dataDir);
   const terminalCapabilities = detectProcessTerminalCapabilities();
   const authEnvironment = resolveKcodeAuthEnvironment({
     runtimeRegion: process.env.MAVIS_REGION === 'en' ? 'en' : 'cn',
@@ -325,6 +334,9 @@ export async function launchTui(
         terminal,
         tuiMode,
         persistTuiMode: (mode) => (dependencies.writeTuiMode ?? writeTuiModeSetting)(dataDir, mode),
+        ...(theme ? { theme } : {}),
+        persistTheme: (value) =>
+          (dependencies.writeTuiTheme ?? writeTuiThemeSetting)(dataDir, value),
         persistStatusLineItems: (items) => writeTuiStatusLineSetting(dataDir, items),
         externalEditorCommand: options.externalEditorCommand,
         observability,

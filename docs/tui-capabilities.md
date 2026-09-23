@@ -22,6 +22,15 @@ The evidence column summarizes the historical TUI 0.3.11 restoration record from
 | Files, shell, subagents, sessions, headless, ACP | Actual runtime retained | BYOK, file reads, session resume, ACP, sandbox, and status protocol tests |
 | Built-in skills, MCP, plugin tools | Original TUI assets and activation conditions retained | Asset build, plugin, and MCP tests; no claim that every skill has passed a real task |
 
+## Skill directory links
+
+Workspace `.agents/skills`, `.claude/skills`, and `.minimax/skills` support
+directory symlinks, both for the entire skill root and for individual skill
+directories. Targets may live outside the workspace. Existing external-source
+enable settings and duplicate-name priority still apply. Linked directories are
+watched for `SKILL.md` creation and edits; broken links are skipped. `SKILL.md`
+itself must remain a regular file.
+
 ## ACP Skill commands
 
 ACP clients receive enabled Skills alongside built-in slash commands when a session
@@ -85,12 +94,22 @@ and initial prompt are not applied.
 
 In regular mode, independent feature panels occupy the complete visible terminal
 area, including short Rewind previews and scope pickers. Closing a panel restores
-the current conversation. When running content shrinks entirely within the current
-screen, the renderer keeps native scrollback and the Composer position stable.
+the current conversation. Closing, replacing or shrinking a transient region
+restores the exposed chat rows. This includes inline selectors such as `/theme`,
+completion menus, multi-line drafts, image previews, queued messages, task and
+Goal summaries, welcome notices and status rows. Short documents refresh in place;
+history is reconstructed only when the smaller layout needs to bring scrolled
+rows back into view. This rule follows the rendered layout, including asynchronous
+updates, rather than requiring each close handler to request a special redraw.
+When background running content shrinks entirely within the current screen and
+the transient layout stays unchanged, the renderer keeps native scrollback and
+the Composer position stable.
 Freed rows temporarily remain blank at the top of the active screen and subsequent
 output reuses them. This avoids resetting the host's scroll position when a turn
 finishes. Redundant resize notifications with unchanged dimensions do not rebuild
-history.
+history. Viewport-only redraws erase rows in place so terminals that save a cleared
+screen to scrollback, including Apple Terminal, do not retain the old Composer,
+status line or duplicate transcript rows.
 
 When a change removes or replaces text already in scrollback, the renderer still
 reconstructs the current session to avoid stale or duplicate history. Real resizes
