@@ -22,6 +22,8 @@ import {
   type ConversationMutationPort,
   type ConversationMutationWorkflow,
 } from "./session/conversation-mutation-application.js";
+import { SessionPinApplication } from "./session/pin-application.js";
+import type { SessionPinApplicationOptions } from "./session/pin-application.js";
 
 export interface RuntimeApplications {
   readonly session: {
@@ -31,6 +33,7 @@ export interface RuntimeApplications {
     readonly root: SessionRootApplication;
     readonly diff: SessionDiffApplication;
     readonly conversationMutation: SessionConversationMutationApplication;
+    readonly pin: SessionPinApplication;
   };
   readonly queue: QueueApplication;
 }
@@ -49,6 +52,8 @@ export interface InitializeApplicationsOptions {
     submit: TurnService["submit"];
   };
   readonly publishGlobalEvent: GlobalEventPublisher;
+  /** Ordered pin list owner; Session pins are a preference value, not a column. */
+  readonly pin: SessionPinApplicationOptions["pinService"];
   readonly metrics?: ApplicationMetricsClient;
   readonly onRootBestEffortFailure?: SessionRootApplicationOptions["onBestEffortFailure"];
   readonly assertSessionDeletionAllowed?: (sessionId: string) => Promise<void>;
@@ -149,8 +154,12 @@ export const initializeApplications: InitializeApplications = (options) => {
     options.conversationMutationPort,
     options.conversationMutationWorkflow,
   );
+  const pin = new SessionPinApplication({
+    pinService: options.pin,
+    publish: options.publishGlobalEvent,
+  });
   return {
-    session: { query, content, lifecycle, root, diff, conversationMutation },
+    session: { query, content, lifecycle, root, diff, conversationMutation, pin },
     queue,
   };
 };

@@ -73,6 +73,8 @@ import type {
   UpdateQueueItemResult as UpdateQueueItemResp,
   UpdateSessionInput as UpdateSessionReq,
   UpdateSessionResult as UpdateSessionResp,
+  PinSessionInput as PinSessionReq,
+  PinSessionResult as PinSessionResp,
 } from "@mavis/protocol/local";
 import {
   PermissionReply,
@@ -179,6 +181,13 @@ export class CliService {
     ctx: ProcessLocalContext = {},
   ): Promise<ArchiveSessionResp> {
     return this.options.applications.session.lifecycle.archiveSession(ctx, req);
+  }
+
+  pinSession(
+    req: PinSessionReq,
+    ctx: ProcessLocalContext = {},
+  ): Promise<PinSessionResp> {
+    return this.options.applications.session.pin.pinSession(ctx, req);
   }
 
   async deleteSession(

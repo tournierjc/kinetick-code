@@ -900,6 +900,23 @@ export interface ArchiveSessionResult {
   success?: boolean;
 }
 
+/**
+ * Pin or unpin a Session. Pins are an ordered product-level list, not a column on
+ * the Session, so a pinned Session comes back first in the pin list rather than
+ * carrying state of its own.
+ */
+export interface PinSessionInput {
+  id: string;
+  pinned?: boolean;
+  /** 0-based slot in the pinned list; omitted appends to the end of the pinned block. */
+  insertIndex?: number;
+}
+
+export interface PinSessionResult {
+  success?: boolean;
+  pinned?: boolean;
+}
+
 export interface CompressSessionInput {
   id: string;
   archived?: boolean;
