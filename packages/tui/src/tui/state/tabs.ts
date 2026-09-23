@@ -11,6 +11,9 @@
  *   creates tabs without touching each call site.
  * - Closing never rearranges the remaining tabs, so a tab keeps its key binding
  *   and its position on the bar while other Sessions open and close.
+ * - Opening appends, and only an explicit move (`/tabs move`, `Shift+Alt+←/→`)
+ *   rearranges the bar. Slots are positional, so nothing may reorder behind the
+ *   user's back: an ordering the user set survives every other tab action.
  */
 
 export interface TuiTabListState {
@@ -42,6 +45,33 @@ export const TUI_TAB_DIRECT_SLOT_COUNT = 9;
 
 export function openTuiTab(order: readonly string[], sessionId: string): readonly string[] {
   return order.includes(sessionId) ? order : [...order, sessionId];
+}
+
+/**
+ * Move one tab by `delta` positions, leaving every other tab where it is.
+ *
+ * The bar's direct slots are positional (`Alt+<n>`), so moving a tab is how a
+ * Session is put on the key the user expects. A move past either end is clamped,
+ * not wrapped: sending the first tab earlier does nothing rather than teleporting
+ * it to the far end.
+ *
+ * Returns the same list when nothing would change, so the reducer can skip a
+ * state update — the same contract `openTuiTab` and `closeTuiTab` follow.
+ */
+export function moveTuiTab(
+  order: readonly string[],
+  sessionId: string,
+  delta: number,
+): readonly string[] {
+  const index = order.indexOf(sessionId);
+  const step = Math.trunc(delta);
+  if (index < 0 || step === 0) return order;
+  const target = index + step;
+  if (target < 0 || target >= order.length) return order;
+  const next = [...order];
+  next.splice(index, 1);
+  next.splice(target, 0, sessionId);
+  return next;
 }
 
 export function closeTuiTab(order: readonly string[], sessionId: string): readonly string[] {

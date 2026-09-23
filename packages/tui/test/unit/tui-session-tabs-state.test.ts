@@ -5,6 +5,7 @@ import {
   applyingTuiTabGroupCollapse,
   foldingTuiTabGroups,
   cycleTuiTab,
+  moveTuiTab,
   selectTuiTabAfterClose,
   selectTuiTabSlot,
   TUI_TAB_DIRECT_SLOT_COUNT,
@@ -100,6 +101,34 @@ describe('session tab list', () => {
     expect(reduceTuiState(opened, { type: 'tabs/close', sessionId: 'session-missing' }).state).toBe(
       opened,
     );
+  });
+
+  it('moves a tab by state action without switching the visible Session', () => {
+    const opened = apply(
+      createTuiState(),
+      activate('session-a'),
+      activate('session-b'),
+      activate('session-c'),
+    );
+
+    const state = apply(opened, { type: 'tabs/move', sessionId: 'session-a', delta: 1 });
+
+    expect(state.tabs.order).toEqual(['session-b', 'session-a', 'session-c']);
+    expect(state.activeSessionId).toBe('session-c');
+  });
+
+  it('returns the same state object when a move cannot happen', () => {
+    const opened = apply(createTuiState(), activate('session-a'), activate('session-b'));
+
+    expect(
+      reduceTuiState(opened, { type: 'tabs/move', sessionId: 'session-a', delta: -1 }).state,
+    ).toBe(opened);
+    expect(
+      reduceTuiState(opened, { type: 'tabs/move', sessionId: 'session-b', delta: 1 }).state,
+    ).toBe(opened);
+    expect(
+      reduceTuiState(opened, { type: 'tabs/move', sessionId: 'session-missing', delta: 1 }).state,
+    ).toBe(opened);
   });
 
   it('keeps every tab it opened while Sessions are unknown', () => {
@@ -243,5 +272,35 @@ describe('tab grouping state', () => {
     }).state;
 
     expect(unfolded.tabs.collapsedGroups).toEqual([]);
+  });
+});
+
+describe('moveTuiTab', () => {
+  it('swaps a tab with its neighbour and leaves every other tab where it is', () => {
+    expect(moveTuiTab(['a', 'b', 'c', 'd'], 'c', -1)).toEqual(['a', 'c', 'b', 'd']);
+    expect(moveTuiTab(['a', 'b', 'c', 'd'], 'b', 1)).toEqual(['a', 'c', 'b', 'd']);
+  });
+
+  it('clamps at both ends instead of wrapping', () => {
+    const order = ['a', 'b', 'c'];
+
+    expect(moveTuiTab(order, 'a', -1)).toBe(order);
+    expect(moveTuiTab(order, 'c', 1)).toBe(order);
+  });
+
+  it('returns the same list for a no-op move', () => {
+    const order = ['a', 'b'];
+
+    expect(moveTuiTab(order, 'a', 0)).toBe(order);
+    expect(moveTuiTab(order, 'missing', 1)).toBe(order);
+    expect(moveTuiTab([], 'a', 1)).toEqual([]);
+  });
+
+  it('takes the whole delta, so a jump across the bar is one move', () => {
+    expect(moveTuiTab(['a', 'b', 'c'], 'a', 2)).toEqual(['b', 'c', 'a']);
+    expect(moveTuiTab(['a', 'b', 'c'], 'c', -2)).toEqual(['c', 'a', 'b']);
+    // Past the end the clamp still applies.
+    const order = ['a', 'b', 'c'];
+    expect(moveTuiTab(order, 'a', 9)).toBe(order);
   });
 });

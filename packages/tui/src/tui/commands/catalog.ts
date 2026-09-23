@@ -155,11 +155,13 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     name: 'tabs',
     description: 'Switch between the open Session tabs',
     category: 'Session',
-    argumentHint: '<next | prev | close | rename [title] | group [on|off] | collapse | 1-9>',
+    argumentHint:
+      '<next | prev | close | move <left|right> | rename [title] | group [on|off] | collapse | 1-9>',
     getArgumentCompletions: argumentCompleter([
       ['next', 'Switch to the next open tab'],
       ['prev', 'Switch to the previous open tab'],
       ['close', 'Close the visible tab and show its neighbour'],
+      ['move', 'Move the visible tab one slot along the bar'],
       ['rename', 'Rename the visible tab'],
       ['group', 'Group the tabs by project'],
       ['collapse', 'Fold every other project group, or unfold them all'],

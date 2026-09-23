@@ -174,6 +174,74 @@ describe('cycleTab', () => {
   });
 });
 
+describe('moveTab', () => {
+  it('moves the visible tab one slot earlier and leaves the rest of the bar alone', async () => {
+    const { flow, tabOrder, activeSessionId } = createFlow({
+      tabs: [TAB_A, TAB_B, TAB_C],
+      visible: TAB_B,
+    });
+
+    await flow.moveTab(-1);
+
+    expect(tabOrder()).toEqual([TAB_B, TAB_A, TAB_C]);
+    // Reordering the bar is not a switch: the Session on screen stays put.
+    expect(activeSessionId()).toBe(TAB_B);
+  });
+
+  it('moves the visible tab one slot later', async () => {
+    const { flow, tabOrder, activeSessionId } = createFlow({
+      tabs: [TAB_A, TAB_B, TAB_C],
+      visible: TAB_A,
+    });
+
+    await flow.moveTab(1);
+
+    expect(tabOrder()).toEqual([TAB_B, TAB_A, TAB_C]);
+    expect(activeSessionId()).toBe(TAB_A);
+  });
+
+  it('maps the bar position onto the direct slot bindings', async () => {
+    const { flow, tabOrder } = createFlow({ tabs: [TAB_A, TAB_B, TAB_C], visible: TAB_A });
+
+    await flow.moveTab(1);
+    await flow.moveTab(1);
+
+    // The tab now sits in slot 3, which is what `Alt+3` selects.
+    expect(tabOrder()).toEqual([TAB_B, TAB_C, TAB_A]);
+  });
+
+  it('refuses to move past either end instead of wrapping', async () => {
+    const first = createFlow({ tabs: [TAB_A, TAB_B], visible: TAB_A });
+
+    await first.flow.moveTab(-1);
+
+    expect(first.tabOrder()).toEqual([TAB_A, TAB_B]);
+    expect(first.append).toHaveBeenCalledWith('This tab is already first.', 'warning');
+
+    const last = createFlow({ tabs: [TAB_A, TAB_B], visible: TAB_B });
+
+    await last.flow.moveTab(1);
+
+    expect(last.tabOrder()).toEqual([TAB_A, TAB_B]);
+    expect(last.append).toHaveBeenCalledWith('This tab is already last.', 'warning');
+  });
+
+  it('reorders the bar while a turn is live and says nothing about the run', async () => {
+    const { flow, tabOrder, append } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_B,
+      hasLiveRun: true,
+    });
+
+    await flow.moveTab(-1);
+
+    expect(tabOrder()).toEqual([TAB_B, TAB_A]);
+    // A move is a bar action: it neither switches nor aborts, so it must not claim
+    // anything about the running turn.
+    expect(append).not.toHaveBeenCalled();
+  });
+});
+
 describe('activateTabSlot', () => {
   it('switches to another tab while a turn is live', async () => {
     const { flow, loadSessionProjection, append } = createFlow({

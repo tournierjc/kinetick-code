@@ -988,6 +988,15 @@ export class TuiCommandFlow {
           await this.options.sessionFlow.closeTab();
           return;
         }
+        if (action === 'move') {
+          const direction = argument.toLocaleLowerCase();
+          if (direction !== 'left' && direction !== 'right') {
+            this.options.append('Usage: /tabs move <left | right>.', 'warning');
+            return 'retained';
+          }
+          await this.options.sessionFlow.moveTab(direction === 'right' ? 1 : -1);
+          return;
+        }
         if (action === 'rename') {
           await this.options.sessionFlow.renameTab(argument || undefined);
           return;
@@ -1017,8 +1026,8 @@ export class TuiCommandFlow {
         // Deliberately not "next" by default: an accidental bare `/tabs` must not
         // move the user off the Session they are reading.
         this.options.append(
-          'Usage: /tabs <next | prev | close | rename [title] | group [on|off] | collapse | 1-9>. ' +
-            'The key hints are in /hotkeys.',
+          'Usage: /tabs <next | prev | close | move <left|right> | rename [title] | ' +
+            'group [on|off] | collapse | 1-9>. The key hints are in /hotkeys.',
           'warning',
         );
         return 'retained';
