@@ -267,6 +267,42 @@ describe("TuiFeatureFlow", () => {
     );
   });
 
+  it("opens a Session from the list while a Turn is running", async () => {
+    let live = false;
+    const harness = createHarness({ hasLiveRun: () => live });
+    harness.runtime.listSessionPage.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "session-a",
+          title: "Runtime review",
+          workspaceDir: "/workspace",
+        },
+        {
+          sessionId: "session-b",
+          title: "Other work",
+          workspaceDir: "/workspace",
+        },
+      ],
+      hasMore: false,
+      nextCursor: undefined,
+    });
+
+    await harness.flow.showSessionManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    live = true;
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+
+    // Selecting is a switch: the running Session keeps running in the background.
+    await vi.waitFor(() => expect(harness.onOpenSession).toHaveBeenCalledWith("session-b"));
+    expect(harness.setHint).not.toHaveBeenCalledWith(
+      "Stop the running turn before using /sessions.",
+    );
+  });
+
   it("refuses to delete a Session while a Turn is running", async () => {
     let live = false;
     const harness = createHarness({ hasLiveRun: () => live });
@@ -298,7 +334,7 @@ describe("TuiFeatureFlow", () => {
     expect(harness.deleteSession).not.toHaveBeenCalled();
   });
 
-  it("does not open a Session manager when a Turn starts during its async load", async () => {
+  it("opens a Session manager when a Turn starts during its async load", async () => {
     let live = false;
     let resolvePage:
       | ((page: {
@@ -321,10 +357,9 @@ describe("TuiFeatureFlow", () => {
     resolvePage?.({ sessions: [], hasMore: false, nextCursor: undefined });
     await opening;
 
-    expect(harness.shown).toEqual([]);
-    expect(harness.setHint).toHaveBeenLastCalledWith(
-      "Stop the running turn before using /sessions.",
-    );
+    // The list only switches, and switching is allowed during a live Turn, so a
+    // Turn starting mid-load no longer cancels the command.
+    expect(harness.shown).toHaveLength(1);
   });
 
   it("exports the complete Runtime history in chronological order and reports the file link", async () => {

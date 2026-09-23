@@ -155,7 +155,7 @@ describe('cycleTab', () => {
     );
   });
 
-  it('refuses to switch while a turn is live', async () => {
+  it('switches while a turn is live and says the turn keeps running', async () => {
     const { flow, append, loadSessionProjection } = createFlow({
       tabs: [TAB_A, TAB_B],
       visible: TAB_A,
@@ -164,12 +164,29 @@ describe('cycleTab', () => {
 
     await flow.cycleTab(1);
 
-    expect(loadSessionProjection).not.toHaveBeenCalled();
-    expect(append).toHaveBeenCalledWith('Stop the running turn before using /sessions.', 'warning');
+    expect(loadSessionProjection).toHaveBeenCalledWith(TAB_B);
+    expect(append).toHaveBeenCalledWith(
+      'The previous Session keeps running in the background; switch back to its tab to watch it.',
+    );
   });
 });
 
 describe('activateTabSlot', () => {
+  it('switches to another tab while a turn is live', async () => {
+    const { flow, loadSessionProjection, append } = createFlow({
+      tabs: [TAB_A, TAB_B, TAB_C],
+      visible: TAB_A,
+      hasLiveRun: true,
+    });
+
+    await flow.activateTabSlot(2);
+
+    expect(loadSessionProjection).toHaveBeenCalledWith(TAB_B);
+    expect(append).toHaveBeenCalledWith(
+      'The previous Session keeps running in the background; switch back to its tab to watch it.',
+    );
+  });
+
   it('activates the Session bound to a direct slot', async () => {
     const { flow, loadSessionProjection } = createFlow({
       tabs: [TAB_A, TAB_B, TAB_C],
@@ -240,7 +257,7 @@ describe('closeTab', () => {
     expect(tabOrder()).toEqual([]);
   });
 
-  it('keeps the tab when the switch is refused by a live turn', async () => {
+  it('keeps the running tab open instead of closing it', async () => {
     const { flow, append, tabOrder, activeSessionId } = createFlow({
       tabs: [TAB_A, TAB_B],
       visible: TAB_A,
@@ -249,7 +266,7 @@ describe('closeTab', () => {
 
     await flow.closeTab();
 
-    expect(append).toHaveBeenCalledWith('Stop the running turn before using /sessions.', 'warning');
+    expect(append).toHaveBeenCalledWith('Stop the running turn before closing its tab.', 'warning');
     expect(tabOrder()).toEqual([TAB_A, TAB_B]);
     expect(activeSessionId()).toBe(TAB_A);
   });

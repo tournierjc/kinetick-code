@@ -489,7 +489,10 @@ export class TuiFeatureFlow {
   ): Promise<void> {
     if (this.isStopped()) return;
     const sourceCommand = openOptions.initialRenameSessionId ? '/rename' : '/sessions';
-    if (this.rejectLiveSessionNavigation(sourceCommand)) return;
+    // The list only reads and switches, and switching is allowed while a turn
+    // runs, so opening it is allowed too. `/rename` still needs a stopped Session,
+    // and the row actions below keep their own guards.
+    if (sourceCommand === '/rename' && this.rejectLiveSessionNavigation(sourceCommand)) return;
     this.closeInspectionPanel();
     const sessionGeneration = this.sessionGeneration;
     const loadSequence = ++this.sessionManagerLoadSequence;
@@ -527,7 +530,7 @@ export class TuiFeatureFlow {
     ) {
       return;
     }
-    if (this.rejectLiveSessionNavigation(sourceCommand)) return;
+    if (sourceCommand === '/rename' && this.rejectLiveSessionNavigation(sourceCommand)) return;
     let loadedScope: 'workspace' | 'all' = 'workspace';
     let nextCursor = firstPage.nextCursor;
     const sessions =
@@ -561,9 +564,8 @@ export class TuiFeatureFlow {
         };
       },
       onSelect: async (sessionId) => {
-        if (this.rejectLiveSessionNavigation('/sessions')) {
-          throw new Error('Stop the running turn before switching Sessions.');
-        }
+        // Selecting is the same activation a tab switch performs: the Session on
+        // screen changes, the previous one keeps running in the background.
         await this.options.onOpenSession(sessionId);
         this.options.surface.close(manager);
       },
