@@ -51,10 +51,14 @@ import type { KcodeUpdateApplication } from '../update/application.js';
 import { tuiErrorDiagnostic } from '../user-facing-failure.js';
 import { getConfig, resetConfig, writeTuiStatusLineSetting, type MavisRegion } from '@mavis/config';
 import { markLoginRestartHandoff } from './login-restart-handoff.js';
-  readTuiTheme?: typeof readTuiThemeSetting;
-  writeTuiTheme?: typeof writeTuiThemeSetting;
-  createSharedAuthSession?: typeof createKcodeSharedAuthSession;
-  createAuthApplication?: typeof createDefaultKcodeAuthApplication;
+import {
+  readTuiModeSetting,
+  readTuiThemeSetting,
+  writeTuiModeSetting,
+  writeTuiThemeSetting,
+} from '../host/tui-settings.js';
+import { schedulePendingKcodePrefixUpdate } from '../update/prefix-update.js';
+import { KCODE_TUI_RESULT_PATH_ENV } from './automation/result-writer.js';
 import { startTuiStartupStatus, type TuiStartupStatus } from './startup-status.js';
 
 const KCODE_EXIT_SLOGAN = 'Intelligence with everyone, bye~';

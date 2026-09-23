@@ -13,7 +13,7 @@ import type {
 import { resolveTuiAnsi16Foreground, shouldSuppressTuiAnsi16Background } from './ansi16.js';
 import { resolveEnvironmentAppearance } from './detection.js';
 import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from './palettes.js';
-import { createCatppuccinHighlightTheme } from './syntax.js';
+import { createSyntaxHighlightTheme } from './syntax.js';
 
 export interface TuiRenderThemeSnapshot {
   readonly name: string;
@@ -256,7 +256,7 @@ export function getTuiThemeSnapshot(): TuiRenderThemeSnapshot {
   return { ...renderThemeSnapshot };
 }
 
-const tuiHighlightTheme = createCatppuccinHighlightTheme(
+const tuiHighlightTheme = createSyntaxHighlightTheme(
   tuiChalk,
   () => activeSyntax,
   () => renderThemeSnapshot.appearance,

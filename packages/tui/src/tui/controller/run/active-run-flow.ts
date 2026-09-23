@@ -1,5 +1,5 @@
 import { TuiPluginAutocomplete } from '../../commands/plugin-autocomplete.js';
-import type { McodePluginRuntimeAccess } from '../../../plugin/contract.js';
+import type { KcodePluginRuntimeAccess } from '../../../plugin/contract.js';
 import type { Component } from '../../rendering/component.js';
 import type { Terminal } from '../../engine/public.js';
 import {
@@ -70,7 +70,7 @@ export function createTuiAutocomplete(
   skillCommands: readonly TuiCommand[],
   workspace: string | readonly TuiWorkspaceRoot[],
   workspaceFiles?: Partial<
-    TuiWorkspaceFilePort & Pick<McodePluginRuntimeAccess, 'listInstalledPlugins'>
+    TuiWorkspaceFilePort & Pick<KcodePluginRuntimeAccess, 'listInstalledPlugins'>
   >,
   shellCwd?: () => string,
 ): AutocompleteProvider {
@@ -575,7 +575,7 @@ class TuiAutocompleteProvider implements AutocompleteProvider {
     skillCommands: readonly TuiCommand[],
     workspace: string | readonly TuiWorkspaceRoot[],
     private readonly workspaceFiles?: Partial<
-      TuiWorkspaceFilePort & Pick<McodePluginRuntimeAccess, 'listInstalledPlugins'>
+      TuiWorkspaceFilePort & Pick<KcodePluginRuntimeAccess, 'listInstalledPlugins'>
     >,
     shellCwd?: () => string,
   ) {

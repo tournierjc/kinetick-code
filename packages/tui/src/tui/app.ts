@@ -601,7 +601,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       commandFlow.clearRetainedSubmissions();
       return draftLifecycle?.switchSession(sessionKey) ?? Promise.resolve();
     },
-    detachForegroundObserver: () => runtimeEventFlow?.detachForegroundObserver(),
     adoptForegroundRun: () =>
       sessionLifecycle.adoptForegroundRun(
         controller.snapshot().session?.sessionId,
