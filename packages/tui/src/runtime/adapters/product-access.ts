@@ -23,18 +23,18 @@ import type {
 import type { TuiRuntimeAccessContext } from "./access-context.js";
 import type { TuiSessionAccess } from "./session-access.js";
 import type {
-  McodeCreateProviderInput,
-  McodeCopilotOAuthStatus,
-  McodeCodexOAuthStartResult,
-  McodeCodexOAuthLoginOptions,
-  McodeCodexOAuthStatus,
-  McodeMiniMaxModelSource,
-  McodeProviderTemplate,
-  McodeProviderTestResult,
-  McodeRuntimeProviderView,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
-  McodeUpdateProviderInput,
+  KcodeCreateProviderInput,
+  KcodeCopilotOAuthStatus,
+  KcodeCodexOAuthStartResult,
+  KcodeCodexOAuthLoginOptions,
+  KcodeCodexOAuthStatus,
+  KcodeMiniMaxModelSource,
+  KcodeProviderTemplate,
+  KcodeProviderTestResult,
+  KcodeRuntimeProviderView,
+  KcodeSaveProviderCandidateInput,
+  KcodeSaveProviderCandidateResult,
+  KcodeUpdateProviderInput,
 } from "../../provider/contract.js";
 import {
   normalizeAccountStatus,
@@ -127,83 +127,83 @@ export class TuiProductAccess {
     });
   }
 
-  async listUserModelProviders(): Promise<readonly McodeRuntimeProviderView[]> {
+  async listUserModelProviders(): Promise<readonly KcodeRuntimeProviderView[]> {
     const providers = (await this.context
       .service("provider.list")
-      .listUserModelProviders()) as unknown as readonly McodeRuntimeProviderView[];
+      .listUserModelProviders()) as unknown as readonly KcodeRuntimeProviderView[];
     return providers.filter(
       (provider) =>
         !isLegacyManagedMinimaxProvider(provider.providerId, provider.baseUrl),
     );
   }
 
-  async listProviderPresets(): Promise<readonly McodeProviderTemplate[]> {
+  async listProviderPresets(): Promise<readonly KcodeProviderTemplate[]> {
     return (await this.context
       .service("provider.presets")
-      .listProviderPresets()) as readonly McodeProviderTemplate[];
+      .listProviderPresets()) as readonly KcodeProviderTemplate[];
   }
 
-  async getCodexOAuthStatus(): Promise<McodeCodexOAuthStatus> {
+  async getCodexOAuthStatus(): Promise<KcodeCodexOAuthStatus> {
     return (await this.context
       .service("provider.codex-oauth.status")
-      .getCodexOAuthStatus()) as McodeCodexOAuthStatus;
+      .getCodexOAuthStatus()) as KcodeCodexOAuthStatus;
   }
 
   async startCodexOAuthLogin(
-    options?: McodeCodexOAuthLoginOptions,
-  ): Promise<McodeCodexOAuthStartResult> {
+    options?: KcodeCodexOAuthLoginOptions,
+  ): Promise<KcodeCodexOAuthStartResult> {
     return (await this.context
       .service("provider.codex-oauth.start")
-      .startCodexOAuthLogin(options)) as McodeCodexOAuthStartResult;
+      .startCodexOAuthLogin(options)) as KcodeCodexOAuthStartResult;
   }
 
-  async cancelCodexOAuthLogin(loginId: string): Promise<McodeCodexOAuthStatus> {
+  async cancelCodexOAuthLogin(loginId: string): Promise<KcodeCodexOAuthStatus> {
     return (await this.context
       .service("provider.codex-oauth.cancel")
-      .cancelCodexOAuthLogin(loginId)) as McodeCodexOAuthStatus;
+      .cancelCodexOAuthLogin(loginId)) as KcodeCodexOAuthStatus;
   }
 
-  async getCopilotOAuthStatus(): Promise<McodeCopilotOAuthStatus> {
+  async getCopilotOAuthStatus(): Promise<KcodeCopilotOAuthStatus> {
     return (await this.context
       .service("provider.copilot-oauth.status")
-      .getCopilotOAuthStatus()) as McodeCopilotOAuthStatus;
+      .getCopilotOAuthStatus()) as KcodeCopilotOAuthStatus;
   }
 
-  async startCopilotOAuthLogin(): Promise<McodeCopilotOAuthStatus> {
+  async startCopilotOAuthLogin(): Promise<KcodeCopilotOAuthStatus> {
     return (await this.context
       .service("provider.copilot-oauth.start")
-      .startCopilotOAuthLogin()) as McodeCopilotOAuthStatus;
+      .startCopilotOAuthLogin()) as KcodeCopilotOAuthStatus;
   }
 
-  async cancelCopilotOAuthLogin(loginId: string): Promise<McodeCopilotOAuthStatus> {
+  async cancelCopilotOAuthLogin(loginId: string): Promise<KcodeCopilotOAuthStatus> {
     return (await this.context
       .service("provider.copilot-oauth.cancel")
-      .cancelCopilotOAuthLogin(loginId)) as McodeCopilotOAuthStatus;
+      .cancelCopilotOAuthLogin(loginId)) as KcodeCopilotOAuthStatus;
   }
 
   async getMiniMaxApiKeyStatus(): Promise<{
     readonly hasApiKey: boolean;
     readonly maskedApiKey?: string;
-    readonly cachedStatus?: McodeProviderTestResult["status"];
+    readonly cachedStatus?: KcodeProviderTestResult["status"];
   }> {
     return (await this.context
       .service("provider.minimax.status")
       .getMiniMaxApiKeyStatus()) as {
       hasApiKey: boolean;
       maskedApiKey?: string;
-      cachedStatus?: McodeProviderTestResult["status"];
+      cachedStatus?: KcodeProviderTestResult["status"];
     };
   }
 
-  getMiniMaxModelSource(): Promise<McodeMiniMaxModelSource> {
+  getMiniMaxModelSource(): Promise<KcodeMiniMaxModelSource> {
     return this.context
       .service("provider.minimax.source")
       .getMiniMaxModelSource();
   }
 
   setMiniMaxModelSource(
-    source: McodeMiniMaxModelSource,
-  ): Promise<McodeMiniMaxModelSource> {
+    source: KcodeMiniMaxModelSource,
+  ): Promise<KcodeMiniMaxModelSource> {
     return this.context
       .service("provider.minimax.source")
       .setMiniMaxModelSource({ source });
@@ -219,7 +219,7 @@ export class TuiProductAccess {
   }
 
   async createUserModelProvider(
-    input: McodeCreateProviderInput,
+    input: KcodeCreateProviderInput,
   ): Promise<void> {
     await this.context.service("provider.create").createUserModelProvider({
       ...input,
@@ -228,7 +228,7 @@ export class TuiProductAccess {
   }
 
   discoverUserModelsCandidate(
-    input: import("../../provider/contract.js").McodeDiscoverProviderModelsInput,
+    input: import("../../provider/contract.js").KcodeDiscoverProviderModelsInput,
   ) {
     return this.context
       .service("provider.discover")
@@ -240,7 +240,7 @@ export class TuiProductAccess {
     saveAndUse,
     skipConnectionTest,
     ...candidate
-  }: McodeSaveProviderCandidateInput): Promise<McodeSaveProviderCandidateResult> {
+  }: KcodeSaveProviderCandidateInput): Promise<KcodeSaveProviderCandidateResult> {
     return (await this.context
       .service("provider.save-candidate")
       .saveUserModelProviderCandidate({
@@ -253,11 +253,11 @@ export class TuiProductAccess {
         modelId,
         ...(skipConnectionTest !== undefined ? { skipConnectionTest } : {}),
         ...(saveAndUse !== undefined ? { saveAndUse } : {}),
-      })) as McodeSaveProviderCandidateResult;
+      })) as KcodeSaveProviderCandidateResult;
   }
 
   async updateUserModelProvider(
-    input: McodeUpdateProviderInput,
+    input: KcodeUpdateProviderInput,
   ): Promise<void> {
     await this.context.service("provider.update").updateUserModelProvider({
       ...input,
@@ -273,19 +273,19 @@ export class TuiProductAccess {
 
   async testUserModelProvider(
     providerId: string,
-  ): Promise<McodeProviderTestResult> {
+  ): Promise<KcodeProviderTestResult> {
     return (await this.context
       .service("provider.test")
-      .testUserModelProvider({ providerId })) as McodeProviderTestResult;
+      .testUserModelProvider({ providerId })) as KcodeProviderTestResult;
   }
 
   async testUserModel(
     providerId: string,
     modelId: string,
-  ): Promise<McodeProviderTestResult> {
+  ): Promise<KcodeProviderTestResult> {
     return (await this.context
       .service("provider.test-model")
-      .testUserModel({ providerId, modelId })) as McodeProviderTestResult;
+      .testUserModel({ providerId, modelId })) as KcodeProviderTestResult;
   }
 
   async getSessionUsage(sessionId: string): Promise<TuiSessionUsage> {

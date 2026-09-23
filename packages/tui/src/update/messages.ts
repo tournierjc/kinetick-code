@@ -4,7 +4,7 @@
  * starts. The messages that described staging and activating a versioned npm
  * prefix went with that update path.
  */
-export function mcodePrefixActivationScheduledMessage(
+export function kcodePrefixActivationScheduledMessage(
   _environment: NodeJS.ProcessEnv = process.env,
 ): string {
   return 'A staged KCode update will activate after this process exits.';

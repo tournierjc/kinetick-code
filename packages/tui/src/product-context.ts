@@ -1,4 +1,4 @@
-export const MINIMAX_CODE_DEFAULT_AGENT_NAME = 'mavis';
+export const KCODE_DEFAULT_AGENT_NAME = 'mavis';
 
 export interface TuiProductContext {
   surface: 'cli' | 'tui' | 'headless';
@@ -11,6 +11,6 @@ export function createTuiProductContext(
 ): TuiProductContext {
   return {
     surface,
-    defaultAgentName: overrides.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME,
+    defaultAgentName: overrides.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME,
   };
 }

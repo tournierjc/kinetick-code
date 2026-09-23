@@ -10,30 +10,30 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  McodeUpdateApplication,
-  mcodeUpdateChannelLabel,
-  type McodeUpdateApplicationDependencies,
-  type McodeUpdateApplicationOptions,
-  type McodeUpdatePlan,
+  KcodeUpdateApplication,
+  kcodeUpdateChannelLabel,
+  type KcodeUpdateApplicationDependencies,
+  type KcodeUpdateApplicationOptions,
+  type KcodeUpdatePlan,
   type ReleaseUpdateService,
 } from '../../src/update/application.js';
 import {
-  classifyMcodeInstallPath,
+  classifyKcodeInstallPath,
   classifyNpmGlobalInstall,
-  detectMcodeInstallSource,
-  isInternalMcodePackageName,
-  isManagedMcodeInstallRoot,
-  resolveInstalledMcodePackageVersion,
-  resolveMcodeInstallRoot,
-  resolveMcodeNpmPrefixInstall,
-  resolveMcodePackageName,
+  detectKcodeInstallSource,
+  isInternalKcodePackageName,
+  isManagedKcodeInstallRoot,
+  resolveInstalledKcodePackageVersion,
+  resolveKcodeInstallRoot,
+  resolveKcodeNpmPrefixInstall,
+  resolveKcodePackageName,
 } from '../../src/update/install-source.js';
 import {
-  inspectPendingMcodePrefixUpdate,
-  resolveMcodePrefixLauncherPairs,
-  resolveMcodePrefixModulesRoot,
-  writeMcodePrefixUpdatePending,
-  type McodePrefixUpdateActivation,
+  inspectPendingKcodePrefixUpdate,
+  resolveKcodePrefixLauncherPairs,
+  resolveKcodePrefixModulesRoot,
+  writeKcodePrefixUpdatePending,
+  type KcodePrefixUpdateActivation,
 } from '../../src/update/prefix-update.js';
 import {
   KCODE_RELEASES_URL,
@@ -49,6 +49,9 @@ const PENDING_UPDATE_FILE = '.mcode-update-pending.json';
 describe('KCode install source classification', () => {
   it.each([
     ['/opt/homebrew/lib/node_modules/@minimax-ai/code', 'npm-global'],
+    // The current internal identity, and the one a workspace install used before the rename.
+    ['/opt/data/lib/node_modules/@mavis/code', 'npm-global'],
+    ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@mavis\\code', 'npm-global'],
     ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@minimax\\code', 'npm-global'],
     ['/usr/local/lib/node_modules/@minimax-ai/code', 'npm-global'],
     ['/Users/demo/.local/share/pnpm/global/5/node_modules/@minimax-ai/code', 'pnpm-global'],
@@ -75,7 +78,7 @@ describe('KCode install source classification', () => {
       'bun-global',
     ],
   ] as const)('classifies %s as %s', (packageRoot, expected) => {
-    expect(classifyMcodeInstallPath(packageRoot)).toBe(expected);
+    expect(classifyKcodeInstallPath(packageRoot)).toBe(expected);
   });
 
   it.each([
@@ -110,7 +113,7 @@ describe('KCode install source detection ordering', () => {
     const detectPrefixInstall = vi.fn(() => prefixInstall);
 
     await expect(
-      detectMcodeInstallSource({
+      detectKcodeInstallSource({
         installRoot: '/managed',
         platform: 'linux',
         packageRoot,
@@ -127,7 +130,7 @@ describe('KCode install source detection ordering', () => {
     const packageRoot = vi.fn(() => publicPackageRoot);
 
     await expect(
-      detectMcodeInstallSource({
+      detectKcodeInstallSource({
         installRoot: '/opt/minimax',
         platform: 'linux',
         packageRoot,
@@ -143,7 +146,7 @@ describe('KCode install source detection ordering', () => {
     const npmGlobalPrefix = vi.fn(async () => '/usr/local');
 
     await expect(
-      detectMcodeInstallSource({
+      detectKcodeInstallSource({
         installRoot: '/source',
         platform: 'linux',
         packageRoot: () => publicPackageRoot,
@@ -159,7 +162,7 @@ describe('KCode install source detection ordering', () => {
     const npmGlobalPrefix = vi.fn(async () => '/srv/apps/tools');
 
     await expect(
-      detectMcodeInstallSource({
+      detectKcodeInstallSource({
         installRoot: '/source',
         platform: 'linux',
         packageRoot: () => '/srv/apps/tools/node_modules/@minimax-ai/code',
@@ -173,7 +176,7 @@ describe('KCode install source detection ordering', () => {
 
   it('reports an unsupported installation when the npm prefix cannot be resolved', async () => {
     await expect(
-      detectMcodeInstallSource({
+      detectKcodeInstallSource({
         installRoot: '/source',
         platform: 'linux',
         packageRoot: () => '/srv/apps/tools/node_modules/@minimax-ai/code',
@@ -188,7 +191,7 @@ describe('KCode install source detection ordering', () => {
 
   it('reports an unsupported installation when the entry file has no package root', async () => {
     await expect(
-      detectMcodeInstallSource({
+      detectKcodeInstallSource({
         installRoot: '/source',
         platform: 'linux',
         packageRoot: () => undefined,
@@ -208,7 +211,7 @@ describe('KCode install source detection ordering', () => {
     'reports a local checkout carrying the global-install marker as unsupported: %s',
     async (packageRoot) => {
       await expect(
-        detectMcodeInstallSource({
+        detectKcodeInstallSource({
           installRoot: '/source',
           platform: 'darwin',
           packageRoot: () => packageRoot,
@@ -264,13 +267,13 @@ describe('KCode npm prefix ownership receipts', () => {
           })}`,
         );
 
-        expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
+        expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
           executable: npmExecutable,
           packageName: '@minimax-ai/code',
           prefix: realpathSync(root),
           registry,
         });
-        expect(resolveInstalledMcodePackageVersion(entryFile)).toBe('1.2.3');
+        expect(resolveInstalledKcodePackageVersion(entryFile)).toBe('1.2.3');
       } finally {
         rmSync(root, { recursive: true, force: true });
       }
@@ -317,7 +320,7 @@ describe('KCode npm prefix ownership receipts', () => {
         }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
         executable: npmExecutable,
         packageName: '@minimax-ai/code',
         prefix: realpathSync(prefix),
@@ -331,7 +334,7 @@ describe('KCode npm prefix ownership receipts', () => {
   it('recovers a legacy installer prefix only from its package root and adjacent npm', () => {
     const temporaryParent = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-prefix-legacy-')));
     const prefix = path.join(temporaryParent, '.minimax-code');
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai', 'code');
+    const packageRoot = path.join(resolveKcodePrefixModulesRoot(prefix), '@minimax-ai', 'code');
     const nodeExecutable = path.join(
       prefix,
       'runtime',
@@ -356,7 +359,7 @@ describe('KCode npm prefix ownership receipts', () => {
         JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform, nodeExecutable)).toEqual({
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform, nodeExecutable)).toEqual({
         executable: npmExecutable,
         packageName: '@minimax-ai/code',
         prefix: realpathSync(prefix),
@@ -417,7 +420,7 @@ describe('KCode npm prefix ownership receipts', () => {
         }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -455,7 +458,7 @@ describe('KCode npm prefix ownership receipts', () => {
         }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -502,7 +505,7 @@ describe('KCode npm prefix ownership receipts', () => {
         }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
     } finally {
       rmSync(root, { recursive: true, force: true });
       rmSync(otherPrefix, { recursive: true, force: true });
@@ -527,35 +530,36 @@ describe('KCode npm prefix ownership receipts', () => {
       const entryFile = path.join(packageRoot, 'cli.js');
       writeFileSync(entryFile, '');
 
-      expect(resolveMcodePackageName(entryFile)).toBe('@minimax-ai/code');
-      expect(resolveInstalledMcodePackageVersion(entryFile)).toBeUndefined();
+      expect(resolveKcodePackageName(entryFile)).toBe('@minimax-ai/code');
+      expect(resolveInstalledKcodePackageVersion(entryFile)).toBeUndefined();
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
 
-  it('recognizes only the internal package identity as environment-selectable', () => {
-    expect(isInternalMcodePackageName('@minimax/code')).toBe(true);
-    expect(isInternalMcodePackageName('@minimax-ai/code')).toBe(false);
-    expect(isInternalMcodePackageName(undefined)).toBe(false);
+  it('recognizes the internal package identities as environment-selectable', () => {
+    expect(isInternalKcodePackageName('@mavis/code')).toBe(true);
+    expect(isInternalKcodePackageName('@minimax/code')).toBe(true);
+    expect(isInternalKcodePackageName('@minimax-ai/code')).toBe(false);
+    expect(isInternalKcodePackageName(undefined)).toBe(false);
   });
 });
 
 describe('KCode install root resolution', () => {
   it('prefers MCODE_INSTALL_ROOT and resolves it against the working directory', () => {
-    expect(resolveMcodeInstallRoot({ MCODE_INSTALL_ROOT: '/opt/kcode/data' })).toBe(
+    expect(resolveKcodeInstallRoot({ MCODE_INSTALL_ROOT: '/opt/kcode/data' })).toBe(
       '/opt/kcode/data',
     );
-    expect(resolveMcodeInstallRoot({ MCODE_INSTALL_ROOT: 'relative/data' })).toBe(
+    expect(resolveKcodeInstallRoot({ MCODE_INSTALL_ROOT: 'relative/data' })).toBe(
       path.resolve('relative/data'),
     );
   });
 
   it('defaults to the minimax-code directory under the XDG data home', () => {
-    expect(resolveMcodeInstallRoot({ XDG_DATA_HOME: '/xdg/data' })).toBe(
+    expect(resolveKcodeInstallRoot({ XDG_DATA_HOME: '/xdg/data' })).toBe(
       path.join('/xdg/data', 'minimax-code'),
     );
-    expect(resolveMcodeInstallRoot({})).toBe(
+    expect(resolveKcodeInstallRoot({})).toBe(
       path.join(os.homedir(), '.local', 'share', 'minimax-code'),
     );
   });
@@ -564,17 +568,17 @@ describe('KCode install root resolution', () => {
     [{ LOCALAPPDATA: String.raw`C:\Users\demo\AppData\Local` }, String.raw`C:\Users\demo\AppData\Local\MinimaxCode`],
     [undefined, undefined],
   ] as const)('uses the Windows LOCALAPPDATA data root', (environment, expected) => {
-    // `resolveMcodeInstallRoot` reads `process.platform`, so the Windows branch is
+    // `resolveKcodeInstallRoot` reads `process.platform`, so the Windows branch is
     // entered by redefining the platform for the duration of this test.
     const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
     try {
       if (expected) {
-        expect(resolveMcodeInstallRoot(environment)).toBe(
+        expect(resolveKcodeInstallRoot(environment)).toBe(
           path.join(String.raw`C:\Users\demo\AppData\Local`, 'MinimaxCode'),
         );
       } else {
-        expect(() => resolveMcodeInstallRoot({})).toThrow(
+        expect(() => resolveKcodeInstallRoot({})).toThrow(
           'LOCALAPPDATA is required to resolve the KCode install root.',
         );
       }
@@ -593,7 +597,7 @@ describe('KCode install root resolution', () => {
     try {
       writeFileSync(path.join(installRoot, 'install.json'), JSON.stringify(receipt));
 
-      expect(isManagedMcodeInstallRoot(installRoot)).toBe(expected);
+      expect(isManagedKcodeInstallRoot(installRoot)).toBe(expected);
     } finally {
       rmSync(installRoot, { recursive: true, force: true });
     }
@@ -602,9 +606,9 @@ describe('KCode install root resolution', () => {
   it('treats a missing or unreadable installer receipt as unowned', () => {
     const installRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-managed-missing-'));
     try {
-      expect(isManagedMcodeInstallRoot(installRoot)).toBe(false);
+      expect(isManagedKcodeInstallRoot(installRoot)).toBe(false);
       writeFileSync(path.join(installRoot, 'install.json'), '{');
-      expect(isManagedMcodeInstallRoot(installRoot)).toBe(false);
+      expect(isManagedKcodeInstallRoot(installRoot)).toBe(false);
     } finally {
       rmSync(installRoot, { recursive: true, force: true });
     }
@@ -617,7 +621,7 @@ describe('KCode prefix update journal', () => {
     mkdirSync(path.join(packageRoot, 'dist'), { recursive: true });
     writeFileSync(
       path.join(packageRoot, 'package.json'),
-      JSON.stringify({ name: '@minimax-ai/code', version, bin: { mcode: 'dist/index.js' } }),
+      JSON.stringify({ name: '@minimax-ai/code', version, bin: { kcode: 'dist/index.js' } }),
     );
   }
 
@@ -636,17 +640,17 @@ describe('KCode prefix update journal', () => {
     prefix: string,
     stagingPrefix: string,
     expectedVersion: string,
-  ): McodePrefixUpdateActivation {
-    const activeModulesRoot = resolveMcodePrefixModulesRoot(prefix, process.platform);
+  ): KcodePrefixUpdateActivation {
+    const activeModulesRoot = resolveKcodePrefixModulesRoot(prefix, process.platform);
     return {
       stagingPrefix,
       activePrefix: prefix,
       activeModulesRoot,
-      stagedModulesRoot: resolveMcodePrefixModulesRoot(stagingPrefix, process.platform),
+      stagedModulesRoot: resolveKcodePrefixModulesRoot(stagingPrefix, process.platform),
       backupModulesRoot: `${activeModulesRoot}.mcode-update-backup`,
       packageName: '@minimax-ai/code',
       expectedVersion,
-      launchers: resolveMcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
+      launchers: resolveKcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
     };
   }
 
@@ -661,26 +665,26 @@ describe('KCode prefix update journal', () => {
     const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-staged-')));
     const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.staging`);
     const entryFile = path.join(
-      resolveMcodePrefixModulesRoot(prefix),
+      resolveKcodePrefixModulesRoot(prefix),
       '@minimax-ai/code',
       'dist/index.js',
     );
     try {
       mkdirSync(path.dirname(entryFile), { recursive: true });
       writeFileSync(entryFile, '');
-      writePackage(resolveMcodePrefixModulesRoot(prefix), '1.2.3');
-      writePackage(resolveMcodePrefixModulesRoot(stagingPrefix), '1.2.4');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.3');
+      writePackage(resolveKcodePrefixModulesRoot(stagingPrefix), '1.2.4');
       writeOwnershipReceipt(prefix);
       const pending = activation(prefix, stagingPrefix, '1.2.4');
       writeLaunchers(pending.launchers, 'staged');
-      const pendingFile = writeMcodePrefixUpdatePending(pending);
+      const pendingFile = writeKcodePrefixUpdatePending(pending);
 
       expect(JSON.parse(readFileSync(pendingFile, 'utf8'))).toMatchObject({
         schemaVersion: 1,
         activePrefix: prefix,
         expectedVersion: '1.2.4',
       });
-      expect(inspectPendingMcodePrefixUpdate(entryFile)).toMatchObject({
+      expect(inspectPendingKcodePrefixUpdate(entryFile)).toMatchObject({
         pendingFile,
         state: 'staged',
         activation: { expectedVersion: '1.2.4', stagingPrefix },
@@ -695,20 +699,20 @@ describe('KCode prefix update journal', () => {
     const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-active-')));
     const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.activated`);
     const entryFile = path.join(
-      resolveMcodePrefixModulesRoot(prefix),
+      resolveKcodePrefixModulesRoot(prefix),
       '@minimax-ai/code',
       'dist/index.js',
     );
     try {
       mkdirSync(path.dirname(entryFile), { recursive: true });
       writeFileSync(entryFile, '');
-      writePackage(resolveMcodePrefixModulesRoot(prefix), '1.2.4');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.4');
       writeOwnershipReceipt(prefix);
       const pending = activation(prefix, stagingPrefix, '1.2.4');
       writeLaunchers(pending.launchers, 'active');
-      const pendingFile = writeMcodePrefixUpdatePending(pending);
+      const pendingFile = writeKcodePrefixUpdatePending(pending);
 
-      expect(inspectPendingMcodePrefixUpdate(entryFile)).toMatchObject({
+      expect(inspectPendingKcodePrefixUpdate(entryFile)).toMatchObject({
         pendingFile,
         state: 'activated',
       });
@@ -722,18 +726,18 @@ describe('KCode prefix update journal', () => {
     const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-missing-')));
     const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.missing`);
     const entryFile = path.join(
-      resolveMcodePrefixModulesRoot(prefix),
+      resolveKcodePrefixModulesRoot(prefix),
       '@minimax-ai/code',
       'dist/index.js',
     );
     try {
       mkdirSync(path.dirname(entryFile), { recursive: true });
       writeFileSync(entryFile, '');
-      writePackage(resolveMcodePrefixModulesRoot(prefix), '1.2.3');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.3');
       writeOwnershipReceipt(prefix);
-      const pendingFile = writeMcodePrefixUpdatePending(activation(prefix, stagingPrefix, '1.2.4'));
+      const pendingFile = writeKcodePrefixUpdatePending(activation(prefix, stagingPrefix, '1.2.4'));
 
-      expect(() => inspectPendingMcodePrefixUpdate(entryFile)).toThrow(
+      expect(() => inspectPendingKcodePrefixUpdate(entryFile)).toThrow(
         `KCode pending update artifacts are incomplete at ${pendingFile}.`,
       );
     } finally {
@@ -745,7 +749,7 @@ describe('KCode prefix update journal', () => {
   it('reports malformed pending metadata instead of treating it as a staged update', () => {
     const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-invalid-')));
     const entryFile = path.join(
-      resolveMcodePrefixModulesRoot(prefix),
+      resolveKcodePrefixModulesRoot(prefix),
       '@minimax-ai/code',
       'dist/index.js',
     );
@@ -753,11 +757,11 @@ describe('KCode prefix update journal', () => {
     try {
       mkdirSync(path.dirname(entryFile), { recursive: true });
       writeFileSync(entryFile, '');
-      writePackage(resolveMcodePrefixModulesRoot(prefix), '1.2.3');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.3');
       writeOwnershipReceipt(prefix);
       writeFileSync(pendingFile, '{}');
 
-      expect(() => inspectPendingMcodePrefixUpdate(entryFile)).toThrow(
+      expect(() => inspectPendingKcodePrefixUpdate(entryFile)).toThrow(
         `KCode pending update metadata is invalid at ${pendingFile}.`,
       );
     } finally {
@@ -772,7 +776,7 @@ describe('KCode prefix update journal', () => {
     );
     const foreignStaging = path.join(path.dirname(foreignPrefix), '.foreign-staging');
     const entryFile = path.join(
-      resolveMcodePrefixModulesRoot(prefix),
+      resolveKcodePrefixModulesRoot(prefix),
       '@minimax-ai/code',
       'dist/index.js',
     );
@@ -789,7 +793,7 @@ describe('KCode prefix update journal', () => {
         }),
       );
 
-      expect(() => inspectPendingMcodePrefixUpdate(entryFile)).toThrow(
+      expect(() => inspectPendingKcodePrefixUpdate(entryFile)).toThrow(
         `KCode pending update file is outside its active prefix: ${pendingFile}`,
       );
     } finally {
@@ -800,10 +804,10 @@ describe('KCode prefix update journal', () => {
   });
 
   it('resolves the modules root and launcher pairs for each platform layout', () => {
-    expect(resolveMcodePrefixModulesRoot('/opt/minimax', 'linux')).toBe(
+    expect(resolveKcodePrefixModulesRoot('/opt/minimax', 'linux')).toBe(
       '/opt/minimax/lib/node_modules',
     );
-    expect(resolveMcodePrefixLauncherPairs('/opt/minimax', '/opt/staging', 'linux')).toEqual([
+    expect(resolveKcodePrefixLauncherPairs('/opt/minimax', '/opt/staging', 'linux')).toEqual([
       {
         activePath: '/opt/minimax/bin/mcode',
         stagedPath: '/opt/staging/bin/mcode',
@@ -811,10 +815,10 @@ describe('KCode prefix update journal', () => {
       },
     ]);
     expect(
-      resolveMcodePrefixModulesRoot(String.raw`C:\MinimaxCode`, 'win32'),
+      resolveKcodePrefixModulesRoot(String.raw`C:\MinimaxCode`, 'win32'),
     ).toBe(String.raw`C:\MinimaxCode\node_modules`);
     expect(
-      resolveMcodePrefixLauncherPairs(String.raw`C:\MinimaxCode`, String.raw`C:\Staging`, 'win32'),
+      resolveKcodePrefixLauncherPairs(String.raw`C:\MinimaxCode`, String.raw`C:\Staging`, 'win32'),
     ).toEqual([
       {
         activePath: String.raw`C:\MinimaxCode\mcode.cmd`,
@@ -941,7 +945,7 @@ describe('McodeUpdateApplication', () => {
     const check = vi.fn(async () => releaseCheckResult());
     const application = createApplication({
       detectInstallSource: () =>
-        detectMcodeInstallSource({
+        detectKcodeInstallSource({
           installRoot: '/source',
           platform: 'darwin',
           packageRoot: () => '/Users/demo/project/.bun/install/global/source/@minimax-ai/code',
@@ -1038,7 +1042,7 @@ describe('McodeUpdateApplication', () => {
               installSource: 'npm-global',
               artifactUrl: RELEASE_ARTIFACT_URL,
             }
-      ) as McodeUpdatePlan;
+      ) as KcodeUpdatePlan;
 
       await expect(application.apply(plan)).rejects.toThrow(
         `KCode update plan ${kind} cannot be applied automatically.`,
@@ -1057,8 +1061,8 @@ describe('McodeUpdateApplication', () => {
       detectInstallSource: async () => 'unsupported',
     });
 
-    expect(mcodeUpdateChannelLabel(await application.inspect())).toBe('the stable channel');
-    expect(mcodeUpdateChannelLabel(await manualApplication.inspect())).toBe('the release channel');
+    expect(kcodeUpdateChannelLabel(await application.inspect())).toBe('the stable channel');
+    expect(kcodeUpdateChannelLabel(await manualApplication.inspect())).toBe('the release channel');
   });
 });
 
@@ -1103,12 +1107,12 @@ function createReleaseServiceStub(
 }
 
 function createApplication(
-  dependencies: Partial<McodeUpdateApplicationDependencies> = {},
-  options: Partial<McodeUpdateApplicationOptions> = {},
-): McodeUpdateApplication {
+  dependencies: Partial<KcodeUpdateApplicationDependencies> = {},
+  options: Partial<KcodeUpdateApplicationOptions> = {},
+): KcodeUpdateApplication {
   // The release channel is the only update source this build owns, so every case
   // injects the service that resolves it instead of reaching the network.
-  return new McodeUpdateApplication(
+  return new KcodeUpdateApplication(
     {
       currentVersion: '1.2.3',
       installRoot: '/managed',

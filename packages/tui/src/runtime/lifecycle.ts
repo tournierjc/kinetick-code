@@ -11,7 +11,7 @@ import {
 } from '@mavis/config';
 import {
   AuthSessionChangedError,
-  MCODE_OAUTH_SCOPES,
+  KCODE_OAUTH_SCOPES,
   requiresInteractiveLogin,
   resolveKCodeOAuthEndpointConfig,
   type AccessTokenLease,
@@ -51,7 +51,7 @@ import {
   writeRejectedCliAccountIdentity,
   writeVerifiedCliAccountIdentity,
 } from '../auth/identity-storage.js';
-import { resolveMcodeDataEnvironment } from '../auth/environment.js';
+import { resolveKcodeDataEnvironment } from '../auth/environment.js';
 import { uploadTuiFeedbackDiagnostics } from './feedback/diagnostic-upload.js';
 import { TuiFeedbackService } from './feedback/service.js';
 import {
@@ -59,7 +59,7 @@ import {
   disposeTuiBrowserSessionStorage,
   type TuiBrowserProvider,
 } from './browser-provider.js';
-import { createMcodeSharedAuthSession } from './auth-session.js';
+import { createKcodeSharedAuthSession } from './auth-session.js';
 import { resolveTuiManagedBackendLane } from '../cli/environment.js';
 import {
   prepareTuiMcodeToolsIntegration,
@@ -112,7 +112,7 @@ export interface CreateTuiRuntimeDependencies {
     signal?: AbortSignal,
   ) => Promise<LocalRuntimeAuthContext | undefined>;
   syncRuntimeAuthProjection?: typeof syncCliRuntimeAuthProjection;
-  getDataEnvironment?: typeof resolveMcodeDataEnvironment;
+  getDataEnvironment?: typeof resolveKcodeDataEnvironment;
   fetchImpl?: typeof fetch;
   sharedAuthCore?: Pick<
     KCodeOAuthCore,
@@ -206,7 +206,7 @@ export async function createTuiRuntime(
   if (useSharedOAuth) {
     const activeSharedAuthCore =
       dependencies.sharedAuthCore ??
-      createMcodeSharedAuthSession({
+      createKcodeSharedAuthSession({
         dataDir: options.dataDir,
         region: authScope.region,
         buildEnv: authScope.buildEnv,
@@ -453,7 +453,7 @@ export async function createTuiRuntime(
     },
     ...(options.surface === 'headless' ||
     options.surface === 'acp' ||
-    (dependencies.getDataEnvironment ?? resolveMcodeDataEnvironment)() === 'test'
+    (dependencies.getDataEnvironment ?? resolveKcodeDataEnvironment)() === 'test'
       ? { startupExecutionPolicy: 'quarantined' }
       : {}),
   };
@@ -623,7 +623,7 @@ async function readSharedAccessToken(
 ): Promise<AccessTokenLease | undefined> {
   try {
     return await core.getAccessToken({
-      requiredScopes: [...MCODE_OAUTH_SCOPES],
+      requiredScopes: [...KCODE_OAUTH_SCOPES],
       minValidityMs,
     });
   } catch (error) {
@@ -652,7 +652,7 @@ function createMcodeToolsBrokerAuthSession(
     getStatus: async () => projectStatus(await core.getStatus()),
     getAccessToken: (minValidityMs) =>
       core.getAccessToken({
-        requiredScopes: [...MCODE_OAUTH_SCOPES],
+        requiredScopes: [...KCODE_OAUTH_SCOPES],
         minValidityMs,
       }),
     handleUnauthorized: (generation) => core.handleUnauthorized({ generation }),

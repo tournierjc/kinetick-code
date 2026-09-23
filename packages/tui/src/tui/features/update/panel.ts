@@ -13,14 +13,14 @@ import {
   renderDecisionHeading,
 } from '../interaction/decision-frame.js';
 import type {
-  McodeUpdateApplyOptions,
-  McodeUpdateOutcome,
-  McodeUpdatePlan,
+  KcodeUpdateApplyOptions,
+  KcodeUpdateOutcome,
+  KcodeUpdatePlan,
 } from '../../../update/application.js';
 import {
-  isMcodeUpdateAdmissionError,
-  isMcodeUpdateCancelledError,
-  type McodeUpdatePhase,
+  isKcodeUpdateAdmissionError,
+  isKcodeUpdateCancelledError,
+  type KcodeUpdatePhase,
 } from '../../../update/progress.js';
 import { redactTuiCredentials } from '../../transcript/export.js';
 import { presentTuiFailure } from '../../../user-facing-failure.js';
@@ -29,29 +29,29 @@ const UPDATE_ANIMATION_INTERVAL_MS = 80;
 const UPDATE_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 const UPDATE_RECENT_OUTPUT_LINES = 4;
 
-type ActionableMcodeUpdatePlan = Extract<McodeUpdatePlan, { kind: 'available' }>;
+type ActionableKcodeUpdatePlan = Extract<KcodeUpdatePlan, { kind: 'available' }>;
 
-type McodeUpdatePanelState =
+type KcodeUpdatePanelState =
   | { status: 'review' }
   | {
       status: 'applying';
       startedAtMs: number;
-      phase: McodeUpdatePhase;
+      phase: KcodeUpdatePhase;
       cancellable: boolean;
       cancelRequested: boolean;
     }
   | { status: 'paused'; reason: string }
   | { status: 'cancelled' }
   | { status: 'failed'; message: string; diagnostic?: string }
-  | { status: 'succeeded'; outcome: McodeUpdateOutcome };
+  | { status: 'succeeded'; outcome: KcodeUpdateOutcome };
 
 export interface TuiUpdatePanelOptions {
-  readonly plan: ActionableMcodeUpdatePlan;
+  readonly plan: ActionableKcodeUpdatePlan;
   readonly maxRows: number | (() => number);
   readonly apply: (
-    plan: ActionableMcodeUpdatePlan,
-    options?: McodeUpdateApplyOptions,
-  ) => Promise<McodeUpdateOutcome>;
+    plan: ActionableKcodeUpdatePlan,
+    options?: KcodeUpdateApplyOptions,
+  ) => Promise<KcodeUpdateOutcome>;
   readonly requestRender: () => void;
   readonly onClose: () => void;
   readonly onRestart: () => Promise<void>;
@@ -60,7 +60,7 @@ export interface TuiUpdatePanelOptions {
 }
 
 export class TuiUpdatePanel implements Component, Focusable {
-  private state: McodeUpdatePanelState = { status: 'review' };
+  private state: KcodeUpdatePanelState = { status: 'review' };
   private selectedAction = 0;
   private detailsExpanded = false;
   private frameIndex = 0;
@@ -173,8 +173,8 @@ export class TuiUpdatePanel implements Component, Focusable {
       this.setState({ status: 'succeeded', outcome });
     } catch (error) {
       if (this.disposed) return;
-      if (isMcodeUpdateCancelledError(error)) this.setState({ status: 'cancelled' });
-      else if (isMcodeUpdateAdmissionError(error)) {
+      if (isKcodeUpdateCancelledError(error)) this.setState({ status: 'cancelled' });
+      else if (isKcodeUpdateAdmissionError(error)) {
         this.setState({ status: 'paused', reason: sanitizeTerminalText(error.message) });
       } else {
         const presentation = presentTuiFailure(error, {
@@ -356,12 +356,12 @@ export class TuiUpdatePanel implements Component, Focusable {
     this.options.requestRender();
   }
 
-  private acceptPhase(phase: McodeUpdatePhase, cancellable: boolean): void {
+  private acceptPhase(phase: KcodeUpdatePhase, cancellable: boolean): void {
     if (this.disposed || this.state.status !== 'applying') return;
     this.setState({ ...this.state, phase, cancellable });
   }
 
-  private setState(state: McodeUpdatePanelState): void {
+  private setState(state: KcodeUpdatePanelState): void {
     this.state = state;
     if (state.status === 'applying') this.startAnimation();
     else this.stopAnimation();
@@ -403,7 +403,7 @@ export class TuiUpdatePanel implements Component, Focusable {
   }
 }
 
-function phaseLabel(phase: McodeUpdatePhase): string {
+function phaseLabel(phase: KcodeUpdatePhase): string {
   if (phase === 'checking') return 'Checking';
   if (phase === 'downloading') return 'Downloading';
   if (phase === 'staging') return 'Staging';
@@ -413,7 +413,7 @@ function phaseLabel(phase: McodeUpdatePhase): string {
   return 'Installing';
 }
 
-function sourceLabel(plan: ActionableMcodeUpdatePlan): string {
+function sourceLabel(plan: ActionableKcodeUpdatePlan): string {
   return `${plan.installSource.replace('-global', '')} global installation`;
 }
 

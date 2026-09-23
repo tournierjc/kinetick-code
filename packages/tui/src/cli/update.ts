@@ -1,50 +1,50 @@
 import { createInterface } from 'node:readline/promises';
 import { stripVTControlCharacters } from 'node:util';
 import {
-  McodeUpdateApplication,
-  mcodeUpdateChannelLabel,
-  type McodeUpdatePlan,
+  KcodeUpdateApplication,
+  kcodeUpdateChannelLabel,
+  type KcodeUpdatePlan,
 } from '../update/application.js';
-import { mcodePrefixActivationScheduledMessage } from '../update/messages.js';
+import { kcodePrefixActivationScheduledMessage } from '../update/messages.js';
 import { KCODE_RELEASES_URL } from '../update/release.js';
-import { schedulePendingMcodePrefixUpdate } from '../update/prefix-update.js';
-import type { McodeUpdatePhase } from '../update/progress.js';
+import { schedulePendingKcodePrefixUpdate } from '../update/prefix-update.js';
+import type { KcodeUpdatePhase } from '../update/progress.js';
 
 const UPDATE_ANIMATION_INTERVAL_MS = 80;
 const UPDATE_ACTIVITY_INTERVAL_MS = 15_000;
 const UPDATE_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const;
 const UPDATE_OUTPUT_MAX_LENGTH = 72;
 
-export interface RunMcodeUpdateOptions {
-  readonly application?: McodeUpdateApplication;
+export interface RunKcodeUpdateOptions {
+  readonly application?: KcodeUpdateApplication;
   readonly interactive?: boolean;
   readonly confirm?: (message: string) => Promise<boolean>;
   readonly write?: (value: string) => void;
   readonly schedulePendingPrefixUpdate?: () => Promise<boolean>;
 }
 
-export async function runMcodeUpdate(
+export async function runKcodeUpdate(
   currentVersion: string,
-  options: RunMcodeUpdateOptions = {},
+  options: RunKcodeUpdateOptions = {},
 ): Promise<void> {
-  const application = options.application ?? new McodeUpdateApplication({ currentVersion });
+  const application = options.application ?? new KcodeUpdateApplication({ currentVersion });
   const interactive = options.interactive ?? Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const write = options.write ?? ((value: string) => process.stdout.write(value));
   const schedulePendingPrefixUpdate =
-    options.schedulePendingPrefixUpdate ?? (() => schedulePendingMcodePrefixUpdate());
+    options.schedulePendingPrefixUpdate ?? (() => schedulePendingKcodePrefixUpdate());
   if (await schedulePendingPrefixUpdate()) {
-    write(`${mcodePrefixActivationScheduledMessage()}\n`);
+    write(`${kcodePrefixActivationScheduledMessage()}\n`);
     return;
   }
   const plan = await application.inspect();
 
   if (plan.kind === 'current') {
-    write(`KCode ${plan.currentVersion} is current on ${mcodeUpdateChannelLabel(plan)}.\n`);
+    write(`KCode ${plan.currentVersion} is current on ${kcodeUpdateChannelLabel(plan)}.\n`);
     return;
   }
   if (plan.kind === 'ahead') {
     write(
-      `KCode ${plan.currentVersion} is newer than ${mcodeUpdateChannelLabel(plan)} ` +
+      `KCode ${plan.currentVersion} is newer than ${kcodeUpdateChannelLabel(plan)} ` +
         `${plan.latestVersion}; no update was applied.\n`,
     );
     return;
@@ -69,7 +69,7 @@ export async function runMcodeUpdate(
     return;
   }
 
-  const progress = new McodeUpdateCliProgress(write, updateProcessLabel(plan));
+  const progress = new KcodeUpdateCliProgress(write, updateProcessLabel(plan));
   progress.start();
   try {
     const outcome = await application.apply(plan, {
@@ -84,11 +84,11 @@ export async function runMcodeUpdate(
   }
 }
 
-class McodeUpdateCliProgress {
+class KcodeUpdateCliProgress {
   private frameIndex = 0;
   private latestOutput = '';
   private latestOutputAtMs: number | undefined;
-  private phase: McodeUpdatePhase | undefined;
+  private phase: KcodeUpdatePhase | undefined;
   private startedAtMs = 0;
   private animationTimer: ReturnType<typeof setInterval> | undefined;
   private activityTimer: ReturnType<typeof setInterval> | undefined;
@@ -111,7 +111,7 @@ class McodeUpdateCliProgress {
     this.activityTimer.unref?.();
   }
 
-  acceptPhase(phase: McodeUpdatePhase): void {
+  acceptPhase(phase: KcodeUpdatePhase): void {
     this.phase = phase;
     if (phase === 'completed') {
       this.render();
@@ -168,7 +168,7 @@ class McodeUpdateCliProgress {
   }
 }
 
-function phaseLabel(phase: McodeUpdatePhase): string {
+function phaseLabel(phase: KcodeUpdatePhase): string {
   if (phase === 'checking') return 'Checking for updates';
   if (phase === 'downloading') return 'Downloading release';
   if (phase === 'staging') return 'Preparing isolated update';
@@ -178,7 +178,7 @@ function phaseLabel(phase: McodeUpdatePhase): string {
   return 'Completing update';
 }
 
-function updateProcessLabel(plan: Extract<McodeUpdatePlan, { kind: 'available' }>): string {
+function updateProcessLabel(plan: Extract<KcodeUpdatePlan, { kind: 'available' }>): string {
   return plan.installSource.replace('-global', '');
 }
 
@@ -187,11 +187,11 @@ function truncateOutput(value: string): string {
   return `${value.slice(0, UPDATE_OUTPUT_MAX_LENGTH - 1)}…`;
 }
 
-function renderAvailableUpdate(plan: Extract<McodeUpdatePlan, { kind: 'available' }>): string {
+function renderAvailableUpdate(plan: Extract<KcodeUpdatePlan, { kind: 'available' }>): string {
   return (
     `KCode ${plan.latestVersion} is available from ${KCODE_RELEASES_URL} ` +
     `(current ${plan.currentVersion}, ${plan.installSource.replace('-global', '')} installation, ` +
-    `${mcodeUpdateChannelLabel(plan)}).\n`
+    `${kcodeUpdateChannelLabel(plan)}).\n`
   );
 }
 

@@ -12,8 +12,8 @@ import {
 import { resolveTuiLayoutPolicy } from '../layout-policy.js';
 import { formatTuiKeybinding, type TuiKeybindingRegistry } from '../keybindings.js';
 import {
-  MINIMAX_CODE_WELCOME_DESIGN,
-  MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT,
+  KCODE_WELCOME_DESIGN,
+  KCODE_WELCOME_PASTE_IMAGE_SHORTCUT,
 } from './design.js';
 import { renderTuiWelcomeHero } from './hero.js';
 
@@ -76,10 +76,10 @@ function renderWideWelcome(
   keybindings: TuiKeybindingRegistry | undefined,
   content?: TuiWelcomeContent,
 ): string[] {
-  const tips = resolveWelcomeItems(content?.tips, MINIMAX_CODE_WELCOME_DESIGN.wide.tips, 3);
+  const tips = resolveWelcomeItems(content?.tips, KCODE_WELCOME_DESIGN.wide.tips, 3);
   const news = resolveWelcomeItems(
     content?.changelogEntries,
-    MINIMAX_CODE_WELCOME_DESIGN.wide.news,
+    KCODE_WELCOME_DESIGN.wide.news,
     3,
   );
   return [
@@ -87,12 +87,12 @@ function renderWideWelcome(
     '',
     renderWelcomeHeader(state, width),
     ...renderWelcomeAccountNoticeRows(state, width),
-    renderFrameRow(renderSectionTitle(MINIMAX_CODE_WELCOME_DESIGN.sectionTitles.tips), width),
+    renderFrameRow(renderSectionTitle(KCODE_WELCOME_DESIGN.sectionTitles.tips), width),
     ...tips.map((text) =>
       renderFrameRow(renderWelcomeBullet(resolveWelcomeCopy(text, keybindings)), width),
     ),
     renderFrameDivider(width),
-    renderFrameRow(renderSectionTitle(MINIMAX_CODE_WELCOME_DESIGN.sectionTitles.news), width),
+    renderFrameRow(renderSectionTitle(KCODE_WELCOME_DESIGN.sectionTitles.news), width),
     ...news.map((text) =>
       renderFrameRow(renderWelcomeBullet(resolveWelcomeCopy(text, keybindings)), width),
     ),
@@ -106,10 +106,10 @@ function renderStackedWelcome(
   keybindings: TuiKeybindingRegistry | undefined,
   content?: TuiWelcomeContent,
 ): string[] {
-  const tips = resolveWelcomeItems(content?.tips, MINIMAX_CODE_WELCOME_DESIGN.stacked.tips, 2);
+  const tips = resolveWelcomeItems(content?.tips, KCODE_WELCOME_DESIGN.stacked.tips, 2);
   const news = resolveWelcomeItems(
     content?.changelogEntries,
-    MINIMAX_CODE_WELCOME_DESIGN.stacked.news,
+    KCODE_WELCOME_DESIGN.stacked.news,
     3,
   );
   return [
@@ -118,12 +118,12 @@ function renderStackedWelcome(
     renderWelcomeHeader(state, width),
     ...renderWelcomeAccountNoticeRows(state, width),
     renderFrameDivider(width),
-    renderFrameRow(renderSectionTitle(MINIMAX_CODE_WELCOME_DESIGN.sectionTitles.tips), width),
+    renderFrameRow(renderSectionTitle(KCODE_WELCOME_DESIGN.sectionTitles.tips), width),
     ...tips.map((text) =>
       renderFrameRow(renderWelcomeBullet(resolveWelcomeCopy(text, keybindings)), width),
     ),
     renderFrameRow('', width),
-    renderFrameRow(renderSectionTitle(MINIMAX_CODE_WELCOME_DESIGN.sectionTitles.news), width),
+    renderFrameRow(renderSectionTitle(KCODE_WELCOME_DESIGN.sectionTitles.news), width),
     ...news.map((text) =>
       renderFrameRow(renderWelcomeBullet(resolveWelcomeCopy(text, keybindings)), width),
     ),
@@ -138,10 +138,10 @@ function renderCompactWelcome(
   keybindings: TuiKeybindingRegistry | undefined,
   content?: TuiWelcomeContent,
 ): string[] {
-  const tips = resolveWelcomeItems(content?.tips, MINIMAX_CODE_WELCOME_DESIGN.compact.tips, 2);
+  const tips = resolveWelcomeItems(content?.tips, KCODE_WELCOME_DESIGN.compact.tips, 2);
   const news = resolveWelcomeItems(
     content?.changelogEntries,
-    MINIMAX_CODE_WELCOME_DESIGN.compact.news,
+    KCODE_WELCOME_DESIGN.compact.news,
     3,
   );
   return [
@@ -157,7 +157,7 @@ function renderCompactWelcome(
     ...tips.map((text) =>
       renderFrameRow(chalk.hex(colors.muted)(resolveWelcomeCopy(text, keybindings)), width),
     ),
-    renderFrameRow(renderSectionTitle(MINIMAX_CODE_WELCOME_DESIGN.sectionTitles.news), width),
+    renderFrameRow(renderSectionTitle(KCODE_WELCOME_DESIGN.sectionTitles.news), width),
     ...news.map((text) => renderFrameRow(chalk.hex(colors.muted)(text), width)),
     renderFrameBottom(width),
   ];
@@ -189,7 +189,7 @@ function renderWelcomeBullet(text: string): string {
 
 function resolveWelcomeCopy(value: string, keybindings: TuiKeybindingRegistry | undefined): string {
   return value.replaceAll(
-    MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT,
+    KCODE_WELCOME_PASTE_IMAGE_SHORTCUT,
     formatTuiKeybinding('composer.paste-image', keybindings),
   );
 }

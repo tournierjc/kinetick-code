@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { McodeInteractiveRenderer } from "../../src/tui/renderer/interactive-renderer.js";
+import { KcodeInteractiveRenderer } from "../../src/tui/renderer/interactive-renderer.js";
 import { TuiComposer } from "../../src/tui/shell/composer.js";
 import { Editor } from "../../src/tui/widgets/editor/editor.js";
 import { type Component } from "../../src/tui/engine/public.js";
@@ -41,7 +41,7 @@ function setup(
   columns = 40,
 ) {
   const terminal = new RecordingTerminal(columns, 16);
-  const renderer = new McodeInteractiveRenderer({
+  const renderer = new KcodeInteractiveRenderer({
     terminal,
     initialMode: mode,
     showHardwareCursor,

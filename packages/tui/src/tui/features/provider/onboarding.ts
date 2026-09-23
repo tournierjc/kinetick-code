@@ -1,9 +1,9 @@
 import type {
-  McodeProviderApiFormat,
-  McodeProviderView,
-  McodeProviderTemplate,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
+  KcodeProviderApiFormat,
+  KcodeProviderView,
+  KcodeProviderTemplate,
+  KcodeSaveProviderCandidateInput,
+  KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { additiveProviderModels, matchesProviderTemplate } from './connections.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -16,7 +16,7 @@ import { SelectList } from '../../widgets/select-list.js';
 
 const CUSTOM_PROVIDER_VALUE = '\u0000custom-provider';
 const CUSTOM_FORMATS: readonly {
-  readonly value: McodeProviderApiFormat;
+  readonly value: KcodeProviderApiFormat;
   readonly label: string;
   readonly description: string;
 }[] = [
@@ -51,12 +51,12 @@ export interface TuiProviderOnboardingResult {
 }
 
 export interface TuiProviderOnboardingOptions {
-  readonly templates: readonly McodeProviderTemplate[];
-  readonly providers?: readonly McodeProviderView[];
+  readonly templates: readonly KcodeProviderTemplate[];
+  readonly providers?: readonly KcodeProviderView[];
   readonly catalogWarning?: string;
   readonly onSave: (
-    input: McodeSaveProviderCandidateInput,
-  ) => Promise<McodeSaveProviderCandidateResult>;
+    input: KcodeSaveProviderCandidateInput,
+  ) => Promise<KcodeSaveProviderCandidateResult>;
   readonly onComplete: (result: TuiProviderOnboardingResult) => void | Promise<void>;
   readonly onCancel: () => void;
   readonly requestRender: () => void;
@@ -68,8 +68,8 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private readonly searchInput = new Input({ prompt: '' });
   private readonly textInput = new Input({ prompt: '' });
   private readonly secretInput = new Input({ prompt: '', mask: '•' });
-  private template?: McodeProviderTemplate;
-  private connection?: McodeProviderView;
+  private template?: KcodeProviderTemplate;
+  private connection?: KcodeProviderView;
   private alias = '';
   private selectedModelId = '';
   private modelFocus: ModelFocus = 'models';
@@ -78,7 +78,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private presetBaseUrl = '';
   private customName = '';
   private customBaseUrl = '';
-  private customApiFormat: McodeProviderApiFormat = 'openai-completions';
+  private customApiFormat: KcodeProviderApiFormat = 'openai-completions';
   private customModelId = '';
   private busy = false;
   private status = '';
@@ -375,7 +375,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     return list;
   }
 
-  private filteredModels(): McodeProviderTemplate['models'] {
+  private filteredModels(): KcodeProviderTemplate['models'] {
     const query = this.searchInput.getValue().trim().toLocaleLowerCase();
     return (this.template?.models ?? []).filter((model) =>
       `${model.modelId} ${model.displayName ?? ''}`.toLocaleLowerCase().includes(query),
@@ -385,7 +385,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private createFormatList(): SelectList {
     const list = this.createList([...CUSTOM_FORMATS]);
     list.onSelect = (item) => {
-      this.customApiFormat = item.value as McodeProviderApiFormat;
+      this.customApiFormat = item.value as KcodeProviderApiFormat;
       this.enterTextMode('custom-model', this.customModelId);
     };
     return list;
@@ -414,7 +414,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     this.enterMode(this.matchingConnections().length ? 'connection' : 'model');
   }
 
-  private matchingConnections(): readonly McodeProviderView[] {
+  private matchingConnections(): readonly KcodeProviderView[] {
     const template = this.template;
     return template
       ? (this.options.providers ?? []).filter(
@@ -566,7 +566,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     }
   }
 
-  private saveInput(apiKey: string): McodeSaveProviderCandidateInput | undefined {
+  private saveInput(apiKey: string): KcodeSaveProviderCandidateInput | undefined {
     if (this.template) {
       if (!this.selectedModelId) return undefined;
       return {
@@ -649,7 +649,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
             : this.createFormatList();
   }
 
-  private selectedModel(): McodeProviderTemplate['models'][number] | undefined {
+  private selectedModel(): KcodeProviderTemplate['models'][number] | undefined {
     return this.template?.models.find((model) => model.modelId === this.selectedModelId);
   }
 

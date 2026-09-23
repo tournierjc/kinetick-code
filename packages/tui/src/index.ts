@@ -6,12 +6,12 @@ import {
   configureTuiRuntimeEnvironment,
   resolveTuiStartupEnvironmentOption,
 } from './cli/environment.js';
-import { prepareMcodePrefixProcess } from './update/prefix-update.js';
-import { isInternalMcodePackageName, resolveMcodePackageName } from './update/install-source.js';
+import { prepareKcodePrefixProcess } from './update/prefix-update.js';
+import { isInternalKcodePackageName, resolveKcodePackageName } from './update/install-source.js';
 
 async function main(): Promise<void> {
-  const packageName = resolveMcodePackageName(fileURLToPath(import.meta.url));
-  const internalPackage = isInternalMcodePackageName(packageName);
+  const packageName = resolveKcodePackageName(fileURLToPath(import.meta.url));
+  const internalPackage = isInternalKcodePackageName(packageName);
   let startupBuildEnvironment: ReturnType<typeof resolveTuiStartupEnvironmentOption>;
   try {
     startupBuildEnvironment = resolveTuiStartupEnvironmentOption(
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     dataDir: getTuiDataDirPath(),
     ...(startupBuildEnvironment ? { startupBuildEnvironment } : {}),
   });
-  const prefixProcess = await prepareMcodePrefixProcess();
+  const prefixProcess = await prepareKcodePrefixProcess();
   try {
     // Default-deny egress: installed before any product module is imported, so
     // no request can be issued before the policy is in place.

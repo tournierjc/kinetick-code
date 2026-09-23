@@ -6,7 +6,7 @@ import type {
   ConversationSteerInput,
   ConversationSteerResult,
 } from "@mavis/local-runtime-v2/cli-service";
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from "../product-context.js";
+import { KCODE_DEFAULT_AGENT_NAME } from "../product-context.js";
 import { TuiEventAccess } from "./adapters/event-access.js";
 import { TuiRuntimeAccessContext } from "./adapters/access-context.js";
 import { TuiWorkspaceAccess } from "./adapters/workspace-access.js";
@@ -126,7 +126,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   constructor(cliService: CliService, options: TuiRuntimeAdapterOptions = {}) {
     this.cliService = cliService;
     const defaultAgentName =
-      options.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME;
+      options.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME;
     this.tokenPlanAccountStatusGetter = options.tokenPlanAccountStatusGetter;
     this.synchronizeAuth = options.synchronizeAuth;
     this.accountIdentityGetter = options.accountIdentityGetter;
@@ -468,7 +468,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     return this.productAccess.getMiniMaxModelSource();
   }
   setMiniMaxModelSource(
-    source: import("../provider/contract.js").McodeMiniMaxModelSource,
+    source: import("../provider/contract.js").KcodeMiniMaxModelSource,
   ) {
     return this.productAccess.setMiniMaxModelSource(source);
   }
@@ -476,22 +476,22 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     return this.productAccess.upsertMiniMaxApiKey(input);
   }
   createUserModelProvider(
-    input: import("../provider/contract.js").McodeCreateProviderInput,
+    input: import("../provider/contract.js").KcodeCreateProviderInput,
   ) {
     return this.productAccess.createUserModelProvider(input);
   }
   discoverUserModelsCandidate(
-    input: import("../provider/contract.js").McodeDiscoverProviderModelsInput,
+    input: import("../provider/contract.js").KcodeDiscoverProviderModelsInput,
   ) {
     return this.productAccess.discoverUserModelsCandidate(input);
   }
   saveUserModelProviderCandidate(
-    input: import("../provider/contract.js").McodeSaveProviderCandidateInput,
+    input: import("../provider/contract.js").KcodeSaveProviderCandidateInput,
   ) {
     return this.productAccess.saveUserModelProviderCandidate(input);
   }
   updateUserModelProvider(
-    input: import("../provider/contract.js").McodeUpdateProviderInput,
+    input: import("../provider/contract.js").KcodeUpdateProviderInput,
   ) {
     return this.productAccess.updateUserModelProvider(input);
   }

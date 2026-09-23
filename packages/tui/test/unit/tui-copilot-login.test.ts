@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { McodeCopilotOAuthStatus } from '../../src/provider/contract.js';
+import type { KcodeCopilotOAuthStatus } from '../../src/provider/contract.js';
 import { TuiCopilotLogin } from '../../src/tui/features/auth/copilot-login.js';
 import { stripAnsi, visibleWidth } from '../../src/tui/rendering/text.js';
 
-const disconnected: McodeCopilotOAuthStatus = {
+const disconnected: KcodeCopilotOAuthStatus = {
   state: 'disconnected',
   providerId: 'github-copilot',
 };
-const device: McodeCopilotOAuthStatus = {
+const device: KcodeCopilotOAuthStatus = {
   state: 'pending',
   providerId: 'github-copilot',
   loginId: 'attempt-1',
@@ -19,14 +19,14 @@ const device: McodeCopilotOAuthStatus = {
   },
 };
 
-function harness(initial: McodeCopilotOAuthStatus = disconnected) {
+function harness(initial: KcodeCopilotOAuthStatus = disconnected) {
   const application = {
     getCopilotOAuthStatus: vi.fn(
-      async (): Promise<McodeCopilotOAuthStatus> => initial,
+      async (): Promise<KcodeCopilotOAuthStatus> => initial,
     ),
-    connectCopilotOAuth: vi.fn(async (): Promise<McodeCopilotOAuthStatus> => device),
+    connectCopilotOAuth: vi.fn(async (): Promise<KcodeCopilotOAuthStatus> => device),
     cancelCopilotOAuthLogin: vi.fn(
-      async (): Promise<McodeCopilotOAuthStatus> => disconnected,
+      async (): Promise<KcodeCopilotOAuthStatus> => disconnected,
     ),
   };
   const openExternalTarget = vi.fn(async () => undefined);
@@ -97,7 +97,7 @@ describe('Copilot sign-in panel', () => {
 
   it('cancels an authorization that arrives after the user closes the panel', async () => {
     const h = harness();
-    let release!: (status: McodeCopilotOAuthStatus) => void;
+    let release!: (status: KcodeCopilotOAuthStatus) => void;
     h.application.connectCopilotOAuth.mockImplementation(
       () =>
         new Promise((resolve) => {

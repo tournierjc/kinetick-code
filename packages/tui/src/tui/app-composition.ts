@@ -60,7 +60,7 @@ import {
   type TUI,
   type TuiMode,
 } from './engine/public.js';
-import { McodeInteractiveRenderer } from './renderer/index.js';
+import { KcodeInteractiveRenderer } from './renderer/index.js';
 import type { TuiRunProjection } from './state/run-projection.js';
 import type { TuiStateStore } from './state/index.js';
 import { TuiThemeController } from './theme/controller.js';
@@ -71,9 +71,9 @@ import type { LocalTranscriptCellKind } from './transcript/local-appender.js';
 import type { TranscriptView } from './transcript/view.js';
 import type { CreateTuiAppOptions } from '../types/tui-app.js';
 import { Editor } from './widgets/editor/editor.js';
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from '../product-context.js';
+import { KCODE_DEFAULT_AGENT_NAME } from '../product-context.js';
 import { createTuiAutomationResultWriter } from './automation/result-writer.js';
-import { MINIMAX_CODE_WELCOME_DESIGN } from './shell/welcome/design.js';
+import { KCODE_WELCOME_DESIGN } from './shell/welcome/design.js';
 
 // ---------------------------------------------------------------------------
 // Small numeric / utility helpers
@@ -93,7 +93,7 @@ export function createTuiChatControllerComposition(options: CreateTuiAppOptions)
   readonly writeAutomationResult?: CreateTuiChatControllerOptions['writeAutomationResult'];
   readonly workspaceRoots: TuiWorkspaceRoots;
 } {
-  const defaultAgentName = options.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME;
+  const defaultAgentName = options.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME;
   const writer = createTuiAutomationResultWriter({
     statusLineItems: options.statusLineItems,
     resultPath: options.automationResultPath,
@@ -130,7 +130,7 @@ export function createTuiApplicationRenderer(options: CreateTuiAppOptions) {
   const readClipboardText = options.readClipboardText ?? readTuiClipboardText;
   let themeController: TuiThemeController | undefined;
   const styleSearchMatch = (text: string): string => tuiChalk.hex(tuiColors.signal)(text);
-  const renderer = new McodeInteractiveRenderer({
+  const renderer = new KcodeInteractiveRenderer({
     terminal,
     initialMode: options.tuiMode ?? 'regular',
     logDirectory: options.runtimeLogDirectory,
@@ -332,7 +332,7 @@ export function createTuiApplicationWidgets(options: {
     },
     options.app.keybindings,
     {
-      tips: selectRandomTuiItems(MINIMAX_CODE_WELCOME_DESIGN.tipPool, 3),
+      tips: selectRandomTuiItems(KCODE_WELCOME_DESIGN.tipPool, 3),
       ...(changelog
         ? {
             changelogEntries: selectRandomTuiItems(

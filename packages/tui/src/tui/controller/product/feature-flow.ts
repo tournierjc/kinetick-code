@@ -76,20 +76,20 @@ import type { TuiChatController } from '../chat-controller.js';
 import { TuiModelState } from './model-state.js';
 import { isRuntimeErrorCode, isRuntimeMethodNotImplemented } from '../support.js';
 import { resolveTuiThinkingChoice } from '../../features/model/thinking.js';
-import { McodeProviderApplication } from '../../../provider/application.js';
+import { KcodeProviderApplication } from '../../../provider/application.js';
 import type {
-  McodeCodexOAuthStatus,
-  McodeCopilotOAuthStatus,
-  McodeProviderTemplate,
+  KcodeCodexOAuthStatus,
+  KcodeCopilotOAuthStatus,
+  KcodeProviderTemplate,
 } from '../../../provider/contract.js';
-import { McodePluginApplication } from '../../../plugin/application.js';
-import type { McodePluginRuntimeAccess, McodePluginView } from '../../../plugin/contract.js';
+import { KcodePluginApplication } from '../../../plugin/application.js';
+import type { KcodePluginRuntimeAccess, KcodePluginView } from '../../../plugin/contract.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 import type { TuiTranscriptExporter } from '../../../host/transcript-export.js';
 import { TuiSessionForkFlow } from '../session-fork-flow.js';
 import { hyperlink } from '../../engine/public.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
-import { MINIMAX_CODE_VERSION } from '../../../build-info.js';
+import { KCODE_VERSION } from '../../../build-info.js';
 
 const OFFICIAL_MODEL_LOGIN_HINT = 'Sign in with /login to use official MiniMax models.';
 const SESSION_MANAGER_PAGE_SIZE = 50;
@@ -101,7 +101,7 @@ type FeatureRuntime = TuiSessionPort &
   TuiInspectionPort &
   TuiInteractionPort &
   TuiWorkspaceGitPort &
-  McodePluginRuntimeAccess &
+  KcodePluginRuntimeAccess &
   Partial<TuiSessionForkPort>;
 
 type AppendLocalCell = (
@@ -150,7 +150,7 @@ export interface TuiFeatureFlowOptions {
   readonly refreshAutocomplete: () => void;
   /** Starts the `/login` sign-in flow; absent when the host has no auth. */
   readonly onStartMiniMaxLogin?: () => void;
-  readonly loadProviderTemplates?: () => Promise<readonly McodeProviderTemplate[]>;
+  readonly loadProviderTemplates?: () => Promise<readonly KcodeProviderTemplate[]>;
   readonly isStopped?: () => boolean;
   readonly hasLiveRun?: () => boolean;
 }
@@ -162,8 +162,8 @@ export interface TuiSessionManagerOpenOptions {
 
 export class TuiFeatureFlow {
   private readonly modelState: TuiModelState;
-  private readonly providerApplication: McodeProviderApplication;
-  private readonly pluginApplication: McodePluginApplication;
+  private readonly providerApplication: KcodeProviderApplication;
+  private readonly pluginApplication: KcodePluginApplication;
   private readonly sessionForkFlow: TuiSessionForkFlow;
   private skillCommandsValue: TuiCommand[] = [];
   private inspectionPanel: Component | undefined;
@@ -197,8 +197,8 @@ export class TuiFeatureFlow {
       onChanged: options.onChanged,
       isStopped: () => this.isStopped(),
     });
-    this.providerApplication = new McodeProviderApplication(options.runtime);
-    this.pluginApplication = new McodePluginApplication(options.runtime);
+    this.providerApplication = new KcodeProviderApplication(options.runtime);
+    this.pluginApplication = new KcodePluginApplication(options.runtime);
     this.sessionForkFlow = new TuiSessionForkFlow({
       runtime: options.runtime,
       currentSession: () => options.controller.snapshot().session,
@@ -440,7 +440,7 @@ export class TuiFeatureFlow {
       if (this.isStopped()) return;
       const panel = new TuiChangelogPanel({
         markdown: extractTuiChangelogMarkdown(source),
-        version: MINIMAX_CODE_VERSION,
+        version: KCODE_VERSION,
         onClose: () => this.closeInspectionPanel(panel),
         requestRender: this.options.onChanged,
       });
@@ -614,20 +614,20 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.modelLoadSequence;
     let models: TuiModel[];
     let managedTokenPresent = false;
-    let codexOAuthStatus: McodeCodexOAuthStatus;
-    let copilotOAuthStatus: McodeCopilotOAuthStatus;
+    let codexOAuthStatus: KcodeCodexOAuthStatus;
+    let copilotOAuthStatus: KcodeCopilotOAuthStatus;
     try {
       const [modelCatalog, account, codexStatus, copilotStatus] = await Promise.all([
         this.options.runtime.listModels(sessionId),
         this.options.runtime.getAccountStatus(sessionId),
         this.options.runtime.getCodexOAuthStatus().catch(
-          (): McodeCodexOAuthStatus => ({
+          (): KcodeCodexOAuthStatus => ({
             state: 'hidden',
             providerId: 'openai-codex',
           }),
         ),
         this.options.runtime.getCopilotOAuthStatus().catch(
-          (): McodeCopilotOAuthStatus => ({
+          (): KcodeCopilotOAuthStatus => ({
             state: 'hidden',
             providerId: 'github-copilot',
           }),
@@ -824,7 +824,7 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.providerLoadSequence;
     this.options.setHint('Loading provider catalog…');
     this.options.onChanged();
-    let templates: readonly McodeProviderTemplate[] = [];
+    let templates: readonly KcodeProviderTemplate[] = [];
     let catalogWarning: string | undefined;
     try {
       templates = await (
@@ -1137,8 +1137,8 @@ export class TuiFeatureFlow {
       }
     };
     const refreshSkillsAfterMutation = async (
-      operation: () => Promise<McodePluginView>,
-    ): Promise<McodePluginView> => {
+      operation: () => Promise<KcodePluginView>,
+    ): Promise<KcodePluginView> => {
       const plugin = await operation();
       await refreshSkills();
       return plugin;
@@ -1229,7 +1229,7 @@ export class TuiFeatureFlow {
           this.options.runtime.getInstructionSources(workspaceDir).catch(() => undefined),
         ]);
         const presentation = {
-          version: this.options.version ?? MINIMAX_CODE_VERSION,
+          version: this.options.version ?? KCODE_VERSION,
           model: this.selectedModel(),
           effort: this.selectedEffort(),
           workspaceDir,

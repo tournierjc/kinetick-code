@@ -1,7 +1,7 @@
 /**
  * Inject `<dataDir>/bin` into `process.env.PATH` so that shell commands
  * spawned by the agent (via pi-mono's `getShellEnv()`) can find tools like
- * `mavis-trash`, `mavis`, and `minimax`.
+ * `mavis-trash`, `mavis`, and `kcode`.
  *
  * `getShellEnv()` (third_party/pi-mono) spreads `process.env` and prepends
  * `~/.pi/agent/bin`, but does NOT add the mavis data-dir bin. Rather than

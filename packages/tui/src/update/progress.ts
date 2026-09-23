@@ -1,4 +1,4 @@
-export type McodeUpdatePhase =
+export type KcodeUpdatePhase =
   | 'checking'
   | 'downloading'
   | 'staging'
@@ -7,38 +7,38 @@ export type McodeUpdatePhase =
   | 'activating'
   | 'completed';
 
-export interface McodeUpdatePhaseEvent {
-  readonly phase: McodeUpdatePhase;
+export interface KcodeUpdatePhaseEvent {
+  readonly phase: KcodeUpdatePhase;
   readonly cancellable: boolean;
 }
 
-export interface McodeUpdateOperationOptions {
+export interface KcodeUpdateOperationOptions {
   readonly signal?: AbortSignal;
   readonly onOutput?: (chunk: string) => void;
-  readonly onPhase?: (event: McodeUpdatePhaseEvent) => void;
+  readonly onPhase?: (event: KcodeUpdatePhaseEvent) => void;
 }
 
-export class McodeUpdateCancelledError extends Error {
+export class KcodeUpdateCancelledError extends Error {
   constructor(message = 'KCode update cancelled; the previous installation remains active.') {
     super(message);
     this.name = 'McodeUpdateCancelledError';
   }
 }
 
-export class McodeUpdateAdmissionError extends Error {
+export class KcodeUpdateAdmissionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'McodeUpdateAdmissionError';
   }
 }
 
-export function throwIfMcodeUpdateCancelled(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new McodeUpdateCancelledError();
+export function throwIfKcodeUpdateCancelled(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw new KcodeUpdateCancelledError();
 }
 
-export function reportMcodeUpdatePhase(
-  options: Pick<McodeUpdateOperationOptions, 'onPhase'>,
-  phase: McodeUpdatePhase,
+export function reportKcodeUpdatePhase(
+  options: Pick<KcodeUpdateOperationOptions, 'onPhase'>,
+  phase: KcodeUpdatePhase,
   cancellable: boolean,
 ): void {
   try {
@@ -48,10 +48,10 @@ export function reportMcodeUpdatePhase(
   }
 }
 
-export function isMcodeUpdateCancelledError(error: unknown): error is McodeUpdateCancelledError {
-  return error instanceof McodeUpdateCancelledError;
+export function isKcodeUpdateCancelledError(error: unknown): error is KcodeUpdateCancelledError {
+  return error instanceof KcodeUpdateCancelledError;
 }
 
-export function isMcodeUpdateAdmissionError(error: unknown): error is McodeUpdateAdmissionError {
-  return error instanceof McodeUpdateAdmissionError;
+export function isKcodeUpdateAdmissionError(error: unknown): error is KcodeUpdateAdmissionError {
+  return error instanceof KcodeUpdateAdmissionError;
 }

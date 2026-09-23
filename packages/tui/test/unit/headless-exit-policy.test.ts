@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { ExecResult } from '../../src/headless/contract.js';
 import {
-  MINIMAX_CODE_EXEC_EXIT_CODES,
+  KCODE_EXEC_EXIT_CODES,
   TuiExecError,
   exitCodeForExecError,
   exitCodeForExecResult,
@@ -24,7 +24,7 @@ function result(fields: {
 
 describe('mcode exec exit codes', () => {
   it('publishes the documented table and freezes it', () => {
-    expect(MINIMAX_CODE_EXEC_EXIT_CODES).toEqual({
+    expect(KCODE_EXEC_EXIT_CODES).toEqual({
       success: 0,
       invocation: 2,
       config: 3,
@@ -35,7 +35,7 @@ describe('mcode exec exit codes', () => {
       cancelled: 130,
       brokenPipe: 141,
     });
-    expect(Object.isFrozen(MINIMAX_CODE_EXEC_EXIT_CODES)).toBe(true);
+    expect(Object.isFrozen(KCODE_EXEC_EXIT_CODES)).toBe(true);
   });
 
   it('maps every run status onto its exit code', () => {

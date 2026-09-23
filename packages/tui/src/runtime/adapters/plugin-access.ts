@@ -6,9 +6,9 @@ import type {
 } from '@mavis/local-runtime-v2/cli-service';
 
 import type {
-  McodePluginMarketplace,
-  McodePluginRuntimeAccess,
-  McodePluginView,
+  KcodePluginMarketplace,
+  KcodePluginRuntimeAccess,
+  KcodePluginView,
 } from '../../plugin/contract.js';
 
 const PAGE_SIZE = 200;
@@ -16,14 +16,14 @@ const MAX_PAGES = 100;
 const OFFICIAL_PLUGIN_SOURCE: InstalledPluginSource = 1;
 const LOCAL_PLUGIN_SOURCE: InstalledPluginSource = 2;
 
-export class TuiPluginAccess implements McodePluginRuntimeAccess {
+export class TuiPluginAccess implements KcodePluginRuntimeAccess {
   constructor(private readonly cliService: CliService) {}
 
   async listInstalledPlugins(
     input: {
-      readonly marketplace?: McodePluginMarketplace;
+      readonly marketplace?: KcodePluginMarketplace;
     } = {},
-  ): Promise<readonly McodePluginView[]> {
+  ): Promise<readonly KcodePluginView[]> {
     const plugins = await collectPages((cursor) =>
       this.cliService.listInstalledPlugins({
         limit: PAGE_SIZE,
@@ -33,15 +33,15 @@ export class TuiPluginAccess implements McodePluginRuntimeAccess {
     return plugins
       .map(toInstalledPlugin)
       .filter(
-        (plugin): plugin is McodePluginView =>
+        (plugin): plugin is KcodePluginView =>
           plugin !== undefined &&
           (input.marketplace === undefined || plugin.marketplace === input.marketplace),
       );
   }
 
   async listMarketplacePlugins(input: {
-    readonly marketplace: McodePluginMarketplace;
-  }): Promise<readonly McodePluginView[]> {
+    readonly marketplace: KcodePluginMarketplace;
+  }): Promise<readonly KcodePluginView[]> {
     const source = toGeneratedSource(input.marketplace);
     const plugins = await collectPages((cursor) =>
       this.cliService.listMarketplacePlugins({
@@ -57,7 +57,7 @@ export class TuiPluginAccess implements McodePluginRuntimeAccess {
   }
 
   async mutatePlugin(
-    input: Parameters<McodePluginRuntimeAccess['mutatePlugin']>[0],
+    input: Parameters<KcodePluginRuntimeAccess['mutatePlugin']>[0],
   ): Promise<{ readonly installed: boolean; readonly enabled: boolean }> {
     const request = {
       pluginName: input.plugin.name,
@@ -72,7 +72,7 @@ export class TuiPluginAccess implements McodePluginRuntimeAccess {
   }
 }
 
-function mutationMethod(action: Parameters<McodePluginRuntimeAccess['mutatePlugin']>[0]['action']) {
+function mutationMethod(action: Parameters<KcodePluginRuntimeAccess['mutatePlugin']>[0]['action']) {
   return {
     install: 'installPlugin',
     remove: 'uninstallPlugin',
@@ -102,7 +102,7 @@ async function collectPages<T>(
   throw new Error(`Plugin catalog exceeded ${MAX_PAGES} pages.`);
 }
 
-function toInstalledPlugin(plugin: InstalledPluginSummary): McodePluginView | undefined {
+function toInstalledPlugin(plugin: InstalledPluginSummary): KcodePluginView | undefined {
   const marketplace = fromGeneratedSource(plugin.source);
   if (!marketplace) return undefined;
   return toPluginView(plugin, marketplace, true, plugin.enabled);
@@ -110,17 +110,17 @@ function toInstalledPlugin(plugin: InstalledPluginSummary): McodePluginView | un
 
 function toMarketplacePlugin(
   plugin: PluginMarketplaceSummary,
-  marketplace: McodePluginMarketplace,
-): McodePluginView | undefined {
+  marketplace: KcodePluginMarketplace,
+): KcodePluginView | undefined {
   return toPluginView(plugin, marketplace, plugin.installExists, plugin.enabled);
 }
 
 function toPluginView(
   plugin: InstalledPluginSummary | PluginMarketplaceSummary,
-  marketplace: McodePluginMarketplace,
+  marketplace: KcodePluginMarketplace,
   installed: boolean,
   enabled: boolean,
-): McodePluginView | undefined {
+): KcodePluginView | undefined {
   const name = plugin.name.trim();
   if (!name) return undefined;
   return {
@@ -141,11 +141,11 @@ function toPluginView(
   };
 }
 
-function toGeneratedSource(marketplace: McodePluginMarketplace) {
+function toGeneratedSource(marketplace: KcodePluginMarketplace) {
   return marketplace === 'official' ? OFFICIAL_PLUGIN_SOURCE : LOCAL_PLUGIN_SOURCE;
 }
 
-function fromGeneratedSource(source: number): McodePluginMarketplace | undefined {
+function fromGeneratedSource(source: number): KcodePluginMarketplace | undefined {
   if (source === OFFICIAL_PLUGIN_SOURCE) return 'official';
   if (source === LOCAL_PLUGIN_SOURCE) return 'local';
   return undefined;

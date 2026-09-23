@@ -1,34 +1,34 @@
 import type {
-  McodeCopilotOAuthStatus,
-  McodeCodexOAuthStartResult,
-  McodeCodexOAuthLoginOptions,
-  McodeCodexOAuthStatus,
-  McodeCreateProviderInput,
-  McodeMiniMaxModelSource,
-  McodeProviderRuntimePort,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
-  McodeProviderSnapshot,
-  McodeProviderTestResult,
-  McodeProviderView,
-  McodeRuntimeProviderView,
-  McodeUpdateProviderInput,
+  KcodeCopilotOAuthStatus,
+  KcodeCodexOAuthStartResult,
+  KcodeCodexOAuthLoginOptions,
+  KcodeCodexOAuthStatus,
+  KcodeCreateProviderInput,
+  KcodeMiniMaxModelSource,
+  KcodeProviderRuntimePort,
+  KcodeSaveProviderCandidateInput,
+  KcodeSaveProviderCandidateResult,
+  KcodeProviderSnapshot,
+  KcodeProviderTestResult,
+  KcodeProviderView,
+  KcodeRuntimeProviderView,
+  KcodeUpdateProviderInput,
 } from './contract.js';
 import {
-  MCODE_COPILOT_PROVIDER_ID,
+  KCODE_COPILOT_PROVIDER_ID,
   isModelProviderApiFormat,
-  mcodeCustomProviderKey,
+  kcodeCustomProviderKey,
 } from './contract.js';
 
-export class McodeProviderApplication {
-  constructor(private readonly port: McodeProviderRuntimePort) {}
+export class KcodeProviderApplication {
+  constructor(private readonly port: KcodeProviderRuntimePort) {}
 
   async snapshot(
     options: {
       readonly includeCodexOAuth?: boolean;
       readonly includeCopilotOAuth?: boolean;
     } = {},
-  ): Promise<McodeProviderSnapshot> {
+  ): Promise<KcodeProviderSnapshot> {
     const [
       customProviders,
       minimaxStatus,
@@ -47,7 +47,7 @@ export class McodeProviderApplication {
     // the model roster and the removal path, so showing both would render one
     // connection twice.
     const copilotConfigured = customProviders.some(
-      (provider) => mcodeCustomProviderKey(provider.providerId) === MCODE_COPILOT_PROVIDER_ID,
+      (provider) => kcodeCustomProviderKey(provider.providerId) === KCODE_COPILOT_PROVIDER_ID,
     );
     return {
       minimaxModelSource,
@@ -85,31 +85,31 @@ export class McodeProviderApplication {
     };
   }
 
-  setMiniMaxSource(source: McodeMiniMaxModelSource): Promise<McodeMiniMaxModelSource> {
+  setMiniMaxSource(source: KcodeMiniMaxModelSource): Promise<KcodeMiniMaxModelSource> {
     return this.port.setMiniMaxModelSource(source);
   }
 
-  connectCodexOAuth(options?: McodeCodexOAuthLoginOptions): Promise<McodeCodexOAuthStartResult> {
+  connectCodexOAuth(options?: KcodeCodexOAuthLoginOptions): Promise<KcodeCodexOAuthStartResult> {
     return this.port.startCodexOAuthLogin(options);
   }
 
-  getCodexOAuthStatus(): Promise<McodeCodexOAuthStatus> {
+  getCodexOAuthStatus(): Promise<KcodeCodexOAuthStatus> {
     return this.port.getCodexOAuthStatus();
   }
 
-  cancelCodexOAuthLogin(loginId: string): Promise<McodeCodexOAuthStatus> {
+  cancelCodexOAuthLogin(loginId: string): Promise<KcodeCodexOAuthStatus> {
     return this.port.cancelCodexOAuthLogin(loginId);
   }
 
-  connectCopilotOAuth(): Promise<McodeCopilotOAuthStatus> {
+  connectCopilotOAuth(): Promise<KcodeCopilotOAuthStatus> {
     return this.port.startCopilotOAuthLogin();
   }
 
-  getCopilotOAuthStatus(): Promise<McodeCopilotOAuthStatus> {
+  getCopilotOAuthStatus(): Promise<KcodeCopilotOAuthStatus> {
     return this.port.getCopilotOAuthStatus();
   }
 
-  cancelCopilotOAuthLogin(loginId: string): Promise<McodeCopilotOAuthStatus> {
+  cancelCopilotOAuthLogin(loginId: string): Promise<KcodeCopilotOAuthStatus> {
     return this.port.cancelCopilotOAuthLogin(loginId);
   }
 
@@ -117,15 +117,15 @@ export class McodeProviderApplication {
     await this.port.upsertMiniMaxApiKey({ apiKey, saveAndUse });
   }
 
-  async create(input: McodeCreateProviderInput): Promise<void> {
+  async create(input: KcodeCreateProviderInput): Promise<void> {
     await this.port.createUserModelProvider(input);
   }
 
-  saveCandidate(input: McodeSaveProviderCandidateInput): Promise<McodeSaveProviderCandidateResult> {
+  saveCandidate(input: KcodeSaveProviderCandidateInput): Promise<KcodeSaveProviderCandidateResult> {
     return this.port.saveUserModelProviderCandidate(input);
   }
 
-  async refreshModels(provider: McodeProviderView): Promise<number> {
+  async refreshModels(provider: KcodeProviderView): Promise<number> {
     if (
       provider.kind !== 'custom' ||
       provider.readOnly ||
@@ -169,7 +169,7 @@ export class McodeProviderApplication {
     return added.length;
   }
 
-  async update(input: McodeUpdateProviderInput): Promise<void> {
+  async update(input: KcodeUpdateProviderInput): Promise<void> {
     await this.port.updateUserModelProvider(input);
   }
 
@@ -177,14 +177,14 @@ export class McodeProviderApplication {
     await this.port.deleteUserModelProvider(providerId);
   }
 
-  test(providerId: string, modelId?: string): Promise<McodeProviderTestResult> {
+  test(providerId: string, modelId?: string): Promise<KcodeProviderTestResult> {
     return modelId
       ? this.port.testUserModel(providerId, modelId)
       : this.port.testUserModelProvider(providerId);
   }
 }
 
-function normalizeCodexOAuthProvider(status: McodeCodexOAuthStatus): McodeProviderView {
+function normalizeCodexOAuthProvider(status: KcodeCodexOAuthStatus): KcodeProviderView {
   return {
     providerId: status.providerId,
     name: 'OpenAI Codex',
@@ -201,7 +201,7 @@ function normalizeCodexOAuthProvider(status: McodeCodexOAuthStatus): McodeProvid
   };
 }
 
-function normalizeCopilotOAuthProvider(status: McodeCopilotOAuthStatus): McodeProviderView {
+function normalizeCopilotOAuthProvider(status: KcodeCopilotOAuthStatus): KcodeProviderView {
   return {
     providerId: status.providerId,
     name: 'GitHub Copilot',
@@ -219,13 +219,13 @@ function normalizeCopilotOAuthProvider(status: McodeCopilotOAuthStatus): McodePr
 }
 
 function normalizeCustomProvider(
-  provider: McodeRuntimeProviderView,
-  copilotOAuthStatus?: McodeCopilotOAuthStatus,
-): McodeProviderView {
+  provider: KcodeRuntimeProviderView,
+  copilotOAuthStatus?: KcodeCopilotOAuthStatus,
+): KcodeProviderView {
   const apiFormat = isModelProviderApiFormat(provider.apiFormat) ? provider.apiFormat : undefined;
   // The connector's own entry keeps the Copilot identity, so its row reports and
   // starts the sign-in instead of offering the generic custom-row actions.
-  const copilot = mcodeCustomProviderKey(provider.providerId) === MCODE_COPILOT_PROVIDER_ID;
+  const copilot = kcodeCustomProviderKey(provider.providerId) === KCODE_COPILOT_PROVIDER_ID;
   return {
     providerId: provider.providerId,
     name: provider.name?.trim() || provider.providerId,
@@ -266,8 +266,8 @@ function normalizeCustomProvider(
 }
 
 export type {
-  McodeCreateProviderInput,
-  McodeProviderRuntimePort,
-  McodeProviderSnapshot,
-  McodeUpdateProviderInput,
+  KcodeCreateProviderInput,
+  KcodeProviderRuntimePort,
+  KcodeProviderSnapshot,
+  KcodeUpdateProviderInput,
 } from './contract.js';

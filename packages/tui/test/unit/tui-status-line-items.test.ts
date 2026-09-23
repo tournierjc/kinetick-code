@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { applyTuiRenderTheme, getTuiThemeSnapshot, tuiChalk, tuiColors } from '../../src/tui/theme/runtime.js';
-import { MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
+import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
 import { TuiStatusLine } from '../../src/tui/shell/chrome.js';
 import { stripAnsi, visibleWidth } from '../../src/tui/rendering/text.js';
 import { setCapabilityOverrides } from '../../src/tui/engine/public.js';
@@ -789,7 +789,7 @@ describe('context meter boundaries', () => {
 
   it('uses the same warning and error boundaries as the percentage item', () => {
     const previous = getTuiThemeSnapshot();
-    applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+    applyTuiRenderTheme(KCODE_DARK_THEME, 3);
     try {
       for (const [remaining, color] of [
         [26, tuiColors.muted], [25, tuiColors.warning],
@@ -807,7 +807,7 @@ describe('context meter boundaries', () => {
       }
     } finally {
       applyTuiRenderTheme(
-        previous.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME,
+        previous.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME,
         previous.colorLevel,
       );
     }

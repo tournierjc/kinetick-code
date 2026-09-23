@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { stripAnsi } from "../../src/tui/rendering/text.js";
 import { TuiProviderManager } from "../../src/tui/features/provider/manager.js";
-import type { McodeProviderSnapshot } from "../../src/provider/contract.js";
+import type { KcodeProviderSnapshot } from "../../src/provider/contract.js";
 
-const snapshot: McodeProviderSnapshot = {
+const snapshot: KcodeProviderSnapshot = {
   minimaxModelSource: "token_plan",
   providers: [
     {
@@ -43,7 +43,7 @@ const snapshot: McodeProviderSnapshot = {
   ],
 };
 
-const snapshotWithCodex: McodeProviderSnapshot = {
+const snapshotWithCodex: KcodeProviderSnapshot = {
   ...snapshot,
   providers: [
     {
@@ -63,7 +63,7 @@ const snapshotWithCodex: McodeProviderSnapshot = {
 
 function withSource(
   source: "token_plan" | "minimax_api_key",
-): McodeProviderSnapshot {
+): KcodeProviderSnapshot {
   return {
     ...snapshot,
     minimaxModelSource: source,
@@ -81,7 +81,7 @@ function withSource(
   };
 }
 
-const snapshotWithCopilot: McodeProviderSnapshot = {
+const snapshotWithCopilot: KcodeProviderSnapshot = {
   ...snapshot,
   providers: [
     {
@@ -144,7 +144,7 @@ describe("TuiProviderManager", () => {
       providerId: "openai-codex" as const,
       authUrl: "https://auth.openai.example/authorize",
     }));
-    const pendingSnapshot: McodeProviderSnapshot = {
+    const pendingSnapshot: KcodeProviderSnapshot = {
       ...snapshotWithCodex,
       providers: snapshotWithCodex.providers.map((provider) =>
         provider.kind === "codex-oauth"
@@ -182,7 +182,7 @@ describe("TuiProviderManager", () => {
 
   it("reports the Copilot row as connected without restarting sign-in", async () => {
     const onConnectCopilot = vi.fn();
-    const connected: McodeProviderSnapshot = {
+    const connected: KcodeProviderSnapshot = {
       ...snapshotWithCopilot,
       providers: snapshotWithCopilot.providers.map((provider) =>
         provider.kind === "copilot-oauth"
@@ -424,7 +424,7 @@ describe("TuiProviderManager", () => {
     // Regression caught in review: `active` means "current MiniMax credential
     // source" for MiniMax rows but "owns the selected model" for custom rows.
     // Rendering both as ● made two rows look selected at once.
-    const withSelectedCustomModel: McodeProviderSnapshot = {
+    const withSelectedCustomModel: KcodeProviderSnapshot = {
       ...withSource("minimax_api_key"),
       providers: withSource("minimax_api_key").providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -458,7 +458,7 @@ describe("TuiProviderManager", () => {
   });
 
   it("redacts credentials and URL parameters from a custom provider", () => {
-    const credentialed: McodeProviderSnapshot = {
+    const credentialed: KcodeProviderSnapshot = {
       ...snapshot,
       providers: snapshot.providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -517,7 +517,7 @@ describe("TuiProviderManager", () => {
   it("renders a disabled custom provider without the in-use marker", () => {
     // Regression caught: a leftover selected model rendered `● … Disabled`,
     // claiming a provider Runtime no longer resolves is the active source.
-    const disabled: McodeProviderSnapshot = {
+    const disabled: KcodeProviderSnapshot = {
       ...snapshot,
       providers: snapshot.providers.map((provider) =>
         provider.providerId === "custom_provider:openai"

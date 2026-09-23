@@ -7,38 +7,38 @@ import type {
   LogoutResult,
 } from '@mavis/oauth-core';
 
-import { resolveMcodeAuthEnvironment } from './environment.js';
-import { buildMcodeLogoutUrl } from './logout-url.js';
+import { resolveKcodeAuthEnvironment } from './environment.js';
+import { buildKcodeLogoutUrl } from './logout-url.js';
 
-export type McodeAuthProgress = {
+export type KcodeAuthProgress = {
   readonly state: 'device-authorization';
 } & DeviceAuthorizationPrompt;
 
-export interface McodeAuthResult {
+export interface KcodeAuthResult {
   readonly state: 'already-authenticated' | 'authenticated' | 'already-signed-out' | 'signed-out';
   readonly message: string;
   readonly restartRequired?: boolean;
   readonly logoutUrl?: string;
 }
 
-export interface McodeAuthPort {
+export interface KcodeAuthPort {
   login(
-    onProgress?: (progress: McodeAuthProgress) => void,
+    onProgress?: (progress: KcodeAuthProgress) => void,
     region?: MavisRegion,
-  ): Promise<McodeAuthResult>;
-  logout(): Promise<McodeAuthResult>;
+  ): Promise<KcodeAuthResult>;
+  logout(): Promise<KcodeAuthResult>;
 }
 
-export interface McodeSharedAuthCore {
+export interface KcodeSharedAuthCore {
   getStatus(): Promise<AuthStatusSnapshot>;
   login(options?: LoginOptions): Promise<LoginResult>;
   logout(options: { revoke: boolean }): Promise<LogoutResult>;
 }
 
-export interface McodeAuthApplicationOptions {
+export interface KcodeAuthApplicationOptions {
   readonly dataDir: string;
-  readonly sharedAuthCore: McodeSharedAuthCore;
-  readonly resolveSharedAuthCore?: (region: MavisRegion) => McodeSharedAuthCore;
+  readonly sharedAuthCore: KcodeSharedAuthCore;
+  readonly resolveSharedAuthCore?: (region: MavisRegion) => KcodeSharedAuthCore;
   readonly region?: MavisRegion;
   readonly buildEnv?: MavisBuildEnv;
   readonly writeRegionPreference?: (
@@ -47,11 +47,11 @@ export interface McodeAuthApplicationOptions {
   ) => unknown;
 }
 
-export class McodeAuthApplication implements McodeAuthPort {
+export class KcodeAuthApplication implements KcodeAuthPort {
   private readonly scope: { region: MavisRegion; buildEnv: MavisBuildEnv };
 
-  constructor(private readonly options: McodeAuthApplicationOptions) {
-    const environment = resolveMcodeAuthEnvironment({
+  constructor(private readonly options: KcodeAuthApplicationOptions) {
+    const environment = resolveKcodeAuthEnvironment({
       runtimeRegion: process.env.MAVIS_REGION === 'en' ? 'en' : 'cn',
     });
     this.scope = {
@@ -61,9 +61,9 @@ export class McodeAuthApplication implements McodeAuthPort {
   }
 
   async login(
-    onProgress?: (progress: McodeAuthProgress) => void,
+    onProgress?: (progress: KcodeAuthProgress) => void,
     region: MavisRegion = this.scope.region,
-  ): Promise<McodeAuthResult> {
+  ): Promise<KcodeAuthResult> {
     try {
       const requestedScope = { ...this.scope, region };
       const switchesRegion = !isSameScope(requestedScope, this.scope);
@@ -103,13 +103,13 @@ export class McodeAuthApplication implements McodeAuthPort {
     }
   }
 
-  async logout(): Promise<McodeAuthResult> {
+  async logout(): Promise<KcodeAuthResult> {
     const status = await this.options.sharedAuthCore.getStatus();
     // Always run the shared logout: signing out while already signed out is a
     // safe no-op in the core, and never blocking /logout keeps a wedged local
     // state recoverable.
     const result = await this.options.sharedAuthCore.logout({ revoke: true });
-    const logoutUrl = buildMcodeLogoutUrl(this.scope);
+    const logoutUrl = buildKcodeLogoutUrl(this.scope);
     if (status.status === 'anonymous' && result.status === 'anonymous') {
       return { state: 'already-signed-out', message: 'Already signed out of MiniMax.', logoutUrl };
     }

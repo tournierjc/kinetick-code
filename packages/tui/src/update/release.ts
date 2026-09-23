@@ -5,12 +5,12 @@ import path from 'node:path';
 import spawn from 'cross-spawn';
 import { EnvHttpProxyAgent, fetch } from 'undici';
 import {
-  McodeUpdateCancelledError,
-  reportMcodeUpdatePhase,
-  throwIfMcodeUpdateCancelled,
-  type McodeUpdateOperationOptions,
+  KcodeUpdateCancelledError,
+  reportKcodeUpdatePhase,
+  throwIfKcodeUpdateCancelled,
+  type KcodeUpdateOperationOptions,
 } from './progress.js';
-import type { McodePackageManagerInstallSource } from './install-source.js';
+import type { KcodePackageManagerInstallSource } from './install-source.js';
 
 /**
  * Kinetick Code's release channel.
@@ -52,7 +52,7 @@ const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/u;
 export type KcodeReleaseChannel = 'stable' | 'preview';
 
 /** Package managers that own an installation this module can replace. */
-export type KcodeReleaseInstallSource = Exclude<McodePackageManagerInstallSource, 'npm-prefix'>;
+export type KcodeReleaseInstallSource = Exclude<KcodePackageManagerInstallSource, 'npm-prefix'>;
 
 export interface KcodeReleaseArtifact {
   readonly name: string;
@@ -72,7 +72,7 @@ export interface KcodeRelease {
   readonly artifact: KcodeReleaseArtifact;
 }
 
-export interface KcodeReleaseRequest extends McodeUpdateOperationOptions {
+export interface KcodeReleaseRequest extends KcodeUpdateOperationOptions {
   channel?: string;
   version?: string;
   timeoutMs?: number;
@@ -103,7 +103,7 @@ export interface KcodeReleaseDependencies {
   runInstall(
     command: KcodeInstallCommand,
     environment: NodeJS.ProcessEnv,
-    options: McodeUpdateOperationOptions,
+    options: KcodeUpdateOperationOptions,
   ): Promise<void>;
   readInstalledPackageVersion(): string | undefined;
 }
@@ -129,7 +129,7 @@ export interface KcodeReleaseServiceOptions {
 }
 
 /** Reject anything that is not a version this product could have released. */
-export function parseMcodeVersion(value: string): string {
+export function parseKcodeVersion(value: string): string {
   if (!VERSION_PATTERN.test(value)) {
     throw new Error(`Invalid KCode version: ${JSON.stringify(value)}`);
   }
@@ -171,7 +171,7 @@ export function selectKcodeRelease(
     );
   }
   return candidates.reduce((best, candidate) =>
-    compareMcodeVersions(candidate.version, best.version) > 0 ? candidate : best,
+    compareKcodeVersions(candidate.version, best.version) > 0 ? candidate : best,
   );
 }
 
@@ -190,7 +190,7 @@ function readKcodeRelease(value: unknown): KcodeRelease | undefined {
   if (!match?.[1]) return undefined;
   let version: string;
   try {
-    version = parseMcodeVersion(match[1]);
+    version = parseKcodeVersion(match[1]);
   } catch {
     return undefined;
   }
@@ -348,7 +348,7 @@ export class KcodeReleaseService {
   private readonly dependencies: KcodeReleaseDependencies;
 
   constructor(options: KcodeReleaseServiceOptions) {
-    this.currentVersion = parseMcodeVersion(options.currentVersion);
+    this.currentVersion = parseKcodeVersion(options.currentVersion);
     this.installSource = options.installSource;
     this.installRoot = options.installRoot;
     this.environment = options.environment ?? process.env;
@@ -369,16 +369,16 @@ export class KcodeReleaseService {
   }
 
   async check(request: KcodeReleaseRequest = {}): Promise<KcodeReleaseCheckResult> {
-    throwIfMcodeUpdateCancelled(request.signal);
-    reportMcodeUpdatePhase(request, 'checking', true);
+    throwIfKcodeUpdateCancelled(request.signal);
+    reportKcodeUpdatePhase(request, 'checking', true);
     const channel = parseKcodeReleaseChannel(request.channel ?? this.resolveChannel());
-    const version = request.version ? parseMcodeVersion(request.version) : undefined;
+    const version = request.version ? parseKcodeVersion(request.version) : undefined;
     const release = await this.resolveRelease({
       channel,
       ...(version ? { version } : {}),
       request,
     });
-    const comparison = compareMcodeVersions(this.currentVersion, release.version);
+    const comparison = compareKcodeVersions(this.currentVersion, release.version);
     return {
       status: comparison < 0 ? 'available' : comparison > 0 ? 'ahead' : 'current',
       channel,
@@ -420,7 +420,7 @@ export class KcodeReleaseService {
     timeout.unref?.();
     const stagingDirectory = mkdtempSync(path.join(tmpdir(), 'kcode-update-'));
     try {
-      reportMcodeUpdatePhase(request, 'downloading', true);
+      reportKcodeUpdatePhase(request, 'downloading', true);
       const archivePath = path.join(stagingDirectory, check.release.artifact.name);
       const [archiveBytes, checksumBytes] = await Promise.all([
         this.dependencies.fetchBytes(check.release.artifact.url, {
@@ -437,15 +437,15 @@ export class KcodeReleaseService {
         check.release.artifact.name,
       );
       verifyKcodeArtifact(archiveBytes, check.release.artifact, expectedSha256);
-      throwIfMcodeUpdateCancelled(request.signal);
+      throwIfKcodeUpdateCancelled(request.signal);
       writeFileSync(archivePath, archiveBytes, { mode: 0o600 });
 
       const command = buildKcodeInstallCommand(this.installSource, archivePath, {
         platform: this.platform,
       });
-      reportMcodeUpdatePhase(request, 'installing', false);
+      reportKcodeUpdatePhase(request, 'installing', false);
       await this.dependencies.runInstall(command, this.installEnvironment, request);
-      reportMcodeUpdatePhase(request, 'validating', false);
+      reportKcodeUpdatePhase(request, 'validating', false);
       const installedVersion = this.dependencies.readInstalledPackageVersion();
       if (installedVersion !== check.latestVersion) {
         throw new Error(
@@ -453,11 +453,11 @@ export class KcodeReleaseService {
             `expected ${check.latestVersion}.`,
         );
       }
-      reportMcodeUpdatePhase(request, 'completed', false);
+      reportKcodeUpdatePhase(request, 'completed', false);
       return { ...check, applied: true, restartRequired: true };
     } catch (error) {
-      if (error instanceof McodeUpdateCancelledError || request.signal?.aborted) {
-        throw new McodeUpdateCancelledError();
+      if (error instanceof KcodeUpdateCancelledError || request.signal?.aborted) {
+        throw new KcodeUpdateCancelledError();
       }
       if (timedOut) {
         throw new Error(`KCode update timed out after ${timeoutMs}ms.`, { cause: error });
@@ -553,7 +553,7 @@ interface ParsedVersion {
 }
 
 function parsedVersion(value: string): ParsedVersion {
-  parseMcodeVersion(value);
+  parseKcodeVersion(value);
   const [coreText = '', prereleaseText] = value.split('-', 2);
   return {
     core: coreText.split('.').map((part) => Number.parseInt(part, 10)),
@@ -564,7 +564,7 @@ function parsedVersion(value: string): ParsedVersion {
 }
 
 /** SemVer precedence, extended so `0.5.2-fork.2` follows `0.5.2-fork.1`. */
-export function compareMcodeVersions(left: string, right: string): number {
+export function compareKcodeVersions(left: string, right: string): number {
   const leftVersion = parsedVersion(left);
   const rightVersion = parsedVersion(right);
   for (let index = 0; index < 3; index += 1) {
@@ -657,7 +657,7 @@ function forwardKcodeAbort(
 function defaultRunKcodeInstall(
   command: KcodeInstallCommand,
   environment: NodeJS.ProcessEnv,
-  options: McodeUpdateOperationOptions,
+  options: KcodeUpdateOperationOptions,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -692,7 +692,7 @@ function defaultRunKcodeInstall(
   });
 }
 
-function notifyKcodeOutput(options: McodeUpdateOperationOptions, chunk: Buffer): void {
+function notifyKcodeOutput(options: KcodeUpdateOperationOptions, chunk: Buffer): void {
   try {
     options.onOutput?.(chunk.toString('utf8'));
   } catch {
