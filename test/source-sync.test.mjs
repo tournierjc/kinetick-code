@@ -334,10 +334,26 @@ if (args[0] === 'pr' && args[1] === 'list') {
   process.stdout.write(existsSync(${JSON.stringify(listed)}) ? '[{"number":51}]' : '[]');
   process.exit(0);
 }
+if (args[0] === 'repo' && args[1] === 'view') {
+  process.stdout.write('{"nameWithOwner":"example/kinetick-code"}');
+  process.exit(0);
+}
 appendFileSync(${JSON.stringify(log)}, args.join(' ') + '\\n');
+if (args[0] === 'api') {
+  if (${JSON.stringify(mode)} === 'failing') {
+    process.stderr.write('HTTP 403: Resource not accessible by integration');
+    process.exit(1);
+  }
+  process.stdout.write('{"number":51,"html_url":"https://github.com/example/kinetick-code/pull/51"}');
+  process.exit(0);
+}
 const attempt = (existsSync(${JSON.stringify(calls)}) ? Number(readFileSync(${JSON.stringify(calls)}, 'utf8')) : 0) + 1;
 writeFileSync(${JSON.stringify(calls)}, String(attempt));
 const mode = ${JSON.stringify(mode)};
+if (mode === 'graphql-only') {
+  process.stderr.write('GraphQL: tournierjc does not have the correct permissions to execute CreatePullRequest');
+  process.exit(1);
+}
 if (mode.startsWith('transient:') && attempt <= Number(mode.slice('transient:'.length))) {
   process.stderr.write("GraphQL: Head sha can't be blank, No commits between main and release/v1.2.4 (createPullRequest)");
   process.exit(1);
@@ -388,8 +404,18 @@ test('version PR creation accepts an existing pull request and otherwise names t
       assert.match(error.message, /HTTP 403: Resource not accessible by integration/);
       assert.match(error.message, /The release is pushed \(tag v1\.2\.4, branch release\/v1\.2\.4\)/);
       assert.match(error.message, /gh pr create --base main --head release\/v1\.2\.4 --title "chore: release Kinetick Code 1\.2\.4"/);
+      assert.match(error.message, /via the API: HTTP 403/);
       return true;
     });
+});
+
+test('version PR creation falls back to the REST endpoint when gh pr create is refused', { skip: process.platform === 'win32' }, t => {
+  const fake = fakeGithubCli(t, 'graphql-only');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(fake.createCalls(), 4);
+  const created = fake.createArguments().filter(line => line.startsWith('api '));
+  assert.equal(created.length, 1);
+  assert.match(created[0], /^api -X POST repos\/example\/kinetick-code\/pulls -f title=chore: release Kinetick Code 1\.2\.4 -f head=release\/v1\.2\.4 -f base=main -F body=@/);
 });
 
 test('npm release manifests require native SQLite and pin installed external dependencies', t => {
