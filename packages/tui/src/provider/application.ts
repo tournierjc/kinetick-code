@@ -30,13 +30,13 @@ export class KcodeProviderApplication {
     } = {},
   ): Promise<KcodeProviderSnapshot> {
     const [
-      customProviders,
+      providers,
       minimaxStatus,
       minimaxModelSource,
       codexOAuthStatus,
       copilotOAuthStatus,
     ] = await Promise.all([
-      this.port.listUserModelProviders(),
+      this.port.listModelProviders(),
       this.port.getMiniMaxApiKeyStatus(),
       this.port.getMiniMaxModelSource(),
       options.includeCodexOAuth ? this.port.getCodexOAuthStatus() : undefined,
@@ -46,7 +46,7 @@ export class KcodeProviderApplication {
     // all. Once the connector has written one, that entry carries the revision,
     // the model roster and the removal path, so showing both would render one
     // connection twice.
-    const copilotConfigured = customProviders.some(
+    const copilotConfigured = providers.some(
       (provider) => kcodeCustomProviderKey(provider.providerId) === KCODE_COPILOT_PROVIDER_ID,
     );
     return {
@@ -80,7 +80,7 @@ export class KcodeProviderApplication {
           ...(minimaxStatus.cachedStatus ? { status: minimaxStatus.cachedStatus } : {}),
           models: [],
         },
-        ...customProviders.map((provider) => normalizeCustomProvider(provider, copilotOAuthStatus)),
+        ...providers.map((provider) => normalizeConfiguredProvider(provider, copilotOAuthStatus)),
       ],
     };
   }
@@ -218,7 +218,15 @@ function normalizeCopilotOAuthProvider(status: KcodeCopilotOAuthStatus): KcodePr
   };
 }
 
-function normalizeCustomProvider(
+/**
+ * A connection the runtime resolves: one of the user's `custom_provider`
+ * entries — editable through revision-checked candidate saves — or an entry in
+ * the builtin `provider` tree, which `/provider` shows and tests but does not
+ * rewrite, because that tree belongs to config.yaml rather than to this panel.
+ * Its rows therefore carry no `configRevision`, and `readOnly` states the
+ * refusal once instead of leaving `e` to fail on a missing revision.
+ */
+function normalizeConfiguredProvider(
   provider: KcodeRuntimeProviderView,
   copilotOAuthStatus?: KcodeCopilotOAuthStatus,
 ): KcodeProviderView {
@@ -226,10 +234,11 @@ function normalizeCustomProvider(
   // The connector's own entry keeps the Copilot identity, so its row reports and
   // starts the sign-in instead of offering the generic custom-row actions.
   const copilot = kcodeCustomProviderKey(provider.providerId) === KCODE_COPILOT_PROVIDER_ID;
+  const builtin = provider.source === 'provider';
   return {
     providerId: provider.providerId,
     name: provider.name?.trim() || provider.providerId,
-    kind: copilot ? 'copilot-oauth' : 'custom',
+    kind: copilot ? 'copilot-oauth' : builtin ? 'builtin' : 'custom',
     // A disabled provider is never "in use": Runtime drops it from the model
     // roster (`enabledCustomProviders`) and BYOK resolution refuses it, so a
     // leftover `selected` model must not render as the active source.
@@ -238,7 +247,7 @@ function normalizeCustomProvider(
       provider.models?.some((model) => 'selected' in model && model.selected),
     ),
     enabled: provider.enabled !== false,
-    readOnly: provider.kind === 'oauth',
+    readOnly: builtin || provider.kind === 'oauth',
     ...(provider.configRevision ? { configRevision: provider.configRevision } : {}),
     ...(apiFormat ? { apiFormat } : {}),
     ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),

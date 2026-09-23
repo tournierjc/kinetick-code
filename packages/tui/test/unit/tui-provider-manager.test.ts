@@ -630,3 +630,74 @@ it("shows discovery failures and allows a retry", async () => {
     ),
   );
 });
+
+const snapshotWithBuiltin: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    ...snapshot.providers,
+    {
+      providerId: "openrouter",
+      name: "OpenRouter",
+      kind: "builtin",
+      active: false,
+      enabled: true,
+      readOnly: true,
+      apiFormat: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      hasApiKey: false,
+      maskedApiKey: "sk-o****MPLE",
+      models: [{ modelId: "openai/gpt-5-mini", displayName: "GPT-5 Mini" }],
+    },
+  ],
+};
+
+it("lists a connection the builtin tree owns and tests it in place", async () => {
+  const onTest = vi.fn(async () => ({
+    success: true,
+    status: { state: "available" },
+  }));
+  const manager = createManager({ snapshot: snapshotWithBuiltin, onTest });
+
+  manager.handleInput("\u001b[A");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  const rendered = stripAnsi(manager.render(110).join("\n"));
+  expect(rendered).toContain("OpenRouter");
+  expect(rendered).toContain("https://openrouter.ai/api/v1");
+  expect(rendered).toContain("GPT-5 Mini");
+
+  manager.handleInput("t");
+  await vi.waitFor(() => expect(onTest).toHaveBeenCalledWith("openrouter"));
+});
+
+it("points a builtin-tree row at config.yaml instead of editing it here", () => {
+  const manager = createManager({ snapshot: snapshotWithBuiltin });
+
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("e");
+
+  const rendered = stripAnsi(manager.render(140).join("\n"));
+  expect(rendered).toContain("OpenRouter is defined in config.yaml");
+  expect(rendered).toContain("Press a to connect it as a provider you manage here");
+});
+
+it("connects a provider from the panel without leaving the catalogue behind", () => {
+  const onAddProvider = vi.fn();
+  const manager = createManager({ onAddProvider });
+
+  expect(stripAnsi(manager.render(110).join("\n"))).toContain("a add provider");
+  manager.handleInput("a");
+
+  expect(onAddProvider).toHaveBeenCalledOnce();
+});
+
+it("keeps the add-provider action out of hosts that cannot save one", () => {
+  const manager = createManager();
+
+  const rendered = stripAnsi(manager.render(110).join("\n"));
+  expect(rendered).not.toContain("a add provider");
+  expect(rendered).toContain("Select a custom connection and press r");
+});

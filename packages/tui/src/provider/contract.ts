@@ -18,6 +18,7 @@ export type KcodeProviderKind =
   | 'copilot-oauth'
   | 'minimax-oauth'
   | 'minimax-api-key'
+  | 'builtin'
   | 'custom';
 
 /** Provider key the GitHub Copilot connector writes into `custom_provider`. */
@@ -57,6 +58,8 @@ export interface KcodeRuntimeProviderView {
   readonly providerId: string;
   readonly name?: string;
   readonly kind?: string;
+  /** Config tree the connection lives in: `provider`, `minimax_api` or `custom_provider`. */
+  readonly source?: string;
   readonly enabled?: boolean;
   readonly apiFormat?: string;
   readonly baseUrl?: string;
@@ -216,7 +219,7 @@ export interface KcodeProviderRuntimePort {
   getCopilotOAuthStatus(): Promise<KcodeCopilotOAuthStatus>;
   startCopilotOAuthLogin(): Promise<KcodeCopilotOAuthStatus>;
   cancelCopilotOAuthLogin(loginId: string): Promise<KcodeCopilotOAuthStatus>;
-  listUserModelProviders(): Promise<readonly KcodeRuntimeProviderView[]>;
+  listModelProviders(): Promise<readonly KcodeRuntimeProviderView[]>;
   getMiniMaxApiKeyStatus(): Promise<{
     readonly hasApiKey: boolean;
     readonly maskedApiKey?: string;

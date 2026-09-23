@@ -256,7 +256,7 @@ export interface LocalRuntimeApplication {
     getCopilotOAuthStatus(): Promise<CopilotOAuthStatus>;
     startCopilotOAuthLogin(): Promise<CopilotOAuthStatus>;
     cancelCopilotOAuthLogin(loginId: string): Promise<CopilotOAuthStatus>;
-    listUser(): Promise<readonly Record<string, unknown>[]>;
+    listProviders(): Promise<readonly Record<string, unknown>[]>;
     getMiniMaxApiKeyStatus(): Promise<Record<string, unknown>>;
     getMiniMaxModelSource(): Promise<"token_plan" | "minimax_api_key">;
     setMiniMaxModelSource(input: {

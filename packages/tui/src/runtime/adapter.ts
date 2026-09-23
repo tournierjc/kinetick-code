@@ -438,8 +438,8 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   ): Promise<boolean> {
     return this.productAccess.selectSessionModel(model, sessionId);
   }
-  listUserModelProviders() {
-    return this.productAccess.listUserModelProviders();
+  listModelProviders() {
+    return this.productAccess.listModelProviders();
   }
   listProviderPresets() {
     return this.productAccess.listProviderPresets();

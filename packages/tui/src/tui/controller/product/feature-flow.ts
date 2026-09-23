@@ -815,7 +815,7 @@ export class TuiFeatureFlow {
     this.options.surface.show(picker);
   }
 
-  private async showProviderOnboarding(): Promise<void> {
+  private async showProviderOnboarding(returnTo: 'model' | 'provider' = 'model'): Promise<void> {
     if (this.isStopped()) return;
     this.closeProviderManager();
     this.closeProviderOnboarding();
@@ -869,8 +869,13 @@ export class TuiFeatureFlow {
       ...(catalogWarning ? { catalogWarning } : {}),
       onSave: (input) => this.providerApplication.saveCandidate(input),
       onComplete: (result) =>
-        this.completeProviderOnboarding(onboarding, result, sessionId, sessionGeneration),
-      onCancel: () => this.closeProviderOnboarding(),
+        this.completeProviderOnboarding(onboarding, result, sessionId, sessionGeneration, returnTo),
+      onCancel: () => {
+        this.closeProviderOnboarding();
+        // The panel asked for this flow, so hand the list back instead of
+        // dropping the user at the composer with the surface gone.
+        if (returnTo === 'provider') void this.showProviderManager();
+      },
       requestRender: this.options.onChanged,
     });
     this.providerOnboarding = onboarding;
@@ -882,6 +887,7 @@ export class TuiFeatureFlow {
     result: TuiProviderOnboardingResult,
     sessionId: string | undefined,
     sessionGeneration: number,
+    returnTo: 'model' | 'provider',
   ): Promise<void> {
     if (!this.isCurrentSession(sessionId, sessionGeneration)) return;
     let selected = !sessionId;
@@ -923,7 +929,10 @@ export class TuiFeatureFlow {
         'warning',
       );
     }
-    await this.showModelPicker('');
+    // The panel that started the flow gets its list back, now carrying the new
+    // connection and its test verdict; the model picker keeps the old return.
+    if (returnTo === 'provider') await this.showProviderManager();
+    else await this.showModelPicker('');
   }
 
   private warnModelCacheImpact(
@@ -986,6 +995,12 @@ export class TuiFeatureFlow {
       onConnectCopilot: () => {
         this.closeProviderManager();
         this.showCopilotLogin('provider');
+      },
+      onAddProvider: () => {
+        // The catalogue is the same one `/model` offers; OpenRouter is pinned in
+        // it, so a connection that is not configured yet is reachable from the
+        // panel that manages connections.
+        void this.showProviderOnboarding('provider');
       },
       onRefreshModels: (provider) => this.providerApplication.refreshModels(provider),
       onSaveCustom: (input) => this.providerApplication.saveCandidate(input),

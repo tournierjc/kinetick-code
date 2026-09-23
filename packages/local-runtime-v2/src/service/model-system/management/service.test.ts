@@ -20,6 +20,13 @@ import { LocalModelProviderError, LocalModelProviderService } from './service.js
 const RAW_KEY = 'sk-user-minimax-key-12345678';
 const CUSTOM_KEY = 'sk-custom-key-abcdefgh';
 
+/**
+ * Fake OpenRouter-style key for the builtin `provider` tree fixtures below.
+ * Gitleaks reads a literal key next to `apiKey` as a real secret, so the value
+ * lives here once and the fixtures reference it.
+ */
+const BUILTIN_KEY = 'sk-builtin-fixture';
+
 let dataDir: string;
 
 interface Harness {
@@ -2468,6 +2475,80 @@ describe('provider listings', () => {
     expect(ids).not.toContain('minimax_api');
   });
 
+  it('lists a builtin-tree connection beside the user connections', () => {
+    const h = makeHarness({
+      provider: {
+        openrouter: {
+          name: 'OpenRouter',
+          api: 'openai-completions',
+          options: {
+            apiKey: BUILTIN_KEY,
+            baseURL: 'https://openrouter.ai/api/v1',
+            authMode: 'api-key',
+          },
+          models: { 'openai/gpt-5-mini': { name: 'GPT-5 Mini' } },
+        },
+      },
+      custom_provider: {
+        work: {
+          name: 'Work',
+          kind: 'custom',
+          enabled: true,
+          options: { apiKey: 'work-fictional', baseURL: 'https://work.example.com' },
+          models: { 'm-1': {} },
+        },
+      },
+    });
+
+    const listed = h.service.listProviders();
+
+    // `/provider` reads this, so a connection the runtime already routes — a
+    // hand-written `provider.openrouter`, which no migration moves out of the
+    // builtin tree for a standalone CLI — is visible where connections are
+    // managed, not only in `/model`.
+    expect(listed.map((provider) => provider.providerId)).toEqual([
+      'openrouter',
+      'custom_provider:work',
+    ]);
+    const openrouter = listed[0]!;
+    expect(openrouter.source).toBe('provider');
+    // The panel prints the protocol per row, so it must be the one the connection
+    // speaks and not the MiniMax-shaped default.
+    expect(openrouter.apiFormat).toBe('openai-completions');
+    expect(openrouter.models.map((model) => model.modelId)).toEqual(['openai/gpt-5-mini']);
+    expect(openrouter.maskedApiKey).toContain('****');
+    expect(JSON.stringify(listed)).not.toContain(BUILTIN_KEY);
+  });
+
+  it('keeps the identities that own a dedicated row out of the shared list', () => {
+    const h = makeHarness({
+      provider: {
+        minimax: { options: { authMode: 'managed-login' }, models: { 'MiniMax-M3': {} } },
+        minimax_api: { options: { apiKey: 'minimax-fictional' } },
+        'openai-codex': {
+          api: 'openai-codex-responses',
+          options: { authMode: 'oauth' },
+          models: { 'gpt-5-codex': {} },
+        },
+        'github-copilot': {
+          api: 'openai-completions',
+          options: { authMode: 'oauth' },
+          models: { 'gpt-5-mini': {} },
+        },
+        openrouter: {
+          api: 'openai-completions',
+          options: { apiKey: BUILTIN_KEY, baseURL: 'https://openrouter.ai/api/v1' },
+          models: { 'openai/gpt-5-mini': {} },
+        },
+      },
+    });
+
+    // MiniMax keeps its Token Plan and API Key rows; Codex and Copilot keep the
+    // sign-in rows their connectors synthesize. Listing their entries too would
+    // render one connection twice.
+    expect(h.service.listProviders().map((provider) => provider.providerId)).toEqual(['openrouter']);
+  });
+
   it('returns only masked keys in listings', async () => {
     const h = makeHarness();
     await h.service.upsertMinimaxApiKey({ apiKey: RAW_KEY });
@@ -2537,6 +2618,40 @@ describe('provider listings', () => {
     expect(
       h.service.listUserProviders().find((p) => p.providerId === 'custom_provider:work')?.status,
     ).toBeUndefined();
+  });
+});
+
+describe('builtin config connections', () => {
+  it('tests a builtin-tree connection against its own endpoint and records the verdict', async () => {
+    const h = makeHarness({
+      provider: {
+        openrouter: {
+          name: 'OpenRouter',
+          api: 'openai-completions',
+          options: { apiKey: BUILTIN_KEY, baseURL: 'https://openrouter.ai/api/v1' },
+          models: { 'openai/gpt-5-mini': { name: 'GPT-5 Mini' } },
+        },
+      },
+      defaultModel: 'openrouter/openai/gpt-5-mini',
+    });
+
+    const result = await h.service.testProvider('openrouter');
+
+    expect(result.ok).toBe(true);
+    expect(h.testCalls.at(-1)?.target).toMatchObject({
+      api: 'openai-completions',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: BUILTIN_KEY,
+      modelId: 'openai/gpt-5-mini',
+    });
+    // The verdict is keyed by the id the model rows read, so the row that
+    // offered the test also carries its result.
+    expect(h.service.listProviders()[0]?.status).toMatchObject({ state: 'available' });
+  });
+
+  it('still refuses the ids whose connection a dedicated surface owns', async () => {
+    const h = makeHarness();
+    await expect(h.service.testProvider('minimax')).rejects.toThrow('Model provider not found');
   });
 });
 

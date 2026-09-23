@@ -127,10 +127,10 @@ export class TuiProductAccess {
     });
   }
 
-  async listUserModelProviders(): Promise<readonly KcodeRuntimeProviderView[]> {
+  async listModelProviders(): Promise<readonly KcodeRuntimeProviderView[]> {
     const providers = (await this.context
       .service("provider.list")
-      .listUserModelProviders()) as unknown as readonly KcodeRuntimeProviderView[];
+      .listModelProviders()) as unknown as readonly KcodeRuntimeProviderView[];
     return providers.filter(
       (provider) =>
         !isLegacyManagedMinimaxProvider(provider.providerId, provider.baseUrl),

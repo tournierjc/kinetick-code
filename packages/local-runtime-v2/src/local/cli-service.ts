@@ -666,11 +666,11 @@ export class CliService {
     return this.requireCapability("models", "Model").select(input);
   }
 
-  listUserModelProviders() {
+  listModelProviders() {
     return this.requireCapability(
       "modelProviders",
       "Model Provider",
-    ).listUser();
+    ).listProviders();
   }
 
   listProviderPresets() {
