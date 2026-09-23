@@ -725,7 +725,7 @@ describe('KCode update install-source commands', () => {
         {
           currentVersion: '1.2.3',
           entryFile,
-          environment: {},
+          environment: { KCODE_UPDATE_SOURCE: 'upstream' },
           installRoot: prefix,
           prefixInstall: {
             executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
@@ -785,7 +785,7 @@ describe('KCode update install-source commands', () => {
         {
           currentVersion: '1.2.3',
           entryFile,
-          environment: {},
+          environment: { KCODE_UPDATE_SOURCE: 'upstream' },
           installRoot: prefix,
           prefixInstall: {
             executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
@@ -859,7 +859,7 @@ describe('KCode update install-source commands', () => {
         {
           currentVersion: '1.2.3',
           entryFile,
-          environment: {},
+          environment: { KCODE_UPDATE_SOURCE: 'upstream' },
           installRoot: prefix,
           platform: process.platform,
           prefixInstall: {
@@ -923,7 +923,7 @@ describe('KCode update install-source commands', () => {
         {
           currentVersion: '1.2.3',
           entryFile,
-          environment: {},
+          environment: { KCODE_UPDATE_SOURCE: 'upstream' },
           installRoot: prefix,
           platform: process.platform,
           prefixInstall: {
@@ -987,7 +987,7 @@ describe('KCode update install-source commands', () => {
         {
           currentVersion: '1.2.4',
           entryFile,
-          environment: {},
+          environment: { KCODE_UPDATE_SOURCE: 'upstream' },
           installRoot: prefix,
           platform: process.platform,
           prefixInstall: {
@@ -1338,6 +1338,7 @@ function createApplication(
     currentVersion?: string;
     packageTag?: 'latest' | 'test' | 'preview';
     packageName?: '@minimax-ai/code' | '@minimax-ai/code';
+    environment?: NodeJS.ProcessEnv;
     prefixInstall?: {
       executable: string;
       packageName: '@minimax-ai/code' | '@minimax-ai/code';
@@ -1346,8 +1347,183 @@ function createApplication(
     };
   } = {},
 ): McodeUpdateApplication {
+  // The cases above cover the upstream registry and installer paths, which a
+  // fork installation reaches only through this opt-in. The fork release
+  // channel has its own cases below and in update-fork-release.test.ts.
   return new McodeUpdateApplication(
-    { currentVersion: '1.2.3', installRoot: '/managed', ...options },
+    {
+      currentVersion: '1.2.3',
+      installRoot: '/managed',
+      environment: { KCODE_UPDATE_SOURCE: 'upstream' },
+      ...options,
+    },
     { readInstalledPackageVersion: () => '1.2.4', ...dependencies },
   );
 }
+
+const FORK_ARTIFACT_URL =
+  'https://github.com/tournierjc/kinetick-code/releases/download/v1.2.4-fork.1/' +
+  'kinetick-code-1.2.4-fork.1.tar.gz';
+
+function forkCheckResult() {
+  return {
+    status: 'available' as const,
+    channel: 'preview' as const,
+    currentVersion: '1.2.3',
+    latestVersion: '1.2.4-fork.1',
+    release: {
+      tag: 'v1.2.4-fork.1',
+      version: '1.2.4-fork.1',
+      prerelease: true,
+      publishedAt: '2026-09-23T00:00:00Z',
+      artifact: {
+        name: 'kinetick-code-1.2.4-fork.1.tar.gz',
+        url: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/581069979',
+        downloadUrl: FORK_ARTIFACT_URL,
+        size: 13_144_451,
+        checksumUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/581069978',
+      },
+    },
+  };
+}
+
+describe('KCode fork release channel routing', () => {
+  it('updates a package-manager installation from the fork releases', async () => {
+    const check = vi.fn(async () => forkCheckResult());
+    const apply = vi.fn(async () => ({ ...forkCheckResult(), applied: true, restartRequired: true }));
+    const createForkReleaseService = vi.fn(() => ({
+      check,
+      apply,
+      resolveInstallCommand: vi.fn(async () => 'npm install --global archive'),
+    }));
+    const application = createApplication(
+      { detectInstallSource: async () => 'npm-global', createForkReleaseService },
+      { environment: {} },
+    );
+
+    const plan = await application.inspect();
+
+    expect(plan).toMatchObject({
+      kind: 'available',
+      source: 'fork-release',
+      installSource: 'npm-global',
+      channel: 'preview',
+      currentVersion: '1.2.3',
+      latestVersion: '1.2.4-fork.1',
+      artifactUrl: FORK_ARTIFACT_URL,
+    });
+    expect(createForkReleaseService).toHaveBeenCalledWith('npm-global');
+    await expect(application.apply(plan)).resolves.toMatchObject({
+      applied: true,
+      restartRequired: true,
+      message: expect.stringContaining('https://github.com/tournierjc/kinetick-code/releases'),
+    });
+    expect(apply).toHaveBeenCalledWith({ channel: 'preview', version: '1.2.4-fork.1' });
+  });
+
+  it('refuses to replace the upstream installer prefix layout', async () => {
+    const createForkReleaseService = vi.fn();
+    const application = createApplication(
+      { detectInstallSource: async () => 'npm-prefix', createForkReleaseService },
+      { environment: {} },
+    );
+
+    await expect(application.inspect()).rejects.toThrow(/upstream installer layout/u);
+    expect(createForkReleaseService).not.toHaveBeenCalled();
+  });
+
+  it('points a source checkout at the release archive instead of the npm registry', async () => {
+    const resolveInstallCommand = vi.fn(
+      async () => `npm install --global ${FORK_ARTIFACT_URL}`,
+    );
+    const application = createApplication(
+      {
+        detectInstallSource: async () => 'unsupported',
+        createForkReleaseService: () => ({
+          check: vi.fn(),
+          apply: vi.fn(),
+          resolveInstallCommand,
+        }),
+      },
+      { environment: {} },
+    );
+
+    await expect(application.inspect()).resolves.toEqual({
+      kind: 'manual',
+      source: 'unsupported',
+      currentVersion: '1.2.3',
+      command: `npm install --global ${FORK_ARTIFACT_URL}`,
+    });
+  });
+
+  it('falls back to the releases page when the fork channel is unreachable', async () => {
+    const application = createApplication(
+      {
+        detectInstallSource: async () => 'unsupported',
+        createForkReleaseService: () => ({
+          check: vi.fn(),
+          apply: vi.fn(),
+          resolveInstallCommand: vi.fn(async () => {
+            throw new Error('offline');
+          }),
+        }),
+      },
+      { environment: {} },
+    );
+
+    const plan = await application.inspect();
+
+    expect(plan).toMatchObject({ kind: 'manual', source: 'unsupported' });
+    expect((plan as { command: string }).command).toContain(
+      'https://github.com/tournierjc/kinetick-code/releases',
+    );
+  });
+
+  it('keeps the npm registry path when the fork source is disabled', async () => {
+    const resolveLatestPackageVersion = vi.fn(async () => '1.2.4');
+    const createForkReleaseService = vi.fn();
+    const application = createApplication(
+      {
+        detectInstallSource: async () => 'npm-global',
+        resolveLatestPackageVersion,
+        createForkReleaseService,
+      },
+      { environment: { KCODE_UPDATE_SOURCE: 'upstream' }, packageTag: 'test' },
+    );
+
+    await expect(application.inspect()).resolves.toMatchObject({
+      kind: 'package-manager',
+      source: 'npm-global',
+      latestVersion: '1.2.4',
+    });
+    expect(createForkReleaseService).not.toHaveBeenCalled();
+  });
+
+  it('keeps a managed installer installation on its signed channel', async () => {
+    const createForkReleaseService = vi.fn();
+    const createManagedService = vi.fn(() => ({
+      check: vi.fn(async () => ({
+        status: 'current' as const,
+        channel: 'stable' as const,
+        currentVersion: '1.2.3',
+        latestVersion: '1.2.3',
+        manifest: {} as never,
+      })),
+      apply: vi.fn(),
+    }));
+    const application = createApplication(
+      {
+        detectInstallSource: async () => 'managed-installer',
+        createManagedService,
+        createForkReleaseService,
+      },
+      { environment: {} },
+    );
+
+    await expect(application.inspect()).resolves.toMatchObject({
+      kind: 'current',
+      source: 'managed-installer',
+    });
+    expect(createForkReleaseService).not.toHaveBeenCalled();
+  });
+});

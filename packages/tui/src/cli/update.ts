@@ -1,6 +1,11 @@
 import { createInterface } from 'node:readline/promises';
 import { stripVTControlCharacters } from 'node:util';
-import { McodeUpdateApplication, type McodeUpdatePlan } from '../update/application.js';
+import {
+  McodeUpdateApplication,
+  mcodeUpdateChannelLabel,
+  type McodeUpdatePlan,
+} from '../update/application.js';
+import { KCODE_FORK_RELEASES_URL } from '../update/fork-release.js';
 import {
   mcodePrefixActivationScheduledMessage,
   mcodePrefixJournalScheduleFailedMessage,
@@ -37,24 +42,19 @@ export async function runMcodeUpdate(
   const plan = await application.inspect();
 
   if (plan.kind === 'current') {
-    write(
-      plan.source === 'managed-installer'
-        ? `KCode ${plan.currentVersion} is current on ${plan.channel}.\n`
-        : `KCode ${plan.currentVersion} is current on @${plan.packageTag}.\n`,
-    );
+    write(`KCode ${plan.currentVersion} is current on ${mcodeUpdateChannelLabel(plan)}.\n`);
     return;
   }
   if (plan.kind === 'ahead') {
     write(
-      `KCode ${plan.currentVersion} is newer than ${
-        plan.source === 'managed-installer' ? plan.channel : `@${plan.packageTag}`
-      } ${plan.latestVersion}; no update was applied.\n`,
+      `KCode ${plan.currentVersion} is newer than ${mcodeUpdateChannelLabel(plan)} ` +
+        `${plan.latestVersion}; no update was applied.\n`,
     );
     return;
   }
   if (plan.kind === 'manual') {
     write(
-      'KCode could not identify the owner of this installation. ' +
+      'KCode cannot update this installation automatically. ' +
         `Update manually with:\n  ${plan.command}\n`,
     );
     return;
@@ -187,7 +187,9 @@ function phaseLabel(phase: McodeUpdatePhase): string {
 function updateProcessLabel(
   plan: Extract<McodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
 ): string {
-  if (plan.kind === 'available') return 'installer';
+  if (plan.kind === 'available') {
+    return plan.source === 'fork-release' ? 'update' : 'installer';
+  }
   if (plan.source === 'npm-prefix') return 'npm';
   return plan.source.replace('-global', '');
 }
@@ -201,6 +203,12 @@ function renderAvailableUpdate(
   plan: Extract<McodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
 ): string {
   if (plan.kind === 'available') {
+    if (plan.source === 'fork-release') {
+      return (
+        `KCode ${plan.latestVersion} is available from ${KCODE_FORK_RELEASES_URL} ` +
+        `(current ${plan.currentVersion}, ${plan.installSource.replace('-global', '')} installation).\n`
+      );
+    }
     return (
       `KCode ${plan.latestVersion} is available on ${plan.channel} ` +
       `(current ${plan.currentVersion}).\n`
