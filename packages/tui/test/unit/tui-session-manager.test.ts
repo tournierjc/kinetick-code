@@ -690,6 +690,94 @@ describe('TuiSessionManager delete', () => {
   });
 });
 
+describe('TuiSessionManager project grouping', () => {
+  it('groups the list by project and reports the mode', () => {
+    const { manager } = createManager();
+
+    expect(renderPlain(manager)).toContain('Today');
+
+    manager.handleInput('\u0007');
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Grouped by project.');
+    expect(rendered).toContain('workspace (1)');
+    expect(rendered).not.toContain('Today');
+    expect(rendered).toContain('Ctrl+O fold');
+
+    manager.handleInput('\u0007');
+
+    expect(renderPlain(manager)).toContain('Grouped by recency.');
+    expect(renderPlain(manager)).toContain('Today');
+  });
+
+  it('folds every other project and keeps the selected one open', async () => {
+    const onScopeChange = vi.fn(async () => ({ sessions, hasMore: false }));
+    const { manager } = createManager({ onScopeChange });
+
+    manager.handleInput('\u0001');
+    await flushActions();
+    manager.handleInput('\u0007');
+
+    const grouped = renderPlain(manager);
+    expect(grouped).toContain('workspace (1)');
+    expect(grouped).toContain('other-workspace (1)');
+    expect(grouped).toContain('Fix the login flow');
+    expect(grouped).toContain('Refactor the runtime');
+
+    manager.handleInput('\u000f');
+
+    const folded = renderPlain(manager);
+    expect(folded).toContain('stays open; the other groups are folded.');
+    expect(folded).toContain('▸ other-workspace (1 folded)');
+    expect(folded).not.toContain('Refactor the runtime');
+    expect(folded).toContain('Fix the login flow');
+
+    manager.handleInput('\u000f');
+
+    const unfolded = renderPlain(manager);
+    expect(unfolded).toContain('Showing every group again.');
+    expect(unfolded).toContain('Refactor the runtime');
+    expect(unfolded).not.toContain('folded)');
+  });
+
+  it('says so when there is only one group to fold', () => {
+    const { manager } = createManager();
+
+    manager.handleInput('\u0007');
+    manager.handleInput('\u000f');
+
+    expect(renderPlain(manager)).toContain('Only one group is listed, so there is nothing to fold.');
+  });
+
+  it('folds a project only while the selected Session keeps it open', async () => {
+    const onScopeChange = vi.fn(async () => ({ sessions, hasMore: false }));
+    const { manager } = createManager({ onScopeChange });
+
+    manager.handleInput('\u0001');
+    await flushActions();
+    manager.handleInput('\u0007');
+    manager.handleInput('\u000f');
+    expect(renderPlain(manager)).not.toContain('Refactor the runtime');
+
+    manager.handleInput('\u001b[B');
+
+    const moved = renderPlain(manager);
+    expect(moved).toContain('Refactor the runtime');
+    expect(moved).toContain('Fix the login flow');
+  });
+
+  it('never folds while a query is active, where the list is flat', () => {
+    const { manager } = createManager();
+
+    manager.handleInput('login');
+    manager.handleInput('\u0007');
+
+    const rendered = renderPlain(manager);
+    expect(rendered).not.toContain('Grouped by project.');
+    expect(rendered).toContain('Fix the login flow');
+  });
+});
+
 describe('TuiSessionManager saved-prompt search', () => {
   afterEach(() => {
     vi.useRealTimers();

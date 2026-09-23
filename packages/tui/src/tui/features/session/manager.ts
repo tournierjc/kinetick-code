@@ -97,6 +97,9 @@ export class TuiSessionManager implements Component, Focusable {
   private contentMatches = new Map<string, string>();
   private contentSearchSequence = 0;
   private contentSearching = false;
+  /** Project grouping replaces the recency headers when it is on. */
+  private groupByProject = false;
+  private collapsedGroups = new Set<string>();
   private status?: { tone: 'info' | 'error'; text: string };
   private _focused = false;
   private disposed = false;
@@ -199,6 +202,14 @@ export class TuiSessionManager implements Component, Focusable {
       void this.changeScope();
       return;
     }
+    if (!searchActive && matchesKey(data, Key.ctrl('g'))) {
+      this.toggleProjectGrouping();
+      return;
+    }
+    if (!searchActive && this.groupByProject && matchesKey(data, Key.ctrl('o'))) {
+      this.toggleSelectedGroupCollapse();
+      return;
+    }
     if (matchesKey(data, Key.tab)) {
       this.view = this.view === 'active' ? 'archived' : 'active';
       this.resetSelection();
@@ -227,6 +238,7 @@ export class TuiSessionManager implements Component, Focusable {
     if (getKeybindings().matches(data, 'tui.select.cancel')) {
       if (this.searchInput.getValue()) {
         this.searchInput.setValue('');
+        this.setContentMatches([]);
         this.resetSelection();
       } else {
         this.options.onCancel();
@@ -326,11 +338,11 @@ export class TuiSessionManager implements Component, Focusable {
     }${listPosition}`;
     const secondaryFooter = !showSecondaryFooter
       ? undefined
-      : `Ctrl+A ${this.scope === 'workspace' ? 'all' : 'current'} · Ctrl+N new · Ctrl+R rename · Ctrl+D ${
+      : `Ctrl+A ${this.scope === 'workspace' ? 'all' : 'current'} · Ctrl+N new · Ctrl+R rename · Ctrl+G ${
+          this.groupByProject ? 'recency' : 'projects'
+        }${this.groupByProject ? ' · Ctrl+O fold' : ''} · Ctrl+D ${
           this.view === 'active' ? 'archive' : 'restore'
-        } · Ctrl+X delete${
-          this.hasMore ? ' · More sessions available · Ctrl+L more' : ''
-        } · Esc close`;
+        } · Ctrl+X delete${this.hasMore ? ' · More sessions available · Ctrl+L more' : ''} · Esc close`;
     const footerRows = renderPanelFooter(
       [primaryFooter, ...(secondaryFooter ? [secondaryFooter] : [])],
       Math.max(1, width - 4),
@@ -391,7 +403,7 @@ export class TuiSessionManager implements Component, Focusable {
       const reservedFooterRows = footerRows.length + 2;
       const statusRows = this.status ? 1 : 0;
       const detailRows = this.detailRowBudget(width, maxRows);
-      const showSections =
+      const showGroups =
         !this.searchInput.getValue().trim() &&
         width >= 48 &&
         (maxRows === undefined || maxRows >= 20);
@@ -403,8 +415,8 @@ export class TuiSessionManager implements Component, Focusable {
           statusRows -
           detailRows,
       );
-      const window = this.sessionWindow(visible, listBudget, showSections);
-      lines.push(...this.renderSessionWindow(window.sessions, width, listBudget, showSections));
+      const window = this.sessionWindow(visible, listBudget, showGroups);
+      lines.push(...this.renderSessionWindow(window.sessions, width, listBudget, showGroups));
     }
 
     const detailRowBudget = this.detailRowBudget(width, maxRows);
@@ -573,7 +585,7 @@ export class TuiSessionManager implements Component, Focusable {
   private sessionWindow(
     visible: readonly TuiSession[],
     rowBudget: number,
-    showSections: boolean,
+    showGroups: boolean,
   ): { readonly sessions: readonly TuiSession[]; readonly start: number } {
     if (visible.length === 0) return { sessions: [], start: 0 };
     let count = Math.max(1, Math.min(SESSION_LIST_VISIBLE_LIMIT, rowBudget, visible.length));
@@ -583,24 +595,25 @@ export class TuiSessionManager implements Component, Focusable {
         Math.min(this.selectedIndex - Math.floor(count / 2), Math.max(0, visible.length - count)),
       );
       const sessions = visible.slice(start, start + count);
-      if (count === 1 || this.sessionWindowRowCount(sessions, showSections) <= rowBudget) {
+      if (count === 1 || this.sessionWindowRowCount(sessions, showGroups) <= rowBudget) {
         return { sessions, start };
       }
       count -= 1;
     }
   }
 
-  private sessionWindowRowCount(sessions: readonly TuiSession[], showSections: boolean): number {
-    if (!showSections) return sessions.length;
+  private sessionWindowRowCount(sessions: readonly TuiSession[], showGroups: boolean): number {
+    if (!showGroups) return sessions.length;
+    const collapsed = this.collapsedGroupKeys(sessions);
     let rows = 0;
-    let section: SessionRecencySection | undefined;
+    let key: string | undefined;
     for (const session of sessions) {
-      const nextSection = this.sessionSection(session);
-      if (nextSection !== section) {
+      const group = this.sessionGroup(session);
+      if (group.key !== key) {
         rows += 1;
-        section = nextSection;
+        key = group.key;
       }
-      rows += 1;
+      if (!collapsed.has(group.key)) rows += 1;
     }
     return rows;
   }
@@ -609,17 +622,34 @@ export class TuiSessionManager implements Component, Focusable {
     sessions: readonly TuiSession[],
     width: number,
     rowBudget: number,
-    showSections: boolean,
+    showGroups: boolean,
   ): string[] {
     const rows: string[] = [];
-    let section: SessionRecencySection | undefined;
+    const collapsed = this.collapsedGroupKeys(sessions);
+    const groupSizes = new Map<string, number>();
     for (const session of sessions) {
-      const nextSection = this.sessionSection(session);
-      if (showSections && nextSection !== section && rows.length < rowBudget - 1) {
-        rows.push(frameRow(chalk.bold.hex(colors.text)(sessionSectionLabel(nextSection)), width));
+      const key = this.sessionGroup(session).key;
+      groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
+    }
+    let key: string | undefined;
+    for (const session of sessions) {
+      const group = this.sessionGroup(session);
+      if (showGroups && group.key !== key && rows.length < rowBudget - 1) {
+        const size = groupSizes.get(group.key) ?? 0;
+        rows.push(
+          frameRow(
+            chalk.bold.hex(colors.text)(
+              collapsed.has(group.key)
+                ? `▸ ${group.label} (${size} folded)`
+                : `${group.label} (${size})`,
+            ),
+            width,
+          ),
+        );
       }
-      section = nextSection;
+      key = group.key;
       if (rows.length >= rowBudget) break;
+      if (collapsed.has(group.key)) continue;
       rows.push(
         frameRow(
           this.renderSessionLine(session, session.sessionId === this.selectedSessionId, width - 4),
@@ -701,7 +731,104 @@ export class TuiSessionManager implements Component, Focusable {
     );
   }
 
-  private visibleSessions(): TuiSession[] {
+  private setContentMatches(matches: readonly TuiSessionHistoryMatch[]): void {
+    this.contentSearchSequence += 1;
+    this.contentSearching = false;
+    this.contentMatches = new Map(matches.map((match) => [match.sessionId, match.snippet]));
+  }
+
+  private toggleProjectGrouping(): void {
+    this.groupByProject = !this.groupByProject;
+    this.collapsedGroups = new Set();
+    this.status = {
+      tone: 'info',
+      text: this.groupByProject
+        ? 'Grouped by project. Ctrl+O folds the other projects.'
+        : 'Grouped by recency.',
+    };
+    this.requestRender();
+  }
+
+  /**
+   * Fold every project except the one holding the selected Session, or unfold
+   * them all again. That project always stays open: folding is a rendering
+   * choice, and a folded group must never hide the row the user is standing on
+   * or make a Session unreachable.
+   */
+  private toggleSelectedGroupCollapse(): void {
+    const selected = this.selectedSession();
+    if (!selected) return;
+    const listed = this.visibleSessions();
+    const keepOpen = this.sessionGroup(selected).key;
+    const others = new Set(
+      listed.map((session) => this.sessionGroup(session).key).filter((key) => key !== keepOpen),
+    );
+    if (others.size === 0) {
+      this.status = { tone: 'info', text: 'Only one group is listed, so there is nothing to fold.' };
+      this.requestRender();
+      return;
+    }
+    const folded = [...others].every((key) => this.collapsedGroups.has(key));
+    this.collapsedGroups = folded ? new Set() : others;
+    this.status = {
+      tone: 'info',
+      text: folded
+        ? 'Showing every group again.'
+        : `${this.sessionGroup(selected).label} holds the selected Session, so it stays open; the other groups are folded.`,
+    };
+    this.requestRender();
+  }
+
+  /** The header a Session renders under, and the key that folds it. */
+  private sessionGroup(session: TuiSession): { readonly key: string; readonly label: string } {
+    if (!this.groupByProject) {
+      const section = this.sessionSection(session);
+      return { key: `recent:${section}`, label: sessionSectionLabel(section) };
+    }
+    const workspaceDir = session.workspaceDir?.trim();
+    return workspaceDir
+      ? { key: `project:${workspaceDir}`, label: formatWorkspaceGroupLabel(workspaceDir) }
+      : { key: 'project:', label: 'No workspace' };
+  }
+
+  /**
+   * Project grouping keeps a project's Sessions under one header: projects are
+   * ordered by their newest Session, and the recency order inside each project is
+   * preserved (the sort is stable). Without grouping the list is untouched.
+   */
+  private orderedForGrouping(sessions: readonly TuiSession[]): readonly TuiSession[] {
+    if (!this.groupByProject) return sessions;
+    const newestByGroup = new Map<string, number>();
+    for (const session of sessions) {
+      const key = this.sessionGroup(session).key;
+      const updatedAt = toTimestamp(session.updatedAt);
+      newestByGroup.set(key, Math.max(newestByGroup.get(key) ?? 0, updatedAt));
+    }
+    return [...sessions].sort((left, right) => {
+      const leftKey = this.sessionGroup(left).key;
+      const rightKey = this.sessionGroup(right).key;
+      if (leftKey === rightKey) return 0;
+      return (newestByGroup.get(rightKey) ?? 0) - (newestByGroup.get(leftKey) ?? 0);
+    });
+  }
+
+  /** Collapsed groups, minus the one holding the selected Session. */
+  private collapsedGroupKeys(sessions: readonly TuiSession[]): ReadonlySet<string> {
+    if (this.collapsedGroups.size === 0) return this.collapsedGroups;
+    const selected = sessions.find((session) => session.sessionId === this.selectedSessionId);
+    if (!selected) return this.collapsedGroups;
+    const keepOpen = this.sessionGroup(selected).key;
+    if (!this.collapsedGroups.has(keepOpen)) return this.collapsedGroups;
+    const open = new Set(this.collapsedGroups);
+    open.delete(keepOpen);
+    return open;
+  }
+
+  private visibleSessions(): readonly TuiSession[] {
+    return this.orderedForGrouping(this.matchedSessions());
+  }
+
+  private matchedSessions(): TuiSession[] {
     const matched = this.fieldMatchedSessions();
     if (matched.length > 0) return matched;
     if (this.contentMatches.size === 0) return matched;
@@ -1353,6 +1480,17 @@ function truncatePath(value: string, width: number): string {
     suffix = candidate;
   }
   return `…${suffix}`;
+}
+
+/**
+ * The group header for a project: the last path segment, so a list of nested
+ * workspaces stays readable inside the panel width.
+ */
+function formatWorkspaceGroupLabel(workspaceDir: string): string {
+  const segments = sanitizeTerminalText(workspaceDir)
+    .split('/')
+    .filter((segment) => segment.length > 0);
+  return segments.slice(-2).join('/') || workspaceDir;
 }
 
 function composeLine(left: string, right: string, width: number): string {
