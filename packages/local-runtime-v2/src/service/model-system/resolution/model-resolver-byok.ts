@@ -32,6 +32,12 @@ export interface ByokResolutionPlan {
   readonly contextWindow: number;
   readonly maxTokens: number;
   readonly configHeaders?: Record<string, string>;
+  /**
+   * The endpoint declares no credential at all: no key, no sign-in. The
+   * transport still receives a placeholder key, and the request clears the
+   * credential header it would be written into.
+   */
+  readonly unauthenticatedEndpoint?: true;
   readonly modelCompat?: LocalModelCompatOverrides;
 }
 
@@ -151,18 +157,24 @@ function resolvePerModelApi(provider: unknown): Api | undefined {
 function resolveCustomProviderCredentials(
   config: LocalCustomProviderConfig,
   input: { readonly provider: string; readonly providerKey: string },
-): Pick<ByokResolutionPlan, 'apiKey' | 'authProvider' | 'runtimeProvider' | 'baseUrl'> {
+): Pick<
+  ByokResolutionPlan,
+  'apiKey' | 'authProvider' | 'runtimeProvider' | 'baseUrl' | 'unauthenticatedEndpoint'
+> {
   const authProvider =
     config.kind === 'oauth' || config.options?.authMode === 'oauth' ? input.providerKey : undefined;
   const apiKey = config.options?.apiKey?.trim();
-  if (!apiKey && !authProvider) {
-    throw new Error(`LocalModelResolver: api_key not configured for provider "${input.provider}".`);
-  }
   const baseUrl = config.options?.baseURL?.trim();
   if (!baseUrl) {
     throw new Error(
       `LocalModelResolver: base_url not configured for provider "${input.provider}".`,
     );
+  }
+  // A provider with neither a key nor a sign-in is an endpoint that needs no
+  // authentication — a local or self-hosted server, typically. The plan says so
+  // and the resolver supplies the placeholder key the transport requires.
+  if (!apiKey && !authProvider) {
+    return { unauthenticatedEndpoint: true, baseUrl };
   }
   return {
     ...(apiKey ? { apiKey } : {}),

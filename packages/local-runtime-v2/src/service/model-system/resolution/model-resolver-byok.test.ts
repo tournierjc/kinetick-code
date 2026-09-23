@@ -112,7 +112,29 @@ describe('custom BYOK planning', () => {
     ).toBeUndefined();
   });
 
-  it('fails closed when custom provider credentials are incomplete', () => {
+  it('plans an endpoint that needs no authentication without a credential', () => {
+    const base = { provider: 'custom_provider:work', providerKey: 'work', modelId: 'model' };
+
+    // No key, no sign-in: the endpoint is reached without a credential, and the
+    // plan says so instead of refusing to resolve.
+    expect(
+      planCustomProviderResolution({
+        ...base,
+        byok: {
+          custom_provider: {
+            work: { options: { baseURL: ' http://127.0.0.1:11434/v1 ' }, models: { model: {} } },
+          },
+        },
+      }),
+    ).toMatchObject({
+      unauthenticatedEndpoint: true,
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      contextWindow: 200_000,
+      maxTokens: 16_384,
+    });
+  });
+
+  it('fails closed when the endpoint itself is incomplete', () => {
     const base = {
       provider: 'custom_provider:work',
       providerKey: 'work',
@@ -121,16 +143,10 @@ describe('custom BYOK planning', () => {
     expect(() =>
       planCustomProviderResolution({
         ...base,
-        byok: { custom_provider: { work: { models: { model: {} } } } },
-      }),
-    ).toThrow('api_key not configured');
-    expect(() =>
-      planCustomProviderResolution({
-        ...base,
         byok: {
           custom_provider: {
             work: {
-              options: { apiKey: 'key' },
+              options: {},
               models: { model: {} },
             },
           },

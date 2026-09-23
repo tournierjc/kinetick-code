@@ -27,7 +27,7 @@ import type {
   LocalProviderOptions,
   LocalRuntimeAuthContext,
 } from '../contracts.js';
-import { normalizeProviderBaseUrl } from '../connectivity/provider-request.js';
+import { normalizeProviderBaseUrl, UNAUTHENTICATED_PROVIDER_API_KEY } from '../connectivity/provider-request.js';
 import {
   isModelProviderApi,
   MANAGED_MINIMAX_PROVIDER_ID,
@@ -105,6 +105,11 @@ interface FinishResolveInput extends ModelIdentity {
   readonly customProvider: boolean;
   readonly runtimeProvider?: string;
   readonly configHeaders?: Record<string, string>;
+  /**
+   * The endpoint declares no credential: no key is sent in the request, and
+   * none is required to reach it.
+   */
+  readonly unauthenticatedEndpoint?: true;
   readonly modelCompat?: LocalModelCompatOverrides;
   readonly catalogModel?: Model<Api>;
   readonly authContext?: LocalRuntimeAuthContext;
@@ -187,6 +192,7 @@ export class LocalModelResolver implements LocalModelResolverLike {
       byokProvider: credentials.authMode === 'oauth',
       customProvider: false,
       configHeaders: credentials.headers,
+      ...(usable.unauthenticatedEndpoint ? { unauthenticatedEndpoint: true as const } : {}),
       catalogModel: lookupLocalCatalogModel(provider, modelId),
       ...(authContext ? { authContext } : {}),
       ...(routingContext ? { routingContext } : {}),
@@ -244,6 +250,7 @@ export class LocalModelResolver implements LocalModelResolverLike {
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
       ...(thinking.exposedLevel ? { thinkingLevel: thinking.exposedLevel } : {}),
       ...(thinking.requestPatch ? { thinkingRequestPatch: thinking.requestPatch } : {}),
+      ...(input.unauthenticatedEndpoint ? { unauthenticatedEndpoint: true as const } : {}),
     };
   }
 
@@ -379,7 +386,18 @@ async function resolveByokResolutionPlan(
   plan: ByokResolutionPlan,
   options: LocalModelResolverOptions,
 ): Promise<ResolvedByokResolutionPlan> {
-  const { authProvider, apiKey: configuredApiKey, ...resolved } = plan;
+  const {
+    authProvider,
+    apiKey: configuredApiKey,
+    unauthenticatedEndpoint,
+    ...resolved
+  } = plan;
+  // An endpoint that declares no credential resolves to the placeholder key the
+  // transport requires; `unauthenticatedEndpoint` clears the credential header
+  // that key would otherwise be written into, so nothing is sent in its place.
+  if (unauthenticatedEndpoint) {
+    return { ...resolved, apiKey: UNAUTHENTICATED_PROVIDER_API_KEY, unauthenticatedEndpoint: true };
+  }
   const apiKey = (
     authProvider ? await options.providerAuthGetter?.(authProvider) : configuredApiKey
   )?.trim();
@@ -782,8 +800,22 @@ function requireUsableCredentials(
   apiKey: string | undefined,
   baseUrl: string | undefined,
   credentials: ReturnType<typeof resolveLocalProviderCredentials>,
-): { readonly apiKey: string; readonly baseUrl: string } {
+): { readonly apiKey: string; readonly baseUrl: string; readonly unauthenticatedEndpoint?: true } {
   if (!apiKey) {
+    if (credentials.authMode === 'oauth') {
+      throw new Error(
+        `LocalModelResolver: ${provider} login required; no OAuth credentials found.`,
+      );
+    }
+    if (credentials.authMode !== 'managed-login') {
+      // No key on a route that is not a sign-in: the endpoint needs no
+      // authentication, so the transport gets the placeholder key and the
+      // credential headers are cleared for this request.
+      if (!baseUrl) {
+        throw new Error(`LocalModelResolver: base_url not configured for provider "${provider}".`);
+      }
+      return { apiKey: UNAUTHENTICATED_PROVIDER_API_KEY, baseUrl, unauthenticatedEndpoint: true };
+    }
     throw new Error(
       provider === OPENAI_CODEX_PROVIDER_ID
         ? 'LocalModelResolver: openai-codex login required; no OAuth credentials found.'

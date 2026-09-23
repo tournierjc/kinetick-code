@@ -376,7 +376,11 @@ describe('MiniMax api key', () => {
   });
 
   it('still rejects selecting a custom model with incomplete or unavailable configuration', () => {
-    const missingKey = makeHarness({
+    // A provider saved without a key is an endpoint that needs no
+    // authentication, so it is selectable — its connection test is what reports
+    // an unreachable or uncooperative server. What still blocks selection is
+    // configuration the runtime cannot use at all.
+    const keyless = makeHarness({
       custom_provider: {
         work: {
           enabled: true,
@@ -390,8 +394,8 @@ describe('MiniMax api key', () => {
     });
 
     expect(() =>
-      missingKey.service.assertModelSelectable('custom_provider:work', 'm-1'),
-    ).toThrowError(expect.objectContaining({ code: 'NO_API_KEY' }));
+      keyless.service.assertModelSelectable('custom_provider:work', 'm-1'),
+    ).not.toThrow();
 
     const missingBaseUrl = makeHarness({
       custom_provider: {
@@ -1112,6 +1116,57 @@ describe('custom provider candidate persistence', () => {
     );
     expect(h.testCalls).toEqual([]);
     expect(h.selectModel).not.toHaveBeenCalled();
+    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3');
+  });
+
+  it('saves a candidate without a key as an endpoint that needs no authentication', async () => {
+    const h = makeHarness();
+
+    const outcome = await h.service.saveUserModelProviderCandidate({
+      candidate: {
+        name: 'Local model',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        apiFormat: 'openai-completions',
+        models: [{ modelId: 'local-model', displayName: 'local-model' }],
+      },
+      modelId: 'local-model',
+      saveAndUse: true,
+    });
+
+    expect(outcome).toMatchObject({ ok: true });
+    const stored = h.config.custom_provider?.['local-model']?.options;
+    expect(stored).toEqual({ baseURL: 'http://127.0.0.1:11434/v1' });
+    expect(stored?.apiKey).toBeUndefined();
+    expect(stored?.authMode).toBeUndefined();
+    // The connection test that gates the save sends no credential either.
+    expect(h.testCalls).toHaveLength(1);
+    expect(h.testCalls[0]?.target).toMatchObject({
+      api: 'openai-completions',
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      modelId: 'local-model',
+    });
+    expect(h.testCalls[0]?.target.apiKey).toBeUndefined();
+    expect(h.config.defaultModel).toBe('custom_provider:local-model/local-model');
+  });
+
+  it('reads an empty key as no credential rather than an invalid one', async () => {
+    const h = makeHarness();
+
+    const outcome = await h.service.saveUserModelProviderCandidate({
+      candidate: {
+        name: 'Local model',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        apiKey: '',
+        models: [{ modelId: 'local-model' }],
+      },
+      modelId: 'local-model',
+      saveAndUse: false,
+    });
+
+    expect(outcome).toMatchObject({ ok: true });
+    expect(h.config.custom_provider?.['local-model']?.options).toEqual({
+      baseURL: 'http://127.0.0.1:11434/v1',
+    });
     expect(h.config.defaultModel).toBe('minimax/MiniMax-M3');
   });
 

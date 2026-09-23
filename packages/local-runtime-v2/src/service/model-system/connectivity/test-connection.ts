@@ -160,6 +160,7 @@ function redactConnectionTestError(
 ): string | undefined {
   let message = value.replace(/\s+/gu, ' ').trim();
   const secrets = [target.apiKey, ...Object.values(target.headers ?? {})]
+    .filter((secret): secret is string => typeof secret === 'string')
     .map((secret) => secret.trim())
     .filter((secret) => secret.length >= 4)
     .sort((left, right) => right.length - left.length);

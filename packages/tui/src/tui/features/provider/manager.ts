@@ -639,7 +639,7 @@ function providerDetail(provider: KcodeProviderView): string {
   return [
     provider.enabled ? 'Enabled' : 'Disabled',
     provider.apiFormat ?? 'anthropic-messages',
-    provider.hasApiKey ? (provider.maskedApiKey ?? 'key saved') : 'no key',
+    provider.hasApiKey ? (provider.maskedApiKey ?? 'key saved') : 'no key sent',
     `${provider.models.length} model${provider.models.length === 1 ? '' : 's'}`,
   ].join(' · ');
 }

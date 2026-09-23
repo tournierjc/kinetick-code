@@ -53,7 +53,12 @@ export async function createUserProvider(
   input: {
     name?: string;
     baseUrl: string;
-    apiKey: string;
+    /**
+     * Absent or empty saves an endpoint that needs no authentication: no
+     * credential is stored, and nothing is sent in place of one. A masked value
+     * is still rejected, because that is a key the caller failed to unwrap.
+     */
+    apiKey?: string;
     apiFormat?: string;
     headers?: Record<string, string>;
     models?: UserModelInputView[];
@@ -67,7 +72,7 @@ export async function createUserProvider(
       'TEST_REQUIRED',
     );
   }
-  const apiKey = assertValidRawApiKey(input.apiKey);
+  const apiKey = input.apiKey?.trim() ? assertValidRawApiKey(input.apiKey) : undefined;
   const baseUrl = input.baseUrl?.trim();
   if (!baseUrl) {
     throw new LocalModelProviderError(400, 'base_url must not be empty', 'VALIDATION_ERROR');
@@ -89,9 +94,10 @@ export async function createUserProvider(
       enabled: true,
       ...(apiFormat ? { api: apiFormat } : {}),
       options: {
-        apiKey,
         baseURL: baseUrl,
-        authMode: 'api-key',
+        // The credential scheme is declared only when there is a credential:
+        // an entry without one is an endpoint that needs no authentication.
+        ...(apiKey ? { apiKey, authMode: 'api-key' } : {}),
         ...(headers ? { headers } : {}),
       },
       ...(input.models

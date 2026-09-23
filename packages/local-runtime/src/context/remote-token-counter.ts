@@ -22,6 +22,7 @@
  * that adapter.
  */
 
+import { UNAUTHENTICATED_PROVIDER_API_KEY } from '@mavis/shared';
 import { estimateMessagesTokens, estimateSystemPromptAndToolTokens } from './token-estimator.js';
 import {
   DEFAULT_REMOTE_TOKEN_COUNTER_ADAPTERS,
@@ -100,7 +101,16 @@ export class HttpRemoteTokenCounter implements RemoteTokenCounter {
       }
     };
 
-    if (!ctx.apiKey || !ctx.model.baseUrl) return estimate('counter_unavailable');
+    // A keyless endpoint is counted with the local estimate: this counter's
+    // requests are credential-shaped, and the placeholder key exists only so the
+    // transport can build a client — it is never sent anywhere.
+    if (
+      !ctx.apiKey ||
+      ctx.apiKey === UNAUTHENTICATED_PROVIDER_API_KEY ||
+      !ctx.model.baseUrl
+    ) {
+      return estimate('counter_unavailable');
+    }
     const adapter = resolveRemoteTokenCounterAdapter(ctx, this.adapters);
     if (!adapter) return estimate('counter_unavailable');
     const hasPreparedProviderPayload =

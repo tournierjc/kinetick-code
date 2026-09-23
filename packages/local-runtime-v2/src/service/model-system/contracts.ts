@@ -354,7 +354,8 @@ export interface ModelProviderView {
 export interface ModelDiscoveryTarget {
   api: ModelProviderApi;
   baseUrl: string;
-  apiKey: string;
+  /** Absent for an endpoint that needs no authentication. */
+  apiKey?: string;
   headers?: Record<string, string>;
 }
 
@@ -374,7 +375,8 @@ export interface ModelDiscoveryClientLike {
 export interface ModelConnectionTestTarget {
   api: ModelProviderTestApi;
   baseUrl: string;
-  apiKey: string;
+  /** Absent for an endpoint that needs no authentication. */
+  apiKey?: string;
   modelId: string;
   headers?: Record<string, string>;
   effort?: string;

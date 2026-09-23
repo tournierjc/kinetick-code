@@ -269,7 +269,8 @@ export interface LocalRuntimeApplication {
     create(input: {
       name?: string;
       baseUrl: string;
-      apiKey: string;
+      /** Absent saves an endpoint that needs no authentication. */
+      apiKey?: string;
       apiFormat?: string;
       models?: readonly ProcessLocalModelInput[];
       saveAndUse?: boolean;

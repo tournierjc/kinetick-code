@@ -16,11 +16,14 @@ const provider: KcodeProviderView = {
   configRevision: "rev-1",
   models: [{ modelId: "chat", selected: true }, { modelId: "reasoner" }],
 };
-function setup(onSave = vi.fn(async () => ({ success: true }))) {
+function setup(
+  onSave = vi.fn(async () => ({ success: true })),
+  overrides: Partial<KcodeProviderView> = {},
+) {
   const onSaved = vi.fn();
   const onCancel = vi.fn();
   const editor = new TuiProviderEditor({
-    provider,
+    provider: { ...provider, ...overrides },
     onSave,
     onSaved,
     onCancel,
@@ -117,6 +120,38 @@ describe("TuiProviderEditor", () => {
         baseUrl: provider.baseUrl,
       }),
     );
+  });
+
+  it("tests and saves a connection that carries no key", async () => {
+    const h = setup(undefined, { hasApiKey: false });
+
+    expect(stripAnsi(h.editor.render(200).join("\n"))).toContain(
+      "Not set · a request carries no credential",
+    );
+
+    h.save();
+
+    await vi.waitFor(() => expect(h.onSave).toHaveBeenCalledOnce());
+    const calls = h.onSave.mock.calls as unknown as Array<[Record<string, unknown>]>;
+    expect(calls[0]?.[0]).not.toHaveProperty("apiKey");
+    expect(h.onSaved).toHaveBeenCalledWith(false);
+  });
+
+  it("clears a saved key when the API Key field is submitted empty", async () => {
+    const h = setup();
+
+    h.editor.handleInput("\r");
+    h.editor.handleInput("\r");
+    expect(stripAnsi(h.editor.render(200).join("\n"))).toContain(
+      "Cleared · no credential will be sent",
+    );
+
+    h.save();
+
+    await vi.waitFor(() => expect(h.onSave).toHaveBeenCalledOnce());
+    const calls = h.onSave.mock.calls as unknown as Array<[Record<string, unknown>]>;
+    expect(calls[0]?.[0]).toMatchObject({ apiKey: "" });
+    expect(h.onSaved).toHaveBeenCalledWith(true);
   });
 
   it("does not reopen a disposed editor after a pending save", async () => {

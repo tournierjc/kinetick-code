@@ -178,7 +178,11 @@ export interface KcodeCopilotOAuthStatus {
 export interface KcodeCreateProviderInput {
   readonly name?: string;
   readonly baseUrl: string;
-  readonly apiKey: string;
+  /**
+   * Absent saves an endpoint that needs no authentication: the connection is
+   * created without a credential and requests carry none.
+   */
+  readonly apiKey?: string;
   readonly apiFormat: KcodeProviderApiFormat;
   readonly models: readonly KcodeProviderModelInput[];
   readonly saveAndUse?: boolean;
