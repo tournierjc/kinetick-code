@@ -10,6 +10,7 @@ import type { TuiRotationEvent, TuiSessionCatalogEvent } from '../../types/runti
 import type { TuiComposerDraft } from '../features/composer/draft.js';
 import type { TuiRunProjection } from '../state/run-projection.js';
 import type { TuiStateStore } from '../state/store.js';
+import { cycleTuiTab, selectTuiTabAfterClose, selectTuiTabSlot } from '../state/tabs.js';
 import type { TuiChatController } from './chat-controller.js';
 import type { TuiFeatureFlow } from './product/feature-flow.js';
 import type { TuiInteractionFlow } from './interaction/interaction-flow.js';
@@ -104,6 +105,71 @@ export class TuiSessionFlow {
 
   sideConversationSnapshot(): TuiSideConversationSnapshot | undefined {
     return this.sideConversation;
+  }
+
+  /** Open tabs in bar order; the visible Session is always one of them. */
+  private openTabOrder(): readonly string[] {
+    return this.options.stateStore.snapshot().tabs.order;
+  }
+
+  private visibleSessionId(): string | undefined {
+    return this.options.controller.snapshot().session?.sessionId;
+  }
+
+  /**
+   * Switch to the next (`delta` 1) or previous (`delta` -1) open tab.
+   *
+   * Switching keeps the same live-run rule as `/sessions`. The projection is
+   * still single-Session: loading another Session detaches the foreground run
+   * and aborts its turn, so allowing the switch mid-run would silently kill the
+   * run instead of leaving it in the background.
+   */
+  async cycleTab(delta: 1 | -1): Promise<void> {
+    const current = this.visibleSessionId();
+    const target = cycleTuiTab(this.openTabOrder(), current, delta);
+    if (!target || target === current) {
+      this.options.append('Only one Session tab is open. Use /sessions to open another.', 'warning');
+      return;
+    }
+    await this.activateSessionById(target);
+  }
+
+  /** Switch to the Session bound to a 1-based direct tab slot (`Alt+<n>`). */
+  async activateTabSlot(slot: number): Promise<void> {
+    const target = selectTuiTabSlot(this.openTabOrder(), slot);
+    if (!target) {
+      this.options.append(`No open Session tab in slot ${slot}.`, 'warning');
+      return;
+    }
+    if (target === this.visibleSessionId()) return;
+    await this.activateSessionById(target);
+  }
+
+  /**
+   * Close the visible tab and show its neighbour.
+   *
+   * The neighbour is activated *before* the close because the tab list refuses
+   * to close the visible tab; that keeps the invariant that a Session is always
+   * on screen. Closing the last tab starts a new Session instead. Nothing is
+   * deleted: the Session keeps its history and returns through `/sessions`.
+   *
+   * A refused switch (live run, or a failed projection load) leaves the tab in
+   * place rather than dropping it silently.
+   */
+  async closeTab(): Promise<void> {
+    if (this.stopped) return;
+    const current = this.visibleSessionId();
+    if (!current) return;
+    const neighbour = selectTuiTabAfterClose(this.openTabOrder(), current);
+    if (neighbour) {
+      await this.activateSessionById(neighbour);
+      if (this.visibleSessionId() !== neighbour) return;
+    } else {
+      await this.startNew();
+      if (this.visibleSessionId() !== undefined) return;
+    }
+    this.options.stateStore.dispatch({ type: 'tabs/close', sessionId: current });
+    this.options.onChanged();
   }
 
   async startNew(

@@ -38,6 +38,7 @@ function createReadinessCommandFlow(options: {
   persistTuiMode?: (mode: "regular" | "fullscreen") => void;
   reloadTui?: () => Promise<void>;
   append?: (text: string, kind?: "info" | "warning" | "error") => void;
+  sessionFlow?: unknown;
   queuedCount?: number;
 }) {
   return new TuiCommandFlow({
@@ -64,7 +65,7 @@ function createReadinessCommandFlow(options: {
       handleCommand: vi.fn(async () => false),
       hasPending: vi.fn(() => false),
     } as never,
-    sessionFlow: {} as never,
+    sessionFlow: (options.sessionFlow ?? {}) as never,
     queueFlow: {} as never,
     composerDraft: { hasContent: vi.fn(() => false) } as never,
     workspaceRoots: { additionalDirectories: () => [] } as never,
@@ -1670,5 +1671,47 @@ describe("TuiCommandFlow", () => {
     );
     expect(showPending).toHaveBeenCalledTimes(1);
     expect(activeRunFlow.handle).not.toHaveBeenCalled();
+  });
+});
+
+describe("TuiCommandFlow /tabs", () => {
+  it("cycles, closes and jumps through the open Session tabs", async () => {
+    const cycleTab = vi.fn(async () => undefined);
+    const closeTab = vi.fn(async () => undefined);
+    const activateTabSlot = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      sessionFlow: { cycleTab, closeTab, activateTabSlot },
+    });
+
+    await expect(flow.submit("/tabs next")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs prev")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs close")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs 3")).resolves.toBe("consumed");
+
+    expect(cycleTab.mock.calls).toEqual([[1], [-1]]);
+    expect(closeTab).toHaveBeenCalledOnce();
+    expect(activateTabSlot).toHaveBeenCalledWith(3);
+  });
+
+  it("keeps a bare /tabs and an unknown slot as usage hints", async () => {
+    const append = vi.fn();
+    const cycleTab = vi.fn(async () => undefined);
+    const activateTabSlot = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      append,
+      sessionFlow: { cycleTab, activateTabSlot },
+    });
+
+    await expect(flow.submit("/tabs")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs 12")).resolves.toBe("retained");
+
+    expect(cycleTab).not.toHaveBeenCalled();
+    expect(activateTabSlot).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      "Usage: /tabs <next | prev | close | 1-9>. The key hints are in /hotkeys.",
+      "warning",
+    );
   });
 });

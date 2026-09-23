@@ -417,6 +417,8 @@ export function createTuiApplicationSurface(options: {
   readonly transcript: TranscriptStore;
   readonly transcriptView: TranscriptView;
   readonly widgets: ReturnType<typeof createTuiApplicationWidgets>;
+  /** Open-tab bar; omitted by callers that render no tabs (headless, ACP). */
+  readonly sessionTabs?: Component;
   readonly themeController: TuiThemeController;
   readonly liveRunId: (snapshot?: TuiChatSnapshot) => string | undefined;
   readonly shouldResumeDraftAfterLogin: () => boolean;
@@ -448,6 +450,7 @@ export function createTuiApplicationSurface(options: {
       activity,
       followUp,
       tasks,
+      ...(options.sessionTabs ? { tabs: options.sessionTabs } : {}),
       composer,
       status,
     },
