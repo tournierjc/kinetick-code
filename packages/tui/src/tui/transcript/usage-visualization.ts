@@ -55,7 +55,7 @@ export class UsageVisualization implements Component {
         : chalk.bold.hex(colors.signal)(
             `${formatCompact(this.data.totalTokens)} total` +
               (typeof this.data.costTotalUsd === 'number'
-                ? ` · ${formatTuiCostUsd(this.data.costTotalUsd)}`
+                ? ` · ${this.data.costUnpriced === true ? '~' : ''}${formatTuiCostUsd(this.data.costTotalUsd)}`
                 : ''),
           );
     return composeEdges(title, summary, width);
