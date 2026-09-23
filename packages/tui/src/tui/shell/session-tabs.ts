@@ -52,6 +52,8 @@ const TUI_TAB_UNGROUPED_LABEL = 'No project';
 export interface TuiSessionTabCatalogEntry {
   readonly sessionId: string;
   readonly title?: string;
+  /** Sits in the runtime's pin list, drawn as a marker on the tab. */
+  readonly pinned?: boolean;
 }
 
 /** Project a Session belongs to, as the bar shows it. */
@@ -121,6 +123,8 @@ export interface TuiSessionTabView {
   readonly status: TuiSessionTabStatus;
   /** The Session is gone from the catalog: the tab can only be closed. */
   readonly unavailable: boolean;
+  /** Pinned in the runtime's pin list; drawn as a marker before the label. */
+  readonly pinned?: boolean;
 }
 
 /** One project's worth of tabs, in bar order. */
@@ -131,6 +135,8 @@ export interface TuiSessionTabGroup {
   readonly tabs: readonly TuiSessionTabView[];
   /** Combined status of the tabs, so a folded group still shows activity. */
   readonly status: TuiSessionTabStatus;
+  /** At least one tab of the group is pinned, so a folded group still shows it. */
+  readonly pinned?: boolean;
 }
 
 export interface ResolveTuiSessionTabGroupsInput {
@@ -169,6 +175,7 @@ export function resolveTuiSessionTabGroups(
     collapsed: collapsedKeys.includes(ref.key),
     tabs,
     status: combineTuiSessionTabStatus(tabs),
+    ...(tabs.some((tab) => tab.pinned === true) ? { pinned: true } : {}),
   }));
 }
 
@@ -210,6 +217,9 @@ export function resolveTuiSessionTabs(
   input: ResolveTuiSessionTabsInput,
 ): readonly TuiSessionTabView[] {
   const titles = new Map(input.catalog.map((session) => [session.sessionId, session.title]));
+  const pinned = new Set(
+    input.catalog.filter((session) => session.pinned === true).map((session) => session.sessionId),
+  );
   return input.order.map((sessionId, index) => {
     const title = titles.get(sessionId)?.trim();
     return {
@@ -219,6 +229,7 @@ export function resolveTuiSessionTabs(
       active: sessionId === input.activeSessionId,
       status: input.statusOf(sessionId) ?? IDLE_TUI_SESSION_TAB_STATUS,
       unavailable: !titles.has(sessionId),
+      ...(pinned.has(sessionId) ? { pinned: true } : {}),
     };
   });
 }
@@ -315,8 +326,9 @@ function renderGroupHeader(group: TuiSessionTabGroup, width: number): string {
   const head = `${paint(`${marker} ${group.label}`)}${chalk.hex(colors.dim)(
     ` · ${String(group.tabs.length)}`,
   )}`;
+  const pin = group.pinned ? chalk.hex(colors.accent)(' *') : '';
   return truncateToWidth(
-    `${head}${renderTabMarkers(group.status)}`,
+    `${head}${pin}${renderTabMarkers(group.status)}`,
     width,
     chalk.hex(colors.dim)('…'),
   );
@@ -415,7 +427,10 @@ function renderTabSegment(tab: TuiSessionTabView, labelOverride?: string): strin
   const body = tab.active
     ? chalk.bold.hex(colors.text)(`[${title}]`)
     : chalk.hex(tab.unavailable ? colors.dim : colors.muted)(title);
-  return `${slotLabel}${body}${renderTabMarkers(tab.status)}`;
+  // The pin marker belongs to the fixed part of the segment, so the label budget
+  // shrinks around it instead of the marker being cut off.
+  const pin = tab.pinned ? chalk.hex(colors.accent)('* ') : '';
+  return `${slotLabel}${pin}${body}${renderTabMarkers(tab.status)}`;
 }
 
 function renderTabMarkers(status: TuiSessionTabStatus): string {

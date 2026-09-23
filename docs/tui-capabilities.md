@@ -153,9 +153,11 @@ reopens tabs in insertion order.
 runtime-level, ordered list rather than a field on the Session, so it survives restarts
 and is shared with any other client: pinned Sessions lead the `/sessions` list and the
 session manager, in the runtime's pin order, and the rest follow by recency. The tab
-bar is not re-sorted by pins — it keeps the order you set with `/tabs move` — and a pin
-does not switch, resume or archive anything. `session.pinned_updated` refreshes the
-catalogue when the pin was written elsewhere.
+bar is not re-sorted by pins — it keeps the order you set with `/tabs move` — but a
+pinned tab is marked with a `*` before its label, and a folded project group carrying a
+pinned Session shows one on its header. A pin does not switch, resume or archive
+anything. `session.pinned_updated` refreshes the catalogue when the pin was written
+elsewhere.
 
 Renaming a tab renames its Session: the tab label is the Session title, so
 `/tabs rename`, `/rename` and the inline rename in `/sessions` all write the same
