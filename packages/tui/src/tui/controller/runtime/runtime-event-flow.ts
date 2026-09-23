@@ -369,6 +369,9 @@ export class TuiRuntimeEventFlow {
     }
     const currentSessionId = this.options.controller.snapshot().session?.sessionId;
     const matchesCurrentSession = Boolean(currentSessionId) && event.sessionId === currentSessionId;
+    if (!matchesCurrentSession && event.sessionId && event.type === 'session.start' && event.turnId) {
+      this.adoptRuntimeTurn(event.sessionId, event.turnId, event.timestampMs);
+    }
     let liveTurnDurationMs: number | undefined;
     const sessionScopedResult = this.handleSessionScopedEvent(event, matchesCurrentSession);
     if (sessionScopedResult === true) return;
@@ -547,20 +550,28 @@ export class TuiRuntimeEventFlow {
     });
   }
 
-  adoptRuntimeTurn(sessionId: string, turnId: string, timestampMs: number): void {
-    if (
-      this.options.isStopped() ||
-      this.options.controller.snapshot().session?.sessionId !== sessionId ||
-      this.options.controller.snapshot().activeTurnId === turnId
-    ) {
+  /**
+   * Watch a Turn the Runtime has reported. The Session on screen is adopted as before;
+   * a Session that is not on screen is adopted when its tab is open, so a run the user
+   * cannot see — a drained queue item, a delegation, an automation — streams into its
+   * own pane instead of waiting to be persisted.
+   */
+  adoptRuntimeTurn(sessionId: string, turnId: string, timestampMs?: number): void {
+    if (this.options.isStopped()) return;
+    if (this.isVisibleSession(sessionId)) {
+      if (this.options.controller.snapshot().activeTurnId === turnId) return;
+      this.startLiveTurn(
+        sessionId,
+        turnId,
+        timestampMs,
+        this.options.controller.latestDurableMessageId(),
+      );
       return;
     }
-    this.startLiveTurn(
-      sessionId,
-      turnId,
-      timestampMs,
-      this.options.controller.latestDurableMessageId(),
-    );
+    if (!this.options.controller.retainsTranscript(sessionId)) return;
+    // Stream this turn from its start: the visible Session's durable anchor is not this
+    // Session's.
+    this.startLiveTurn(sessionId, turnId, timestampMs);
   }
 
   private startLiveTurn(

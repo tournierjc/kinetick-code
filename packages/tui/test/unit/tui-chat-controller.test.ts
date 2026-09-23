@@ -372,6 +372,28 @@ describe('TuiChatController', () => {
     expect(transcript.snapshot().some((cell) => cell.content.includes('Question two'))).toBe(false);
   });
 
+  it('reports which Sessions keep a pane', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+
+    expect(controller.retainsTranscript('session-a')).toBe(false);
+    await controller.loadSessionProjection('session-a');
+    expect(controller.retainsTranscript('session-a')).toBe(true);
+    controller.releaseSessionTranscript('session-a');
+    expect(controller.retainsTranscript('session-a')).toBe(false);
+  });
+
   it('streams a background turn into its own pane, not the visible one', async () => {
     const runtime = {
       createSession: vi.fn(),

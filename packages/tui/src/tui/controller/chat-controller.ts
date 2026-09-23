@@ -322,6 +322,11 @@ export class TuiChatController {
     this.retainSessionTranscript(sessionId);
   }
 
+  /** Whether this store keeps a pane for `sessionId` (i.e. its tab was opened). */
+  retainsTranscript(sessionId: string): boolean {
+    return this.retainedTranscriptSessions.has(sessionId);
+  }
+
   /**
    * Forget the cells kept for a Session. Called when its tab closes and when it is
    * archived or deleted: a Session that comes back is projected from durable
