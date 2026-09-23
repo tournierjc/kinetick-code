@@ -64,6 +64,14 @@ export function reduceTuiState(state: TuiState, action: TuiAction): TuiTransitio
   if (action.type === 'tabs/toggleGroup') {
     return { state: { ...state, tabs: toggleTuiTabGroupCollapsed(state.tabs, action.groupKey) }, effects: [] };
   }
+  if (action.type === 'tabs/setCollapsedGroups') {
+    // The fold key folds around the visible tab, so it sets the whole list at
+    // once instead of toggling one group.
+    return {
+      state: { ...state, tabs: { ...state.tabs, collapsedGroups: action.groupKeys } },
+      effects: [],
+    };
+  }
 
   if (action.type === 'interaction/permissionReceived') {
     return updateSession(state, action.sessionId, (session) => ({

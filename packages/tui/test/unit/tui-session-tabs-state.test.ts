@@ -3,6 +3,7 @@ import { createTuiState } from '../../src/tui/state/model.js';
 import { reduceTuiState } from '../../src/tui/state/reducer.js';
 import {
   applyingTuiTabGroupCollapse,
+  foldingTuiTabGroups,
   cycleTuiTab,
   selectTuiTabAfterClose,
   selectTuiTabSlot,
@@ -207,5 +208,40 @@ describe('tab grouping state', () => {
     ]);
     expect(applyingTuiTabGroupCollapse(['/work/api'], undefined)).toEqual(['/work/api']);
     expect(applyingTuiTabGroupCollapse([], '/work/api')).toEqual([]);
+  });
+
+  it('folds every group but the visible one, and unfolds them all again', () => {
+    const keys = ['/work/api', '/work/web'];
+
+    expect(foldingTuiTabGroups(keys, '/work/api', [])).toEqual(['/work/web']);
+    expect(foldingTuiTabGroups(keys, '/work/api', ['/work/web'])).toEqual([]);
+    expect(foldingTuiTabGroups(keys, '/work/web', ['/work/api'])).toEqual([]);
+  });
+
+  it('leaves folding alone when there is nothing to fold', () => {
+    const collapsed = ['/work/web'];
+
+    // Identity, not equality: the caller uses it to tell "no change" from "unfold".
+    expect(foldingTuiTabGroups(['/work/api'], '/work/api', collapsed)).toBe(collapsed);
+    expect(foldingTuiTabGroups(['/work/api', '/work/web'], undefined, collapsed)).toBe(collapsed);
+    expect(foldingTuiTabGroups([], '/work/api', collapsed)).toBe(collapsed);
+  });
+
+  it('sets the folded groups in one action', () => {
+    const state = createTuiState();
+
+    const folded = reduceTuiState(state, {
+      type: 'tabs/setCollapsedGroups',
+      groupKeys: ['/work/api'],
+    }).state;
+
+    expect(folded.tabs.collapsedGroups).toEqual(['/work/api']);
+
+    const unfolded = reduceTuiState(folded, {
+      type: 'tabs/setCollapsedGroups',
+      groupKeys: [],
+    }).state;
+
+    expect(unfolded.tabs.collapsedGroups).toEqual([]);
   });
 });

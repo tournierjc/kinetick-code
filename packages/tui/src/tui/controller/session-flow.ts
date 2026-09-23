@@ -12,6 +12,7 @@ import type { TuiRunProjection } from '../state/run-projection.js';
 import type { TuiStateStore } from '../state/store.js';
 import {
   applyingTuiTabGroupCollapse,
+  foldingTuiTabGroups,
   cycleTuiTab,
   selectTuiTabAfterClose,
   selectTuiTabSlot,
@@ -236,11 +237,13 @@ export class TuiSessionFlow {
   }
 
   /**
-   * Fold or unfold the group holding the visible tab.
+   * Fold every project group but the one holding the visible tab, or unfold them
+   * all again.
    *
-   * Folding the visible tab's own group is recorded and ignored while that tab is
-   * on screen — the same rule that stops the visible tab from being closed — so
-   * this reports what happened instead of leaving the user with no bar.
+   * Folding the visible tab's own group would hide the Session on screen — the
+   * same rule that stops the visible tab from being closed — so the key folds the
+   * groups *around* it. Cycling and the direct slots still reach every open tab,
+   * so a folded group is never a keyboard dead end.
    */
   async toggleTabGroupCollapse(): Promise<void> {
     const state = this.options.stateStore.snapshot();
@@ -249,12 +252,20 @@ export class TuiSessionFlow {
       this.options.append('Project grouping is off. Turn it on with /tabs group on.', 'warning');
       return;
     }
-    const collapsed = state.tabs.collapsedGroups.includes(ref.key);
-    this.options.stateStore.dispatch({ type: 'tabs/toggleGroup', groupKey: ref.key });
+    const refs = resolveTuiSessionTabGroupRefs(this.options.controller.snapshot().sessions);
+    const groupKeys = [...new Set(state.tabs.order.map((id) => refs.get(id)?.key))].filter(
+      (key): key is string => key !== undefined,
+    );
+    const folded = foldingTuiTabGroups(groupKeys, ref.key, state.tabs.collapsedGroups);
+    if (folded === state.tabs.collapsedGroups) {
+      this.options.append('Only one project group is open, so there is nothing to fold.', 'warning');
+      return;
+    }
+    this.options.stateStore.dispatch({ type: 'tabs/setCollapsedGroups', groupKeys: folded });
     this.options.append(
-      collapsed
-        ? `Showing the ${ref.label} tabs again.`
-        : `${ref.label} holds the visible tab, so it stays open. Switch tabs to fold it.`,
+      folded.length === 0
+        ? 'Showing every project group again.'
+        : `${ref.label} holds the visible tab, so it stays open; the other project groups are folded.`,
     );
     this.options.onChanged();
   }

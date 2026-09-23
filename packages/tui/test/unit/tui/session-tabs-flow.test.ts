@@ -329,7 +329,7 @@ describe('tab grouping', () => {
     expect(append).toHaveBeenCalledWith('Grouping needs tabs from more than one project.');
   });
 
-  it('folds the visible tab group and explains that it stays open', async () => {
+  it('folds every other tab group and explains that the visible one stays open', async () => {
     const { flow, tabs, append } = createFlow({
       tabs: [TAB_A, TAB_B],
       visible: TAB_B,
@@ -338,15 +338,31 @@ describe('tab grouping', () => {
 
     await flow.toggleTabGroupCollapse();
 
-    expect(tabs().collapsedGroups).toEqual(['/work/web']);
+    expect(tabs().collapsedGroups).toEqual(['/work/api']);
     expect(append).toHaveBeenCalledWith(
-      'web holds the visible tab, so it stays open. Switch tabs to fold it.',
+      'web holds the visible tab, so it stays open; the other project groups are folded.',
     );
 
     await flow.toggleTabGroupCollapse();
 
     expect(tabs().collapsedGroups).toEqual([]);
-    expect(append).toHaveBeenLastCalledWith('Showing the web tabs again.');
+    expect(append).toHaveBeenLastCalledWith('Showing every project group again.');
+  });
+
+  it('folds nothing when every open tab belongs to the same project', async () => {
+    const { flow, tabs, append } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_A,
+      projects: { [TAB_A]: '/work/api', [TAB_B]: '/work/api' },
+    });
+
+    await flow.toggleTabGroupCollapse();
+
+    expect(tabs().collapsedGroups).toEqual([]);
+    expect(append).toHaveBeenCalledWith(
+      'Only one project group is open, so there is nothing to fold.',
+      'warning',
+    );
   });
 
   it('refuses to fold while grouping is off', async () => {
@@ -375,7 +391,7 @@ describe('tab grouping', () => {
     });
 
     await flow.toggleTabGroupCollapse();
-    expect(tabs().collapsedGroups).toEqual(['/work/api']);
+    expect(tabs().collapsedGroups).toEqual(['/work/web']);
 
     await flow.cycleTab(1);
 
