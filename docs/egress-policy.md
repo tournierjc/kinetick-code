@@ -63,8 +63,10 @@ npm registry for runtime dependencies. Under `allowlist`, declare those origins 
 `MCODE_ALLOWED_ORIGINS` — for example
 `MCODE_ALLOWED_ORIGINS=https://api.github.com,https://github.com,https://objects.githubusercontent.com,https://registry.npmjs.org`
 — or the update fails closed with the refused origin named. The default `off`
-mode reaches them without extra configuration; an installation that should follow
-the upstream npm channel instead sets `KCODE_UPDATE_SOURCE=upstream`.
+mode reaches them without extra configuration. This build has no other update
+channel: the upstream distribution CDN and npm channel listed above stay refused,
+so an installation made by the upstream installer is told to install a release
+archive rather than updated through them.
 
 Refused unless the user declared a provider on that origin: `api.minimax.io`,
 `api.minimaxi.com` — the MiniMax model API is treated as an ordinary BYOK

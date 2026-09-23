@@ -40,10 +40,11 @@ These spellings are deliberately unchanged, and the product rename does not alte
 - Account device-flow client fields (`device_platform`/`browser_name`/`client`: `mcode`) and the
   remote-control headers (`X-MCode-*`) belong to MiniMax service contracts.
 - Update-channel values (`product: minimax-code`, `updateOwner: mcode-installer`) and the `mcode` launcher
-  names the prefix updater looks for identify installs created by the upstream installer. An installation
-  whose `install.json` carries that identity keeps the upstream signed channel; every other installation —
-  an archive install, a global npm/pnpm/yarn/bun install, or an npm prefix — is updated from this fork's
-  GitHub Releases by `kcode update` (see [Updating](installation.md#updating)).
+  names the prefix updater looks for identify installs created by the upstream installer. They are read to
+  recognize such an installation, not to follow its channel: an installation whose `install.json` carries
+  that identity is not replaced in place, and every installation this build owns — an archive install or a
+  global npm/pnpm/yarn/bun install — updates from this repository's GitHub Releases (see
+  [Updating](installation.md#updating)).
 - Data locations (`v2/mcode/drafts`, `v2/observability/mcode`, `.minimax*`, `.mcode`) and environment
   variables (`MINIMAX_*`, `MCODE_*`) are persisted user state; renaming them would orphan existing
   drafts, logs, and configuration. The same reasoning keeps the `# Added by MiniMax Code` path marker, the
