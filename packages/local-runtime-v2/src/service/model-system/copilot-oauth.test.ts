@@ -146,6 +146,7 @@ function managerFor(options: {
   config?: LocalRuntimeConfig;
   authStorage?: ReturnType<typeof createAuthStorage>;
   catalog?: CopilotModelCatalog;
+  catalogGetter?: (credentials: { token: string }) => Promise<CopilotModelCatalog>;
 }) {
   const config = options.config ?? createConfig(true);
   const authStorage = options.authStorage ?? createAuthStorage();
@@ -154,7 +155,9 @@ function managerFor(options: {
     configGetter: () => config,
     authStorageFactory: () => authStorage,
     updateByokConfig: updater,
-    catalogGetter: async () => options.catalog ?? createCatalog(),
+    catalogGetter:
+      options.catalogGetter ??
+      (async () => options.catalog ?? createCatalog()),
   });
   return { manager, config, authStorage, updater };
 }
@@ -501,5 +504,93 @@ describe('CopilotOAuthManager', () => {
     manager.removeCredentials('github-copilot');
     expect(authStorage.remove).toHaveBeenCalledWith('github-copilot');
     expect(() => manager.removeCredentials('openai-codex')).toThrow(CopilotOAuthError);
+  });
+});
+
+describe('startup catalog refresh', () => {
+  it('re-probes the account catalog and merges rollout additions into the stored entry', async () => {
+    const config = createConfig(true);
+    let catalog = createCatalog();
+    const catalogGetter = vi.fn(async () => catalog);
+    const { manager } = managerFor({ config, catalogGetter });
+
+    await manager.connectWithToken('gho_supplied_token');
+    catalogGetter.mockClear();
+    // The account's rollout added a model since the entry was written.
+    catalog = {
+      ...catalog,
+      provider: {
+        ...catalog.provider,
+        models: {
+          ...catalog.provider.models,
+          'gpt-6-sol': {
+            name: 'GPT-6 Sol',
+            reasoning: true,
+            tool_call: true,
+            limit: { context: 400000, output: 128000 },
+            provider: { api: 'openai-responses' },
+          },
+        },
+      },
+    };
+
+    await manager.refreshCatalogInBackground();
+
+    expect(catalogGetter).toHaveBeenCalledTimes(1);
+    expect(Object.keys(config.custom_provider?.['github-copilot']?.models ?? {}).sort()).toEqual([
+      'gpt-5.4',
+      'gpt-6-sol',
+      'minimax-m2',
+    ]);
+  });
+
+  it('stays offline for a disconnected install', async () => {
+    const config = createConfig(true);
+    const catalogGetter = vi.fn(async () => createCatalog());
+    const { manager } = managerFor({ config, catalogGetter });
+
+    await manager.refreshCatalogInBackground();
+
+    expect(catalogGetter).not.toHaveBeenCalled();
+    expect(config.custom_provider?.['github-copilot']).toBeUndefined();
+  });
+
+  it('stays offline while a sign-in is pending', async () => {
+    const { manager, config } = managerFor({
+      catalogGetter: vi.fn(async () => createCatalog()),
+    });
+    await manager.startLogin();
+
+    await manager.refreshCatalogInBackground();
+
+    expect(config.custom_provider?.['github-copilot']).toBeUndefined();
+  });
+
+  it('keeps the stored catalog when the re-probe fails', async () => {
+    const config = createConfig(true);
+    const catalogGetter = vi.fn(async () => createCatalog());
+    const { manager } = managerFor({ config, catalogGetter });
+    await manager.connectWithToken('gho_supplied_token');
+
+    catalogGetter.mockImplementation(async () => {
+      throw new CopilotOAuthError(502, 'discovery down', 'MODEL_DISCOVERY_FAILED');
+    });
+    await expect(manager.refreshCatalogInBackground()).resolves.toBeUndefined();
+
+    // The stored catalog is untouched and the failure is surfaced in the status.
+    expect(Object.keys(config.custom_provider?.['github-copilot']?.models ?? {}).sort()).toEqual([
+      'gpt-5.4',
+      'minimax-m2',
+    ]);
+    expect(manager.getStatus().error).toBe('discovery down');
+  });
+
+  it('does nothing while the feature is disabled', async () => {
+    const catalogGetter = vi.fn(async () => createCatalog());
+    const { manager } = managerFor({ config: createConfig(false), catalogGetter });
+
+    await manager.refreshCatalogInBackground();
+
+    expect(catalogGetter).not.toHaveBeenCalled();
   });
 });

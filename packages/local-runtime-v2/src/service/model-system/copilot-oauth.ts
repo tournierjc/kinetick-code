@@ -209,6 +209,27 @@ export class CopilotOAuthManager {
     return this.syncCatalog(false);
   }
 
+  /**
+   * Fire-and-forget catalog refresh for a connected account, run at model-system
+   * initialization: a stored catalog from a previous session must not outlive the
+   * account's rollout (new models appear on `/models` without any local action).
+   *
+   * No-op unless the feature is enabled and a credential source exists, and never
+   * creates a provider entry (`createIfMissing: false`): a disconnected install
+   * stays disconnected. Failures are swallowed — the stored catalog remains
+   * authoritative until the next explicit `refreshModels()` succeeds.
+   */
+  refreshCatalogInBackground(): Promise<void> {
+    if (!this.enabled()) return Promise.resolve();
+    if (this.login) return Promise.resolve();
+    if (!this.hasConfiguredProvider()) return Promise.resolve();
+    if (!this.credentialSource(this.authStorage())) return Promise.resolve();
+    return this.syncCatalog(false).then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
   private async syncCatalog(createIfMissing: boolean): Promise<CopilotOAuthStatus> {
     if (!this.enabled()) {
       throw new CopilotOAuthError(404, 'GitHub Copilot is not enabled.', 'FEATURE_DISABLED');
