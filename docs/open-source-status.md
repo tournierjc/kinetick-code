@@ -56,12 +56,13 @@ These spellings are deliberately unchanged, and the product rename does not alte
   (`# Added by Kinetick Code`, `# Managed by Kinetick Code`); the spellings earlier releases wrote are
   still recognized so an existing managed block in a user's shell profile is never duplicated and an older
   shim is rewritten in place on the next startup.
-- `@minimax-ai/code` stays the installed package identity the release archives are published under: it is
-  what `kcode update` and the install-source detection resolve a running installation against, and
-  installing the archive into the same npm prefix replaces an existing `@minimax-ai/code` installation in
-  place instead of leaving two products on disk. `@minimax/mcode-sandbox-runtime` is an upstream dependency
-  pinned in `packages/local-runtime-v2`. A workspace install made before this rename (`@minimax/code`) is
-  still recognized as an internal installation.
+- The release archives install under this product's own package name, `kinetick-code`, which the build
+  manifest, the release manifest, `kcode update` and install-source detection all resolve a running
+  installation against (`packages/tui/src/package-identity.ts`, mirrored by `scripts/lib/package-identity.mjs`
+  for the build and release scripts). The names the distribution used earlier — `@minimax-ai/code` for
+  distributed builds, `@minimax/code` for old workspace installs — are still recognized and never written, so
+  an existing installation is classified and keeps updating instead of being reported as a foreign package.
+  `@minimax/mcode-sandbox-runtime` is an upstream dependency pinned in `packages/local-runtime-v2`.
 - The bundled runtime prompts and agent assets (including the `kinetick-code-product` skill) are upstream
   product material that states its own ownership; changing them is a runtime-content change, not a
   documentation rename. The vendored `third_party/**` packages keep their own notices and identifications

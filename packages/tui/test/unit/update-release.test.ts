@@ -282,7 +282,7 @@ describe('KCode release channel', () => {
         '--global',
         archive,
         '--ignore-scripts=false',
-        '--allow-scripts=@minimax-ai/code,better-sqlite3',
+        '--allow-scripts=kinetick-code,@minimax-ai/code,better-sqlite3',
         '--registry',
         'https://registry.npmjs.org/',
       ]),

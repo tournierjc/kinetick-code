@@ -1,9 +1,12 @@
 import { readFileSync } from 'node:fs';
 
+import { KCODE_PACKAGE_NAME, isKcodePackageName } from './package-identity.js';
+
+export { KCODE_PACKAGE_NAME };
+
 export const KCODE_MIN_NODE_VERSION = '22.19.0';
 export const KCODE_SUPPORTED_NODE_VERSIONS = '22.19+, 24, 25, or 26';
 export const TUI_BUILD_PROFILE = 'tui';
-export const KCODE_PACKAGE_NAME = '@minimax-ai/code';
 
 interface PackageManifest {
   name: string;
@@ -17,7 +20,7 @@ export function resolveTuiPackageVersion(moduleUrl: string | URL = import.meta.u
         readFileSync(new URL(relativePath, moduleUrl), 'utf8'),
       ) as Partial<PackageManifest>;
       if (
-        (manifest.name === KCODE_PACKAGE_NAME || manifest.name === '@mavis/code') &&
+        isKcodePackageName(manifest.name) &&
         typeof manifest.version === 'string' &&
         manifest.version.length > 0
       ) {

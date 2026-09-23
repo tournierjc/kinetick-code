@@ -196,8 +196,11 @@ Open **Edit environment variables for your account**, edit the user **Path**, an
 For a global npm installation, use the same npm installation/prefix you used to install KCode:
 
 ```bash
-npm uninstall -g @minimax-ai/code
+npm uninstall -g kinetick-code
 ```
+
+An installation made before this product took its own name is `@minimax-ai/code`; uninstall that one the
+same way if it is still on disk.
 
 For a source build, save any work and remove only the checkout you created; see [Update or remove](docs/installation.md#update-or-remove).
 

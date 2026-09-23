@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 import spawn from 'cross-spawn';
+import { isKcodePackageName } from '../package-identity.js';
 import { resolveKcodeNpmPrefixInstall, type KcodeNpmPackageName } from './install-source.js';
 
 const PENDING_UPDATE_FILE = '.mcode-update-pending.json';
@@ -629,7 +630,7 @@ function readPendingUpdateFile(file: string): {
     typeof value.activeModulesRoot !== 'string' ||
     typeof value.stagedModulesRoot !== 'string' ||
     typeof value.backupModulesRoot !== 'string' ||
-    (value.packageName !== '@mavis/code' && value.packageName !== '@minimax-ai/code') ||
+    !isKcodePackageName(value.packageName) ||
     typeof value.expectedVersion !== 'string' ||
     !Array.isArray(value.launchers) ||
     !value.launchers.every(
