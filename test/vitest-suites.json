@@ -181,7 +181,7 @@
       "packages/tui/test/unit/tui/theme/palettes.test.ts",
       "packages/tui/test/unit/tui/theme/runtime.test.ts",
       "packages/tui/test/unit/tui-plugin-mentions.test.ts",
-      "packages/local-runtime-v2/src/service/turn-system/agent-host/assembly/local-turn-plugin-capabilities.test.ts"
+      "packages/local-runtime-v2/src/service/turn-system/agent-host/assembly/local-turn-plugin-capabilities.test.ts",
       "packages/tui/test/unit/tui-copilot-login.test.ts",
       "packages/local-runtime-v2/src/service/model-system/copilot-oauth.test.ts",
       "packages/local-runtime-v2/src/service/model-system/initialize.test.ts",
