@@ -173,14 +173,16 @@ opened others — and drops a Session's pane when its tab closes, or when the Se
 is archived or deleted, so a Session that comes back is projected from its saved
 messages again. A turn you started keeps streaming into its own tab after you switch
 away: the TUI goes on watching that Session's turn and projects it into that
-Session's pane, and the pane shows the output when you come back. Three limits are
-worth knowing: a turn that started while you were looking at another Session is not
-watched, so its output appears once the Runtime has persisted it; a background turn's
-usage, cost and todo panel are not updated (those belong to the Session on screen);
-and if a background stream is lost, its pane is dropped rather than patched, so its
-next visit reloads saved messages. A permission or questionnaire prompt raised by a
-background Session is recorded against that Session and shows when you switch to its
-tab.
+Session's pane, and the pane shows the output when you come back. A turn that starts
+in a Session you are not looking at is watched too, as soon as that Session has a tab
+on the bar — a drained queue item, a delegation or an automation streams into its tab
+rather than waiting to be saved. Two limits are worth knowing: a Session whose tab was
+never opened has no pane to stream into, so its output appears when you open it; and a
+background turn does not update usage, cost or the todo panel, which describe the
+Session on screen. If a background stream is lost, its pane is dropped rather than
+patched, so its next visit reloads saved messages. A permission or questionnaire
+prompt raised by a background Session is recorded against that Session and shows when
+you switch to its tab.
 
 Some commands still require a stopped Session, because they end or rebind its
 context: `/new`, `/rename`, `/parent`, and archiving or deleting a Session from
