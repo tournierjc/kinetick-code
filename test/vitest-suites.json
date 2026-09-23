@@ -19,8 +19,6 @@
       "packages/tui/test/unit/provider-application.test.ts",
       "packages/tui/test/unit/plugin-application.test.ts",
       "packages/tui/test/unit/tui-plugin-manager.test.ts",
-      "packages/tui/test/unit/daily-checkin-application.test.ts",
-      "packages/tui/test/unit/daily-checkin-http-gateway.test.ts",
       "packages/tui/test/unit/runtime-feedback-service.test.ts",
       "packages/tui/test/unit/runtime-feedback-diagnostic-upload.test.ts",
       "packages/tui/test/unit/update-service.test.ts",

@@ -1,5 +1,4 @@
 export const MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT = '{paste-image-shortcut}';
-const MINIMAX_CODE_WELCOME_CHECKIN_TIP = '/checkin claims the daily reward.';
 
 export const MINIMAX_CODE_WELCOME_DESIGN = {
   sectionTitles: {
@@ -17,14 +16,12 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
     'Use /goal to keep long-running work focused on a finish line.',
     'Use /permission to choose how KCode handles tool approvals.',
     'Use /feedback to preview a redacted report before upload.',
-    MINIMAX_CODE_WELCOME_CHECKIN_TIP,
   ],
   wide: {
     tips: [
       'Say what you want and how to verify it.',
       `Use @ for files; ${MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT} for images.`,
       'Run /init to teach KCode this repo.',
-      MINIMAX_CODE_WELCOME_CHECKIN_TIP,
     ],
     news: [
       'Send follow-ups while KCode works.',
@@ -36,7 +33,6 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
     tips: [
       'Say what you want and how to verify it.',
       `@ files · ${MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT} images · /init guidance`,
-      '/checkin daily reward',
     ],
     news: ['Follow-ups wait while KCode works.', '/context budget · /feedback preview'],
   },
@@ -44,7 +40,6 @@ export const MINIMAX_CODE_WELCOME_DESIGN = {
     tips: [
       `@ files · ${MINIMAX_CODE_WELCOME_PASTE_IMAGE_SHORTCUT} images`,
       '/init repo guidance',
-      '/checkin reward',
     ],
     news: ['Follow-ups wait', '/context · /feedback'],
   },

@@ -1,6 +1,6 @@
 # MiniMax account, models, and media reference
 
-Use this reference for MiniMax Code or MiniMax Open Platform accounts, Token Plan, subscription keys, credits/points/Credit, plans, usage, quotas, API keys, BYOK, providers, model catalogs and access, context windows, image/audio/music/video or multimodal entitlements, and why a model or media task is unavailable.
+Use this reference for Kinetick Code or MiniMax Open Platform accounts, Token Plan, subscription keys, credits/points/Credit, plans, usage, quotas, API keys, BYOK, providers, model catalogs and access, context windows, image/audio/music/video or multimodal entitlements, and why a model or media task is unavailable.
 
 ## Stable boundaries
 
@@ -13,10 +13,10 @@ Use this reference for MiniMax Code or MiniMax Open Platform accounts, Token Pla
 
 Use only the current region's sources:
 
-- `region: cn` → MiniMax Code `https://agent.minimaxi.com/docs/llms.txt`; Open Platform `https://platform.minimaxi.com/docs/llms.txt`
-- `region: en` → MiniMax Code `https://agent.minimax.io/docs/llms.txt`; Open Platform `https://platform.minimax.io/docs/llms.txt`
+- `region: cn` → Kinetick Code `https://agent.minimaxi.com/docs/llms.txt`; Open Platform `https://platform.minimaxi.com/docs/llms.txt`
+- `region: en` → Kinetick Code `https://agent.minimax.io/docs/llms.txt`; Open Platform `https://platform.minimax.io/docs/llms.txt`
 
-MiniMax Code docs are authoritative for product-surface behavior. Open Platform docs are authoritative for API models and underlying billing rules. Prefer `.md` pages discovered from the matching index. Never query both regional indexes for an ordinary current-region question.
+Kinetick Code docs are authoritative for product-surface behavior. Open Platform docs are authoritative for API models and underlying billing rules. Prefer `.md` pages discovered from the matching index. Never query both regional indexes for an ordinary current-region question.
 
 ## Verification workflow
 

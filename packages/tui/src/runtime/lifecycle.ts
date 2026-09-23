@@ -59,8 +59,6 @@ import {
   disposeTuiBrowserSessionStorage,
   type TuiBrowserProvider,
 } from './browser-provider.js';
-import { TuiDailyCheckinApplication } from '../checkin/application.js';
-import { TuiDailyCheckinHttpGateway } from '../checkin/http-gateway.js';
 import { createMcodeSharedAuthSession } from './auth-session.js';
 import { resolveTuiManagedBackendLane } from '../cli/environment.js';
 import {
@@ -509,16 +507,6 @@ export async function createTuiRuntime(
             ? { email: identity.userEmail, name: identity.userName ?? identity.subUserName }
             : undefined;
         },
-        dailyCheckin: new TuiDailyCheckinApplication(
-          new TuiDailyCheckinHttpGateway({
-            appVersion: options.version,
-            authContextGetter,
-            authContextResolver: publicAuthContextResolver,
-            ...(dependencies.fetchImpl ? { fetchImpl: dependencies.fetchImpl } : {}),
-            region: () => authScope.region,
-            buildEnv: () => authScope.buildEnv,
-          }),
-        ),
         feedback: new TuiFeedbackService({
           appVersion: options.version,
           authContextGetter,

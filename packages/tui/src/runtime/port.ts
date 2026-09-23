@@ -18,7 +18,6 @@ import type { TuiPermissionMode } from '../application/permission-mode.js';
 import type { TuiMessage, TuiStreamEvent } from './stream-events.js';
 import type { McodeProviderRuntimePort } from '../provider/contract.js';
 import type { McodePluginRuntimeAccess } from '../plugin/contract.js';
-import type { TuiDailyCheckinOutcome } from '../checkin/application.js';
 import type {
   AbortSessionReq,
   CliSendMessageReq,
@@ -342,10 +341,6 @@ export interface TuiFeedbackPort {
   cancelFeedback(draftId: string): Promise<boolean>;
 }
 
-export interface TuiDailyCheckin {
-  runDailyCheckin(): Promise<TuiDailyCheckinOutcome>;
-}
-
 export interface TuiQueueSnapshot {
   readonly items: readonly TuiQueuedMessage[];
   readonly paused: boolean;
@@ -619,7 +614,6 @@ export type TuiRuntime = TuiSessionPort &
   TuiConfigurationPort &
   TuiInspectionPort &
   TuiFeedbackPort &
-  TuiDailyCheckin &
   TuiQueuePort &
   TuiInteractionPort &
   TuiRuntimeEventPort &
