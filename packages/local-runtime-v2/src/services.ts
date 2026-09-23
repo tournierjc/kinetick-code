@@ -1177,6 +1177,7 @@ async function initializeSessionApplications(
       }
     },
     conversationMutationPort: input.sessionSystem.conversationMutationState,
+    pin: input.pinService,
     conversationMutationWorkflow: createProductionConversationMutationWorkflow({
       sessionFork: input.sessionSystem.fork,
       forkState: createForkState({

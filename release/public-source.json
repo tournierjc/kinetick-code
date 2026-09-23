@@ -608,6 +608,8 @@
     "packages/local-runtime-v2/src/application/session/miniapp-host.ts",
     "packages/local-runtime-v2/src/application/session/model-provider-application.ts",
     "packages/local-runtime-v2/src/application/session/model-provider-contracts.ts",
+    "packages/local-runtime-v2/src/application/session/pin-application.test.ts",
+    "packages/local-runtime-v2/src/application/session/pin-application.ts",
     "packages/local-runtime-v2/src/application/session/plugin-service-logger.ts",
     "packages/local-runtime-v2/src/application/session/process-local-application-contract.ts",
     "packages/local-runtime-v2/src/application/session/process-local-application.test.ts",
