@@ -69,6 +69,7 @@ export type TuiAction =
   | { type: 'tabs/close'; sessionId: string }
   | { type: 'tabs/toggleGrouping'; grouped: boolean }
   | { type: 'tabs/toggleGroup'; groupKey: string }
+  | { type: 'tabs/setCollapsedGroups'; groupKeys: readonly string[] }
   | { type: 'lifecycle/leaveUi' }
   | { type: 'lifecycle/stopped' };
 

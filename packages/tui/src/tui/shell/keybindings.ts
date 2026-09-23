@@ -353,7 +353,7 @@ const TAB_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
     key: 'alt+h',
     action: 'toggle-tab-collapse',
     when: 'application',
-    description: "Fold or unfold the visible tab's project group",
+    description: 'Fold every other project group, or unfold them all',
     helpOrder: 129,
   },
   ...TAB_SLOT_KEYS.map((key, index) => ({

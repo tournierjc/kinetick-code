@@ -162,7 +162,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
       ['close', 'Close the visible tab and show its neighbour'],
       ['rename', 'Rename the visible tab'],
       ['group', 'Group the tabs by project'],
-      ['collapse', "Fold or unfold the visible tab's project group"],
+      ['collapse', 'Fold every other project group, or unfold them all'],
     ]),
   },
   {

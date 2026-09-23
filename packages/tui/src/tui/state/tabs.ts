@@ -111,6 +111,27 @@ export function toggleTuiTabGroupCollapsed(
 }
 
 /**
+ * Collapsed keys after the fold key is pressed: every group *but* the one holding
+ * the visible tab, or none at all when they are already folded. Folding the group
+ * on screen would hide the Session the user is looking at, so the key folds
+ * around it instead.
+ *
+ * Returns `collapsedGroups` unchanged when there is nothing to fold (no visible
+ * tab, or a single group): callers compare by identity to tell "no change" from
+ * "unfold everything".
+ */
+export function foldingTuiTabGroups(
+  groupKeys: readonly string[],
+  activeGroupKey: string | undefined,
+  collapsedGroups: readonly string[],
+): readonly string[] {
+  if (activeGroupKey === undefined) return collapsedGroups;
+  const others = groupKeys.filter((key) => key !== activeGroupKey);
+  if (others.length === 0) return collapsedGroups;
+  return others.every((key) => collapsedGroups.includes(key)) ? [] : others;
+}
+
+/**
  * Collapsed keys that actually hide tabs. The group holding the visible Session
  * always stays open, so the bar can never hide the Session on screen.
  *

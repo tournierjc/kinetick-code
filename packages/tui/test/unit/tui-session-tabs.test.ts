@@ -346,7 +346,7 @@ describe('tab keybindings', () => {
     for (const [id, description, key] of [
       ['tabs.rename', 'Rename the visible Session tab', 'R'],
       ['tabs.grouping', 'Group the Session tabs by project', 'G'],
-      ['tabs.collapse', "Fold or unfold the visible tab's project group", 'H'],
+      ['tabs.collapse', 'Fold every other project group, or unfold them all', 'H'],
     ]) {
       const row = rows.find((candidate) => candidate.ids.includes(id));
 
