@@ -56,15 +56,19 @@ export async function runKcodeProviderCommand(
     if (request.action === 'add') {
       const envName = request.apiKeyEnv?.trim() || 'MCODE_PROVIDER_API_KEY';
       const apiKey = (options.environment ?? process.env)[envName]?.trim();
-      if (!apiKey) {
+      // A key is optional: without one the provider is saved as an endpoint that
+      // needs no authentication, which is the local-server case. An explicitly
+      // named variable that is empty is still an error, because the caller
+      // asked for a key and did not get one.
+      if (request.apiKeyEnv && !apiKey) {
         throw new Error(
-          `Provider API key is missing. Set ${envName} or pass --api-key-env <name>.`,
+          `Provider API key is missing. Set ${envName}, or omit --api-key-env to add an endpoint that needs no authentication.`,
         );
       }
       const input = {
         name: request.name,
         baseUrl: request.baseUrl,
-        apiKey,
+        ...(apiKey ? { apiKey } : {}),
         apiFormat: request.apiFormat,
         models: request.models.map((modelId) => ({
           modelId,
@@ -183,7 +187,7 @@ function formatSnapshot(snapshot: KcodeProviderSnapshot, json: boolean): string 
         ? 'managed login'
         : provider.hasApiKey
           ? (provider.maskedApiKey ?? 'key saved')
-          : 'no key';
+          : 'no key sent';
     return `${provider.active ? '*' : ' '} ${provider.providerId}\t${state}\t${credential}`;
   });
   return lines.join('\n');

@@ -98,6 +98,7 @@
       "packages/tui/test/unit/tui/features/settings/status-line-picker.test.ts",
       "packages/tui/test/unit/tui/widgets/editor/editor-behavior.test.ts",
       "packages/agent-core/test/unit/pi-turn-runner/llm-retry.test.ts",
+      "packages/agent-core/test/unit/pi-turn-runner/unauthenticated-endpoint.test.ts",
       "packages/local-runtime-v2/src/service/turn-system/agent-host/execution/executor.test.ts",
       "packages/local-runtime-v2/src/services.test.ts",
       "packages/local-runtime-v2/src/application/session/pin-application.test.ts",

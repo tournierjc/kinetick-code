@@ -441,3 +441,8 @@ export type IMDirectoryEntry = import('./channel-plugin.js').ChannelDirectoryEnt
 export type IMChannelPlugin = import('./channel-plugin.js').ChannelPlugin;
 
 export { withOpenCodeGoHeaders } from './opencode-go-headers.js';
+export {
+  CREDENTIAL_HEADER_NAMES,
+  UNAUTHENTICATED_PROVIDER_API_KEY,
+  withClearedCredentialHeaders,
+} from './credential-headers.js';

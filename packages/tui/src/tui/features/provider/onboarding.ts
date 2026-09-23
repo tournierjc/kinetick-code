@@ -15,6 +15,14 @@ import { tuiChalk as chalk, tuiColors as colors, tuiSelectListTheme } from '../.
 import { SelectList } from '../../widgets/select-list.js';
 
 const CUSTOM_PROVIDER_VALUE = '\u0000custom-provider';
+const LOCAL_PROVIDER_VALUE = '\u0000local-provider';
+/**
+ * Where the local-model flow starts: the OpenAI-compatible base URL the most
+ * common local servers expose (Ollama's default port). Editable, since the base
+ * URL step is the next one and nothing is contacted before the connection test.
+ */
+const LOCAL_PROVIDER_BASE_URL = 'http://localhost:11434/v1';
+const LOCAL_PROVIDER_NAME = 'Local model';
 const CUSTOM_FORMATS: readonly {
   readonly value: KcodeProviderApiFormat;
   readonly label: string;
@@ -80,6 +88,8 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private customBaseUrl = '';
   private customApiFormat: KcodeProviderApiFormat = 'openai-completions';
   private customModelId = '';
+  /** Set when the flow was started from the catalogue's local-model entry. */
+  private localEndpoint = false;
   private busy = false;
   private status = '';
   private _focused = false;
@@ -343,6 +353,14 @@ export class TuiProviderOnboarding implements Component, Focusable {
         groupLabel: 'Manual',
       });
     }
+    if (!query || 'local model'.includes(query)) {
+      items.push({
+        value: LOCAL_PROVIDER_VALUE,
+        label: 'Local model',
+        description: 'OpenAI-compatible server · API key optional',
+        groupLabel: 'Manual',
+      });
+    }
     const list = this.createList(items);
     list.onSelect = (item) => this.selectProvider(item.value);
     return list;
@@ -402,6 +420,16 @@ export class TuiProviderOnboarding implements Component, Focusable {
 
   private selectProvider(value: string): void {
     this.status = '';
+    if (value === LOCAL_PROVIDER_VALUE) {
+      this.resetKnownProviderDraft();
+      this.template = undefined;
+      this.localEndpoint = true;
+      this.customName = LOCAL_PROVIDER_NAME;
+      this.customBaseUrl = LOCAL_PROVIDER_BASE_URL;
+      this.customApiFormat = 'openai-completions';
+      this.enterTextMode('custom-name', LOCAL_PROVIDER_NAME);
+      return;
+    }
     if (value === CUSTOM_PROVIDER_VALUE) {
       this.resetKnownProviderDraft();
       this.template = undefined;
@@ -516,6 +544,12 @@ export class TuiProviderOnboarding implements Component, Focusable {
         return;
       }
       this.customBaseUrl = trimmed;
+      if (this.localEndpoint) {
+        // The local-model entry is OpenAI-compatible by definition, so the
+        // protocol step is skipped and the flow asks for the model.
+        this.enterTextMode('custom-model', this.customModelId);
+        return;
+      }
       this.enterMode('custom-format');
       return;
     }
@@ -527,15 +561,12 @@ export class TuiProviderOnboarding implements Component, Focusable {
 
   private submitApiKey(value: string): void {
     const apiKey = value.trim();
-    if (!apiKey) {
-      this.status = 'API Key is required.';
-      this.options.requestRender();
-      return;
-    }
-    void this.save(apiKey);
+    // An empty field is a decision, not an omission: the endpoint is saved
+    // without a credential and its requests carry none.
+    void this.save(apiKey || undefined);
   }
 
-  private async save(apiKey: string): Promise<void> {
+  private async save(apiKey?: string): Promise<void> {
     const input = this.saveInput(apiKey);
     if (!input) return;
     this.busy = true;
@@ -557,7 +588,9 @@ export class TuiProviderOnboarding implements Component, Focusable {
     } catch (error) {
       this.status = formatTuiActionFailure(error, {
         summary: "Couldn't save the provider.",
-        nextStep: 'Check the URL, API key, and model, then retry.',
+        nextStep: this.localEndpoint
+          ? 'Check that the server is running and that the base URL answers on that port, then retry.'
+          : 'Check the URL, API key, and model, then retry.',
       });
     } finally {
       if (apiKey) this.status = this.status.split(apiKey).join('[redacted]');
@@ -566,7 +599,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     }
   }
 
-  private saveInput(apiKey: string): KcodeSaveProviderCandidateInput | undefined {
+  private saveInput(apiKey?: string): KcodeSaveProviderCandidateInput | undefined {
     if (this.template) {
       if (!this.selectedModelId) return undefined;
       return {
@@ -591,7 +624,9 @@ export class TuiProviderOnboarding implements Component, Focusable {
     return {
       name: this.customName,
       baseUrl: this.customBaseUrl,
-      apiKey,
+      // Absent saves an endpoint that needs no authentication: the connection is
+      // created with no credential, and requests carry none.
+      ...(apiKey ? { apiKey } : {}),
       apiFormat: this.customApiFormat,
       models: [
         {
@@ -666,6 +701,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     this.modelFocus = 'models';
     this.editingModelApiKey = false;
     this.modelApiKeyDraft = '';
+    this.localEndpoint = false;
     this.secretInput.setValue('');
   }
 
@@ -690,7 +726,10 @@ export class TuiProviderOnboarding implements Component, Focusable {
     if (this.mode === 'custom-name') return this.enterMode('provider');
     if (this.mode === 'custom-url') return this.enterTextMode('custom-name', this.customName);
     if (this.mode === 'custom-format') return this.enterTextMode('custom-url', this.customBaseUrl);
-    if (this.mode === 'custom-model') return this.enterMode('custom-format');
+    if (this.mode === 'custom-model')
+      return this.localEndpoint
+        ? this.enterTextMode('custom-url', this.customBaseUrl)
+        : this.enterMode('custom-format');
     if (this.template) return this.enterMode('model');
     this.enterTextMode('custom-model', this.customModelId);
   }
@@ -703,7 +742,8 @@ export class TuiProviderOnboarding implements Component, Focusable {
     if (this.mode === 'provider') return 'Choose a known provider or enter a custom endpoint';
     if (this.mode === 'model')
       return `Choose a ${sanitizeTerminalText(this.template?.name ?? '')} model`;
-    if (this.mode === 'api-key') return 'The key is stored locally and never shown in output';
+    if (this.mode === 'api-key')
+      return 'Optional: a server that needs no authentication is connected with the field left empty';
     return 'Custom provider';
   }
 
@@ -712,6 +752,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     if (this.mode === 'custom-name') return 'Provider name';
     if (this.mode === 'custom-url' || this.mode === 'preset-url') return 'Base URL';
     if (this.mode === 'custom-model') return 'Model ID';
+    if (this.mode === 'api-key') return 'API Key (optional)';
     return 'API Key';
   }
 
@@ -724,7 +765,10 @@ export class TuiProviderOnboarding implements Component, Focusable {
         return 'enter test, save, and use · tab API Key · esc close details';
       return '↑↓ select · type to search · tab API Key · enter details · esc back';
     }
-    if (this.mode === 'api-key') return 'enter test, save, and use · esc back';
+    if (this.mode === 'api-key')
+      return this.localEndpoint
+        ? 'enter connect without a key · type a key for a guarded server · esc back'
+        : 'enter test, save, and use · leave empty for no authentication · esc back';
     if (
       this.mode === 'preset-url' ||
       this.mode === 'custom-name' ||

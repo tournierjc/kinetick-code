@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { UNAUTHENTICATED_PROVIDER_API_KEY } from '@mavis/shared';
 
+import { HttpRemoteTokenCounter } from '../../src/context/remote-token-counter.js';
 import { resolveRemoteTokenCounterAdapter } from '../../src/context/token-counter-adapters/registry.js';
 import { buildResponsesInputTokensUrl } from '../../src/context/token-counter-adapters/responses.js';
 import type { RemoteTokenCountContext } from '../../src/context/token-counter-adapters/types.js';
@@ -102,5 +104,37 @@ describe('buildResponsesInputTokensUrl version handling (issue #258)', () => {
     expect(buildResponsesInputTokensUrl('not a url/api/paas/v4')).toBe(
       'not a url/api/paas/v4/responses/input_tokens',
     );
+  });
+});
+
+describe('a keyless endpoint is counted without a credential', () => {
+  it('keeps the transport placeholder key off the counter request', async () => {
+    const requestedUrls: string[] = [];
+    const counter = new HttpRemoteTokenCounter({
+      fetchFn: (async (url: string | URL | Request) => {
+        requestedUrls.push(String(url));
+        throw new Error('a keyless endpoint must not be probed with a credential');
+      }) as unknown as typeof fetch,
+    });
+
+    const result = await counter.countContextTokens({
+      model: {
+        id: 'local-model',
+        api: 'openai-completions',
+        provider: 'custom_provider',
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        input: ['text'],
+      },
+      // The runtime hands the transport this key so it can build a client at all;
+      // this counter's own requests are credential-shaped, so it stays local.
+      apiKey: UNAUTHENTICATED_PROVIDER_API_KEY,
+      systemPrompt: 'hi',
+      messages: [],
+      tools: [],
+    } as unknown as RemoteTokenCountContext);
+
+    expect(requestedUrls).toEqual([]);
+    expect(result).toMatchObject({ source: 'estimate', fallbackReason: 'counter_unavailable' });
+    expect(result.tokens).toBeGreaterThan(0);
   });
 });

@@ -179,7 +179,8 @@ export class LocalModelProviderService {
   async createUserProvider(input: {
     name?: string;
     baseUrl: string;
-    apiKey: string;
+    /** Absent or empty saves an endpoint that needs no authentication. */
+    apiKey?: string;
     apiFormat?: string;
     headers?: Record<string, string>;
     models?: UserModelInputView[];
