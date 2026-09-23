@@ -52,34 +52,21 @@ function createVersionPullRequest({ root, branch, version, tag }) {
 export function releaseCli({ root, version, dryRun = false, openPullRequest = createVersionPullRequest }) {
   const tag = `v${version}`;
   versionFromTag(tag);
+  // Retired scheme: releases used to be `<upstream core>-fork.N` prereleases.
+  // Refuse the suffix so it cannot come back by habit; the version is a plain
+  // number of this repository's own sequence.
+  if (/-fork\./.test(version)) {
+    throw new Error('The `-fork.N` release suffix is retired; release a plain version (see docs/releasing.md).');
+  }
   const branch = `release/${tag}`;
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   if (git('status', '--porcelain')) throw new Error('Release requires a clean working tree, including untracked files.');
   const current = cliBuildVersion(root, null);
-  // Fork rule: a `-fork.N` prerelease on the current core is allowed even though
-  // canonical SemVer orders it below the plain core (upstream owns the plain
-  // number). Its N must exceed every `-fork.N` tag of that core, locally or on
-  // origin. Example on a 0.5.1 tree: 0.5.1-fork.1, then 0.5.1-fork.2; the first
-  // release on the next core resets to 0.5.2-fork.1 (or a plain 0.5.2).
-  const forkSuffix = version.match(/^(.+)-fork\.([0-9]+)$/);
-  if (forkSuffix && forkSuffix[1] === current) {
-    const core = forkSuffix[1];
-    const localTags = execFileSync('git', ['tag', '-l', `v${core}-fork.*`],
-      { cwd: root, encoding: 'utf8' }).split('\n').map(line => line.trim()).filter(Boolean);
-    let remoteTags = [];
-    try {
-      remoteTags = execFileSync('git', ['ls-remote', '--tags', 'origin', `refs/tags/v${core}-fork.*`],
-        { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-        .split('\n').map(line => line.split('\t')[1] ?? '').filter(tag => tag.startsWith('refs/tags/')).map(tag => tag.slice('refs/tags/'.length));
-    } catch { /* Local tags only when the remote is unreachable. */ }
-    let highest = 0;
-    for (const tag of [...new Set([...localTags, ...remoteTags])]) {
-      const match = tag.match(new RegExp(`^v${core.replace(/\./g, '\\.')}\\-fork\\.([0-9]+)$`));
-      if (match) highest = Math.max(highest, Number(match[1]));
-    }
-    if (Number(forkSuffix[2]) <= highest)
-      throw new Error(`Fork prerelease must be newer than ${core}-fork.${highest}; take the next -fork.N.`);
-  } else if (compareVersions(version, current) <= 0) {
+  // Versions are this repository's own plain SemVer sequence: the release must
+  // simply be newer than the committed one. A prerelease tag is still allowed
+  // when it is genuinely newer (0.5.3-rc.1 above 0.5.2), and it publishes as a
+  // GitHub prerelease that the `stable` channel ignores.
+  if (compareVersions(version, current) <= 0) {
     throw new Error(`Release version must be newer than ${current}.`);
   }
   git('fetch', '--no-tags', 'origin', 'main');
