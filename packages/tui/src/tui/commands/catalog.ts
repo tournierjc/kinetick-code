@@ -293,6 +293,14 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     audience: 'internal',
   },
   {
+    name: 'pin',
+    description: 'Pin the active session to the top of the session list',
+    category: 'Session',
+    argumentHint: '[on | off]',
+    visibleWhen: (context) => context.hasSession,
+    unavailableReason: 'Start or resume a Session before pinning it.',
+  },
+  {
     ...TUI_COMMAND_DESCRIPTORS.compact,
     category: 'Session',
     argumentHint: '[instructions]',

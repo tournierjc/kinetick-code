@@ -27,6 +27,7 @@ function createReadinessCommandFlow(options: {
   exportCurrentTranscript?: (args: string) => void | Promise<void>;
   hasSession?: boolean;
   setHint?: (message: string | undefined) => void;
+  controller?: unknown;
   surface?: {
     show(component: unknown): void;
     close(component?: unknown): boolean;
@@ -45,13 +46,14 @@ function createReadinessCommandFlow(options: {
 }) {
   return new TuiCommandFlow({
     workspaceDir: "/workspace",
-    controller: {
-      snapshot: vi.fn(() => ({
-        status: "idle" as const,
-        sessions: [],
-        ...(options.hasSession ? { session: { sessionId: "session-a" } } : {}),
-      })),
-    } as never,
+    controller: (options.controller ??
+      {
+        snapshot: vi.fn(() => ({
+          status: "idle" as const,
+          sessions: [],
+          ...(options.hasSession ? { session: { sessionId: "session-a" } } : {}),
+        })),
+      }) as never,
     activeRunFlow: { showHelp: options.showHelp ?? vi.fn() } as never,
     featureFlow: {
       ...createFeatureFlowMock(),
@@ -1790,5 +1792,77 @@ describe("TuiCommandFlow /clone", () => {
     await expect(flow.submit("/clone")).resolves.toBe("retained");
 
     expect(startClone).not.toHaveBeenCalled();
+  });
+});
+
+describe("TuiCommandFlow /pin", () => {
+  it("toggles the pin of the visible Session", async () => {
+    const pinSession = vi.fn(async (sessionId: string, pinned: boolean) => ({
+      sessionId,
+      pinned,
+    }));
+    const setHint = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      setHint,
+      controller: {
+        snapshot: () => ({
+          status: "idle",
+          session: { sessionId: "session-a" },
+          sessions: [{ sessionId: "session-a", pinned: false }],
+        }),
+        pinSession,
+      },
+    });
+
+    await expect(flow.submit("/pin")).resolves.toBe("consumed");
+
+    expect(pinSession).toHaveBeenLastCalledWith("session-a", true);
+    expect(setHint).toHaveBeenCalledWith("Session pinned.");
+
+    await expect(flow.submit("/pin off")).resolves.toBe("consumed");
+
+    expect(pinSession).toHaveBeenLastCalledWith("session-a", false);
+    expect(setHint).toHaveBeenLastCalledWith("Session unpinned.");
+  });
+
+  it("unpins with a bare /pin when the Session is already pinned", async () => {
+    const pinSession = vi.fn(async (sessionId: string, pinned: boolean) => ({
+      sessionId,
+      pinned,
+    }));
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      controller: {
+        snapshot: () => ({
+          status: "idle",
+          session: { sessionId: "session-a" },
+          sessions: [{ sessionId: "session-a", pinned: true }],
+        }),
+        pinSession,
+      },
+    });
+
+    await expect(flow.submit("/pin")).resolves.toBe("consumed");
+
+    expect(pinSession).toHaveBeenLastCalledWith("session-a", false);
+  });
+
+  it("keeps a bad /pin argument as a usage hint and pins nothing", async () => {
+    const append = vi.fn();
+    const pinSession = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      append,
+      controller: {
+        snapshot: () => ({ status: "idle", session: { sessionId: "session-a" }, sessions: [] }),
+        pinSession,
+      },
+    });
+
+    await expect(flow.submit("/pin sideways")).resolves.toBe("retained");
+
+    expect(pinSession).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith("Usage: /pin [on | off].", "warning");
   });
 });

@@ -149,6 +149,14 @@ wrapped, and it is not a switch: the Session on screen stays, and a running turn
 untouched. The order lives in the running TUI and is not persisted, so a restart
 reopens tabs in insertion order.
 
+`/pin` (or `/pin on`) pins the visible Session and `/pin off` unpins it. A pin is a
+runtime-level, ordered list rather than a field on the Session, so it survives restarts
+and is shared with any other client: pinned Sessions lead the `/sessions` list and the
+session manager, in the runtime's pin order, and the rest follow by recency. The tab
+bar is not re-sorted by pins — it keeps the order you set with `/tabs move` — and a pin
+does not switch, resume or archive anything. `session.pinned_updated` refreshes the
+catalogue when the pin was written elsewhere.
+
 Renaming a tab renames its Session: the tab label is the Session title, so
 `/tabs rename`, `/rename` and the inline rename in `/sessions` all write the same
 field and the bar follows on the next frame. There is no separate tab-only label,
@@ -197,8 +205,9 @@ context: `/new`, `/rename`, `/parent`, and archiving or deleting a Session from
 `/sessions`. Closing the tab of a running Session is refused too, so a live Session
 is never left without a tab to return to. Offline tests cover the tab reducer, the
 bar rendering at narrow widths, the key bindings, the switch/close ordering and the
-allowances above; a background pane that buffers its own transcript is not
-implemented.
+allowances above; a Session that keeps streaming into its own pane while you are
+elsewhere is implemented, and the limits of that pane are stated in the tabs section
+above.
 
 ## Copying a Session
 

@@ -105,6 +105,8 @@ export interface TuiSession {
   visibility?: 'visible' | 'hidden';
   purpose?: string;
   archived?: boolean;
+  /** Sits in the runtime's pin list; projected per read, not stored on the Session. */
+  pinned?: boolean;
   workspaceDir?: string;
   createdAt?: number | string;
   updatedAt?: number | string;
@@ -211,6 +213,11 @@ export interface TuiSessionPort {
   listMessagePage(sessionId: string, input?: TuiMessagePageInput): Promise<TuiMessagePage>;
   renameSession(sessionId: string, title: string): Promise<TuiSession>;
   archiveSession(sessionId: string, archived: boolean): Promise<void>;
+  /**
+   * Pin or unpin a Session in the product's ordered pin list. The runtime projects
+   * `pinned` back on the next Session read, so callers refresh the catalogue.
+   */
+  pinSession?(input: { sessionId: string; pinned: boolean; insertIndex?: number }): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   listSessionInputSummaries(
     sessionId: string,

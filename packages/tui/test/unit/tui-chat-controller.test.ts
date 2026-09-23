@@ -12,6 +12,8 @@ import { TuiRunCoordinator, type TuiRunRuntime } from '../../src/application/run
 import { resolveTuiVisiblePresentation } from '../../src/tui/controller/projection/visible-presentation.js';
 import { TuiActivityLine } from '../../src/tui/shell/activity-line.js';
 import { isQuestionnaireTool } from '../../src/tui/controller/projection/turn-tool-projection.js';
+import { sortSessions } from '../../src/tui/controller/chat-controller-support.js';
+import type { TuiSession } from '../../src/runtime/port.js';
 
 class TuiChatController extends ProductionTuiChatController {
   constructor(options: CreateTuiChatControllerOptions) {
@@ -327,6 +329,83 @@ describe('TuiChatController', () => {
     expect(transcript.snapshot().some((cell) => cell.content.includes('late answer from A'))).toBe(
       false,
     );
+  });
+
+  it('sorts pinned Sessions first, then by recency', () => {
+    const order = (sessions: readonly TuiSession[]): readonly string[] =>
+      sortSessions(sessions).map((session) => session.sessionId);
+
+    expect(
+      order([
+        { sessionId: 'older' as never, updatedAt: 10 } as never,
+        { sessionId: 'newer', updatedAt: 30 } as never,
+        { sessionId: 'pinned-but-quiet', updatedAt: 5, pinned: true } as never,
+      ]),
+    ).toEqual(['pinned-but-quiet', 'newer', 'older']);
+    // Two pinned Sessions keep their own recency order inside the pinned block.
+    expect(
+      order([
+        { sessionId: 'pinned-quiet', updatedAt: 5, pinned: true } as never,
+        { sessionId: 'pinned-loud', updatedAt: 40, pinned: true } as never,
+        { sessionId: 'plain', updatedAt: 100 } as never,
+      ]),
+    ).toEqual(['pinned-loud', 'pinned-quiet', 'plain']);
+  });
+
+  it('pins a Session through the runtime and keeps it on screen', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, title: sessionId })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+      pinSession: vi.fn(async () => undefined),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-1');
+
+    await expect(controller.pinSession('session-1', true)).resolves.toMatchObject({
+      sessionId: 'session-1',
+      pinned: true,
+    });
+
+    expect(runtime.pinSession).toHaveBeenCalledWith({ sessionId: 'session-1', pinned: true });
+    // Pinning is not a visibility change: the Session keeps its pane.
+    expect(controller.snapshot().session).toMatchObject({ sessionId: 'session-1', pinned: true });
+    expect(controller.snapshot().sessions).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', pinned: true }),
+    ]);
+
+    await expect(controller.pinSession('session-1', false)).resolves.toMatchObject({
+      sessionId: 'session-1',
+      pinned: false,
+    });
+    expect(runtime.pinSession).toHaveBeenLastCalledWith({ sessionId: 'session-1', pinned: false });
+    expect(controller.snapshot().session?.pinned).toBe(false);
+  });
+
+  it('reports a runtime that cannot pin instead of pretending the Session is pinned', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const controller = new TuiChatController({
+      runtime,
+      transcript: new TranscriptStore(),
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-1');
+
+    await expect(controller.pinSession('session-1', true)).rejects.toThrow(/pinSession/u);
+    expect(controller.snapshot().session?.pinned).toBeUndefined();
   });
 
   it('rebuilds a Session pane when its history was rewritten', async () => {

@@ -24,6 +24,7 @@ import {
 } from "./session/conversation-mutation-application.js";
 import { SessionPinApplication } from "./session/pin-application.js";
 import type { SessionPinApplicationOptions } from "./session/pin-application.js";
+import type { PinService } from "../service/pin/index.js";
 
 export interface RuntimeApplications {
   readonly session: {
@@ -53,7 +54,7 @@ export interface InitializeApplicationsOptions {
   };
   readonly publishGlobalEvent: GlobalEventPublisher;
   /** Ordered pin list owner; Session pins are a preference value, not a column. */
-  readonly pin: SessionPinApplicationOptions["pinService"];
+  readonly pin: SessionPinApplicationOptions["pinService"] & Pick<PinService, "getOrder">;
   readonly metrics?: ApplicationMetricsClient;
   readonly onRootBestEffortFailure?: SessionRootApplicationOptions["onBestEffortFailure"];
   readonly assertSessionDeletionAllowed?: (sessionId: string) => Promise<void>;
@@ -74,6 +75,16 @@ export interface InitializeApplicationsOptions {
 export type InitializeApplications = (
   options: InitializeApplicationsOptions,
 ) => RuntimeApplications;
+
+/**
+ * Session ids from the ordered pin list, most recently pinned first as the list keeps
+ * them. Read on demand so a pin written by another process is picked up by the next
+ * catalogue read.
+ */
+async function readPinnedSessionIds(pin: Pick<PinService, "getOrder">): Promise<readonly string[]> {
+  const items = await pin.getOrder();
+  return items.filter((item) => item.ref.type === "session").map((item) => item.ref.id);
+}
 
 /** Constructs named feature applications without adding an aggregate forwarding facade. */
 export const initializeApplications: InitializeApplications = (options) => {
@@ -127,6 +138,7 @@ export const initializeApplications: InitializeApplications = (options) => {
   });
   const query = new SessionQueryApplication({
     service: options.sessionSystem.session.query,
+    pinnedSessions: () => readPinnedSessionIds(options.pin),
   });
   const content = new SessionContentApplication({
     messages: options.sessionSystem.messages.query,

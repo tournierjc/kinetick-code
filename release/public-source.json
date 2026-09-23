@@ -616,6 +616,7 @@
     "packages/local-runtime-v2/src/application/session/process-local-application.ts",
     "packages/local-runtime-v2/src/application/session/process-local-composition.ts",
     "packages/local-runtime-v2/src/application/session/process-local-miniapp-application.ts",
+    "packages/local-runtime-v2/src/application/session/query-application.test.ts",
     "packages/local-runtime-v2/src/application/session/query-application.ts",
     "packages/local-runtime-v2/src/application/session/query-contract.ts",
     "packages/local-runtime-v2/src/application/session/root-application.ts",
