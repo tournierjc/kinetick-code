@@ -6072,7 +6072,7 @@ describe("createTuiApp", () => {
         expect(history.filter((line) => line.trimEnd().endsWith(`› Message ${index}`))).toHaveLength(1);
       }
       expect(history.join("\n")).not.toContain("Session usage");
-      expect(terminal.getViewport().join("\n")).toContain("Ask Mcode to do anything");
+      expect(terminal.getViewport().join("\n")).toContain("Ask Kcode to do anything");
       expect(terminal.getViewport().join("\n")).toContain("/workspace");
     } finally {
       await app.stop();

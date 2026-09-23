@@ -1,11 +1,11 @@
 import { stripVTControlCharacters } from 'node:util';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  MINIMAX_CODE_DARK_THEME,
-  MINIMAX_CODE_LIGHT_THEME,
+  KCODE_DARK_THEME,
+  KCODE_LIGHT_THEME,
 } from '../../../../src/tui/theme/palettes.js';
 import {
-  MINIMAX_CODE_THEME_CONTRAST_POLICY,
+  KCODE_THEME_CONTRAST_POLICY,
   contrastRatio,
 } from '../../../helpers/theme-contrast.js';
 import {
@@ -27,27 +27,27 @@ import {
 } from '../../../../src/tui/theme/runtime.js';
 
 describe('MCode terminal theme palettes', () => {
-  it.each([MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME])(
+  it.each([KCODE_DARK_THEME, KCODE_LIGHT_THEME])(
     'enforces readable semantic colors for the $appearance palette',
     (palette) => {
-      const background = MINIMAX_CODE_THEME_CONTRAST_POLICY.backgrounds[palette.appearance];
+      const background = KCODE_THEME_CONTRAST_POLICY.backgrounds[palette.appearance];
 
-      for (const role of MINIMAX_CODE_THEME_CONTRAST_POLICY.normalText.roles) {
-        const exception = MINIMAX_CODE_THEME_CONTRAST_POLICY.normalText.exceptions.find(
+      for (const role of KCODE_THEME_CONTRAST_POLICY.normalText.roles) {
+        const exception = KCODE_THEME_CONTRAST_POLICY.normalText.exceptions.find(
           (candidate) => candidate.appearance === palette.appearance && candidate.role === role,
         );
         expect(
           contrastRatio(palette.colors[role], background),
           `${palette.appearance}.${role} must remain readable against ${background}`,
         ).toBeGreaterThanOrEqual(
-          exception?.minimum ?? MINIMAX_CODE_THEME_CONTRAST_POLICY.normalText.minimum,
+          exception?.minimum ?? KCODE_THEME_CONTRAST_POLICY.normalText.minimum,
         );
       }
-      for (const role of MINIMAX_CODE_THEME_CONTRAST_POLICY.nonText.roles) {
+      for (const role of KCODE_THEME_CONTRAST_POLICY.nonText.roles) {
         expect(
           contrastRatio(palette.colors[role], background),
           `${palette.appearance}.${role} must remain distinguishable against ${background}`,
-        ).toBeGreaterThanOrEqual(MINIMAX_CODE_THEME_CONTRAST_POLICY.nonText.minimum);
+        ).toBeGreaterThanOrEqual(KCODE_THEME_CONTRAST_POLICY.nonText.minimum);
       }
     },
   );
@@ -55,10 +55,10 @@ describe('MCode terminal theme palettes', () => {
   it('uses explicit ANSI16 semantics instead of nearest-RGB collisions', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
 
     try {
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 1);
+      applyTuiRenderTheme(KCODE_DARK_THEME, 1);
       expect(tuiChalk.hex(tuiColors.text)('text')).toBe('text');
       expect(tuiChalk.bold.hex(tuiColors.text)('strong')).toContain('\u001B[1m');
       expect(tuiChalk.hex(tuiColors.muted)('muted')).toContain('\u001B[2m');
@@ -72,15 +72,15 @@ describe('MCode terminal theme palettes', () => {
       expect(tuiChalk.bgHex(tuiColors.diffAddedBg)('addition')).toBe('addition');
       expect(tuiChalk.bgHex(tuiColors.diffRemovedBg)('deletion')).toBe('deletion');
 
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 2);
+      applyTuiRenderTheme(KCODE_DARK_THEME, 2);
       expect(tuiChalk.hex(tuiColors.text)('text')).toContain('\u001B[38;5;');
       expect(tuiChalk.hex(tuiColors.signal)('signal')).toContain('\u001B[38;5;');
 
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      applyTuiRenderTheme(KCODE_DARK_THEME, 3);
       expect(tuiChalk.hex(tuiColors.text)('text')).toContain('\u001B[38;2;');
       expect(tuiChalk.hex(tuiColors.signal)('signal')).toContain('\u001B[38;2;');
 
-      applyTuiRenderTheme(MINIMAX_CODE_LIGHT_THEME, 1);
+      applyTuiRenderTheme(KCODE_LIGHT_THEME, 1);
       expect(tuiChalk.bold.hex(tuiColors.signal)('signal')).toContain('\u001B[94m');
       expect(tuiChalk.hex(tuiColors.line)('line')).toContain('\u001B[90m');
       expect(tuiChalk.hex(tuiColors.warning)('warning')).toContain('\u001B[33m');
@@ -89,7 +89,7 @@ describe('MCode terminal theme palettes', () => {
       expect(tuiChalk.bgHex(tuiColors.diffAddedBg)('addition')).toBe('addition');
       expect(tuiChalk.bgHex(tuiColors.diffRemovedBg)('deletion')).toBe('deletion');
 
-      applyTuiRenderTheme(MINIMAX_CODE_LIGHT_THEME, 2);
+      applyTuiRenderTheme(KCODE_LIGHT_THEME, 2);
       expect(tuiChalk.hex(tuiColors.signal)('signal')).toContain('\u001B[38;5;');
       expect(tuiChalk.bgHex(tuiColors.userMessageBg)('message')).toContain('\u001B[48;5;');
       expect(tuiChalk.bgHex(tuiColors.diffAddedBg)('addition')).toContain('\u001B[48;5;');
@@ -101,10 +101,10 @@ describe('MCode terminal theme palettes', () => {
   it('keeps action guidance readable and makes keyboard controls prominent', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
 
     try {
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      applyTuiRenderTheme(KCODE_DARK_THEME, 3);
       const rendered = renderTuiActionHint(
         '↑↓ select · 1-9 choose · Enter confirm · d details · Ctrl+C stop · Option+M mode · /status refresh · Esc cancel',
       );
@@ -123,11 +123,11 @@ describe('MCode terminal theme palettes', () => {
   it('uses adaptive Catppuccin syntax colors for settled and streaming code', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
     const code = "const retries = 3; // keep streaming\nreturn 'ready';";
 
     try {
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      applyTuiRenderTheme(KCODE_DARK_THEME, 3);
       const settled = createTuiMarkdownTheme().highlightCode?.(code, 'ts').join('\n');
       const streaming = tuiStreamingMarkdownTheme.highlightCode?.(code, 'ts').join('\n');
 
@@ -137,7 +137,7 @@ describe('MCode terminal theme palettes', () => {
       expect(stripVTControlCharacters(settled ?? '')).toBe(code);
       expect(streaming).toBe(settled);
 
-      applyTuiRenderTheme(MINIMAX_CODE_LIGHT_THEME, 3);
+      applyTuiRenderTheme(KCODE_LIGHT_THEME, 3);
       const light = createTuiMarkdownTheme().highlightCode?.(code, 'ts').join('\n');
 
       expect(light).toContain('\u001B[38;2;');
@@ -211,7 +211,7 @@ describe('TuiThemeController', () => {
 
     expect(controller.snapshot()).toMatchObject({ appearance: 'light', source: 'colorfgbg' });
     expect(getTuiThemeSnapshot()).toMatchObject({ appearance: 'light' });
-    expect(tuiColors.text).toBe(MINIMAX_CODE_LIGHT_THEME.colors.text);
+    expect(tuiColors.text).toBe(KCODE_LIGHT_THEME.colors.text);
     expect(tuiChalk.hex(tuiColors.text)('body')).toContain('38;2;48;48;48');
     controller.dispose();
   });
@@ -411,7 +411,7 @@ describe('TuiThemeController theme selection', () => {
   const restoreTheme = () => {
     const snapshot = getTuiThemeSnapshot();
     applyTuiRenderTheme(
-      snapshot.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME,
+      snapshot.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME,
       snapshot.colorLevel,
     );
   };
@@ -540,7 +540,7 @@ describe('TuiThemeController theme selection', () => {
     expect(controller.appearanceOverrideValue()).toBeUndefined();
     expect(controller.snapshot().appearance).toBe('light');
     expect(getTuiThemeSnapshot().appearance).toBe('light');
-    expect(tuiColors.text).toBe(MINIMAX_CODE_LIGHT_THEME.colors.text);
+    expect(tuiColors.text).toBe(KCODE_LIGHT_THEME.colors.text);
     controller.dispose();
     restoreTheme();
   });
@@ -558,7 +558,7 @@ describe('TuiThemeController theme selection', () => {
     controller.setAppearanceOverride(undefined);
 
     expect(controller.snapshot().appearance).toBe('dark');
-    expect(tuiColors.text).toBe(MINIMAX_CODE_DARK_THEME.colors.text);
+    expect(tuiColors.text).toBe(KCODE_DARK_THEME.colors.text);
     controller.dispose();
     restoreTheme();
   });
