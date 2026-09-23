@@ -118,6 +118,18 @@ Published releases are untouched: `v0.5.2-fork.1` keeps its tag and asset name (
 
 Not run: an actual release (it pushes a tag, opens the version PR and needs the maintainer's go-ahead), and no release is cut by this change — the next release is the first plain version.
 
+### Release v0.5.2, 2026-09-23
+
+First release under the product's own identity and the plain version scheme: tag `v0.5.2` on the release commit `20760ad` (`chore: release Kinetick Code 0.5.2`), cut from `main` at `dfdeb8f`. The version bump changed only `package.json` and `packages/tui/package.json` (`0.5.2-fork.1` → `0.5.2`), and the tag carries the upstream `sourceRevision` `9b9885e42a3cf1a3df1cfa52a46e4fdb034cfcee` from `release/extraction.json`.
+
+Published: <https://github.com/tournierjc/kinetick-code/releases/tag/v0.5.2> — a normal release (`isDraft: false`, `isPrerelease: false`, the first non-prerelease on this repository), with assets `kinetick-code-0.5.2.tar.gz` (13,149,297 bytes) and `kinetick-code-0.5.2.tar.gz.sha256` (93 bytes). The `CLI release` workflow (run 35858648965) passed `pnpm verify`, packaged one archive, validated the npm installation on Linux and macOS across Node 22.19.0, 24.2.0, 25 and 26, and published only after every install passed.
+
+Read-back on the published assets rather than on the workflow result: the downloaded archive's SHA-256 (`94698c3d49173d100d9cf5f7f3ac0cf593ec9e32d5d1c5a7c9afdf677020deb9`) matches the published `.sha256` file and GitHub's own asset digest; the packaged manifest reads `name: kinetick-code`, `version: 0.5.2`, `bin: { kcode: cli.js }`, `license: MIT`; the archive README carries the identity and the legacy-package removal note. `kcode update` run from a source checkout resolved the newest release as `v0.5.2` over `api.github.com` and printed `npm install --global https://github.com/tournierjc/kinetick-code/releases/download/v0.5.2/kinetick-code-0.5.2.tar.gz`, so an existing installation is offered this release and the new archive name is what the updater addresses.
+
+One failure to note: `release:cli` pushed the release branch and tag, then its own `gh pr create` step exited non-zero, so the version PR was created by hand with the identical title and body. The push is atomic and completed, so no release state was left inconsistent; the PR step itself is the flaky part.
+
+Not run: Windows installation validation (paused repository-wide), any live provider or service call, and an upgrade of a real `@minimax-ai/code` installation to this release — the archive's install path was validated by package-manager installation in CI and by inspection here, not by upgrading a user's machine. `main` carries `0.5.2` once the version PR merges.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.
