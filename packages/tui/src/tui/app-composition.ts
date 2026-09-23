@@ -501,7 +501,7 @@ export function createTuiTerminalTitleSync(options: {
     const title =
       sessionTitle?.trim() && sessionTitle.toLocaleLowerCase() !== 'new session'
         ? sessionTitle.trim()
-        : 'Minimax Code';
+        : 'Kinetick Code';
     if (title === lastTitle) return;
     options.terminal.setTitle(title);
     lastTitle = title;

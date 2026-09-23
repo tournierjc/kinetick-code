@@ -322,7 +322,7 @@ test('npm release manifests require native SQLite and pin installed external dep
   const manifest = releaseManifest([f.root], '0.4.13');
   assert.equal(manifest.version, '0.4.13');
   assert.equal(manifest.private, true);
-  assert.equal(manifest.bin.mcode, 'cli.js');
+  assert.equal(manifest.bin.kcode, 'cli.js');
   assert.equal(manifest.dependencies['better-sqlite3'], '1.2.3');
   assert.equal(manifest.dependencies['@vscode/ripgrep'], '1.2.3');
   assert.equal(manifest.optionalDependencies['@mariozechner/clipboard'], '1.2.3');
@@ -335,7 +335,7 @@ test('npm release manifests require native SQLite and pin installed external dep
 
 test('CLI publication requires every supported installation receipt for the exact archive and revision', t => {
   const f = fixture(t);
-  const archive = path.join(f.root, 'minimax-code-0.4.13.tar.gz');
+  const archive = path.join(f.root, 'kinetick-code-0.4.13.tar.gz');
   writeFileSync(archive, 'synthetic archive');
   const sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
   writeFileSync(`${archive}.sha256`, `${sha256}  ${path.basename(archive)}\n`);
@@ -679,19 +679,19 @@ function archiveFixture(t, entries) {
 
 test('native and Node source extractors produce identical file content', async t => {
   const f = archiveFixture(t, [
-    { path: 'minimax-code/README.md', content: 'Source preview\n' },
-    { path: 'minimax-code/nested/file.txt', content: 'portable contents\n' },
+    { path: 'kinetick-code/README.md', content: 'Source preview\n' },
+    { path: 'kinetick-code/nested/file.txt', content: 'portable contents\n' },
   ]);
   for (const extractor of ['native', 'node']) {
     const output = path.join(f.directory, extractor);
     mkdirSync(output);
     assert.equal(await extractSourceArchive(f.archive, output, extractor), extractor);
-    assert.equal(readFileSync(path.join(output, 'minimax-code/nested/file.txt'), 'utf8'), 'portable contents\n');
+    assert.equal(readFileSync(path.join(output, 'kinetick-code/nested/file.txt'), 'utf8'), 'portable contents\n');
   }
 });
 
 test('Windows extraction ignores a shadow tar executable on PATH', { skip: process.platform !== 'win32' }, t => {
-  const f = archiveFixture(t, [{ path: 'minimax-code/README.md', content: 'Windows archive\n' }]);
+  const f = archiveFixture(t, [{ path: 'kinetick-code/README.md', content: 'Windows archive\n' }]);
   const shadow = path.join(f.directory, 'shadow');
   const output = path.join(f.directory, 'output');
   mkdirSync(shadow);
@@ -706,17 +706,17 @@ test('Windows extraction ignores a shadow tar executable on PATH', { skip: proce
     encoding: 'utf8', env: { ...process.env, PATH: `${shadow}${path.delimiter}${process.env.PATH ?? ''}` },
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(path.join(output, 'minimax-code/README.md'), 'utf8'), 'Windows archive\n');
+  assert.equal(readFileSync(path.join(output, 'kinetick-code/README.md'), 'utf8'), 'Windows archive\n');
 });
 
 test('source archive rejects traversal, links, Git history and duplicate entries before writing files', async t => {
-  const good = { path: 'minimax-code/good.txt', content: 'safe' };
+  const good = { path: 'kinetick-code/good.txt', content: 'safe' };
   for (const bad of [
-    { path: 'minimax-code/../../outside.txt', content: 'unsafe' },
-    { path: 'minimax-code/link', type: 'SymbolicLink', linkpath: '../../outside' },
-    { path: 'minimax-code/link', type: 'Link', linkpath: '../../outside' },
-    { path: 'minimax-code/.git/config', content: 'history' },
-    { path: 'minimax-code/file:stream', content: 'stream' },
+    { path: 'kinetick-code/../../outside.txt', content: 'unsafe' },
+    { path: 'kinetick-code/link', type: 'SymbolicLink', linkpath: '../../outside' },
+    { path: 'kinetick-code/link', type: 'Link', linkpath: '../../outside' },
+    { path: 'kinetick-code/.git/config', content: 'history' },
+    { path: 'kinetick-code/file:stream', content: 'stream' },
     good,
   ]) {
     const f = archiveFixture(t, [good, bad]);
@@ -730,7 +730,7 @@ test('source archive rejects traversal, links, Git history and duplicate entries
 });
 
 test('candidate rejects mismatched receipts and requires successful same-revision Linux and macOS reports', t => {
-  const f = archiveFixture(t, [{ path: 'minimax-code/README.md', content: 'source' }]);
+  const f = archiveFixture(t, [{ path: 'kinetick-code/README.md', content: 'source' }]);
   const revision = 'a'.repeat(40);
   const receipt = { schemaVersion: 1, revision, sha256: createHash('sha256').update(readFileSync(f.archive)).digest('hex'), format: 'source-only-no-git-history', publicationPerformed: false };
   writeFileSync(`${f.archive}.json`, JSON.stringify(receipt));

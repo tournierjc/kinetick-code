@@ -2,7 +2,7 @@
   "name": "@minimax/code",
   "version": "0.5.2-fork.1",
   "private": true,
-  "description": "Minimax Code CLI and TUI product entry.",
+  "description": "Kinetick Code CLI and TUI product entry.",
   "type": "module",
   "exports": {
     "./package.json": "./package.json"

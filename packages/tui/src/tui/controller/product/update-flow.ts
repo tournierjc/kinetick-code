@@ -52,7 +52,7 @@ export function createTuiUpdateFlow(
         kind: 'manual',
         source: 'unsupported',
         currentVersion: options.version,
-        command: 'mcode update',
+        command: 'kcode update',
       })),
     apply:
       options.applyUpdate ??
@@ -81,7 +81,7 @@ export class TuiUpdateFlow {
     if (this.stopped) return;
     if (this.updateTask) {
       this.options.append(
-        'An MCode update is already running. Please wait for it to finish.',
+        'An KCode update is already running. Please wait for it to finish.',
         'warning',
       );
       return;
@@ -106,14 +106,14 @@ export class TuiUpdateFlow {
     if (plan.kind === 'current') {
       this.options.append(
         plan.source === 'managed-installer'
-          ? `MCode ${plan.currentVersion} is current on ${plan.channel}.`
-          : `MCode ${plan.currentVersion} is current on @${plan.packageTag}.`,
+          ? `KCode ${plan.currentVersion} is current on ${plan.channel}.`
+          : `KCode ${plan.currentVersion} is current on @${plan.packageTag}.`,
       );
       return;
     }
     if (plan.kind === 'ahead') {
       this.options.append(
-        `MCode ${plan.currentVersion} is newer than ${
+        `KCode ${plan.currentVersion} is newer than ${
           plan.source === 'managed-installer' ? plan.channel : `@${plan.packageTag}`
         } ${plan.latestVersion}.`,
       );
@@ -156,14 +156,14 @@ export class TuiUpdateFlow {
   ): void {
     if (this.updateTask) {
       this.options.append(
-        'An MCode update is already running. Please wait for it to finish.',
+        'An KCode update is already running. Please wait for it to finish.',
         'warning',
       );
       return;
     }
     this.close(panel);
     this.options.append(
-      `MCode update started in the background (${plan.currentVersion} → ${plan.latestVersion}).`,
+      `KCode update started in the background (${plan.currentVersion} → ${plan.latestVersion}).`,
     );
     const task = this.requireAdmission()
       .then(() =>
@@ -182,7 +182,7 @@ export class TuiUpdateFlow {
       .then(
         (outcome) => {
           if (!this.stopped) {
-            this.options.append(`MCode update completed: ${outcome.message}`);
+            this.options.append(`KCode update completed: ${outcome.message}`);
             if (outcome.restartRequired) {
               void this.options.restart();
             }
@@ -191,7 +191,7 @@ export class TuiUpdateFlow {
         (error: unknown) => {
           if (!this.stopped) {
             this.options.append(
-              `MCode update failed: ${error instanceof Error ? error.message : String(error)}`,
+              `KCode update failed: ${error instanceof Error ? error.message : String(error)}`,
               'error',
             );
           }
@@ -223,7 +223,7 @@ export class TuiUpdateFlow {
     const admission = await this.options.admit?.();
     if (admission && !admission.allowed) {
       throw new McodeUpdateAdmissionError(
-        admission.reason ?? 'Finish active MCode work before updating.',
+        admission.reason ?? 'Finish active KCode work before updating.',
       );
     }
   }

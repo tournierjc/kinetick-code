@@ -9,7 +9,7 @@ export const MINIMAX_CODE_TUI_LOGIN_REQUIRED_MESSAGE =
   'Sign in to MiniMax to use Agent features. Run /login, then retry.';
 
 export const MINIMAX_CODE_HEADLESS_LOGIN_REQUIRED_MESSAGE =
-  'Sign in to MiniMax to use Agent features. Run `mcode login`, then retry.';
+  'Sign in to MiniMax to use Agent features. Run `kcode login`, then retry.';
 
 type TuiLoginStatusPort = Pick<TuiConfigurationPort, 'getAccountStatus'>;
 

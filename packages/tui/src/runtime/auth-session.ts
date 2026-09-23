@@ -4,7 +4,7 @@ import {
   createCredentialStore,
   HttpOAuthClient,
   migrateLegacyAuthNamespace,
-  MCodeOAuthCore,
+  KCodeOAuthCore,
   type HttpOAuthClientOptions,
   type OAuthClient,
 } from '@mavis/oauth-core';
@@ -22,7 +22,7 @@ export interface CreateMcodeSharedAuthSessionOptions {
 
 export function createMcodeSharedAuthSession(
   options: CreateMcodeSharedAuthSessionOptions,
-): MCodeOAuthCore {
+): KCodeOAuthCore {
   const namespace = createAuthNamespace({
     dataDir: options.dataDir,
     buildEnv: options.buildEnv,
@@ -30,7 +30,7 @@ export function createMcodeSharedAuthSession(
   });
   const oauthClient = options.oauthClient ?? createHttpOAuthClient(options.oauthEndpoints);
   const credentialStore = createCredentialStore({ authHome: namespace.namespaceHome });
-  return new MCodeOAuthCore({
+  return new KCodeOAuthCore({
     namespace,
     oauthClient,
     credentialStore,
@@ -43,7 +43,7 @@ function createHttpOAuthClient(
 ): HttpOAuthClient {
   if (!endpoints) {
     throw new TypeError(
-      'Shared MCode OAuth requires explicit device authorization, token, and revocation endpoints.',
+      'Shared KCode OAuth requires explicit device authorization, token, and revocation endpoints.',
     );
   }
   return new HttpOAuthClient(endpoints);

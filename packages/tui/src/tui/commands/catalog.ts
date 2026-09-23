@@ -134,13 +134,13 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'update',
-    description: 'Check for and install an MCode update',
+    description: 'Check for and install an KCode update',
     category: 'Application',
     discoverability: 'search-only',
   },
   {
     name: 'changelog',
-    description: 'Show the packaged MCode update history',
+    description: 'Show the packaged KCode update history',
     category: 'Application',
   },
   {
@@ -305,7 +305,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'login',
-    description: 'Sign in to use MiniMax Code Agent features',
+    description: 'Sign in to use Kinetick Code Agent features',
     category: 'Runtime',
     discoverability: 'contextual',
     visibleWhen: (context) => !context.managedTokenPresent,
@@ -360,7 +360,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'settings',
-    description: 'Configure the MCode terminal interface',
+    description: 'Configure the KCode terminal interface',
     category: 'Application',
   },
   {
@@ -506,7 +506,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   {
     name: 'quit',
     aliases: ['exit'],
-    description: 'Exit Minimax Code',
+    description: 'Exit Kinetick Code',
     category: 'Application',
     readiness: 'immediate',
   },

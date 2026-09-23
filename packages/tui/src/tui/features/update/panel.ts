@@ -183,7 +183,7 @@ export class TuiUpdatePanel implements Component, Focusable {
         const presentation = presentTuiFailure(error, {
           summary: "The update couldn't be installed.",
           nextStep: 'Retry, or close this panel and try again later.',
-          preservation: 'The previous MCode version is still active.',
+          preservation: 'The previous KCode version is still active.',
         });
         this.detailsExpanded = false;
         this.setState({
@@ -207,8 +207,8 @@ export class TuiUpdatePanel implements Component, Focusable {
       if (this.disposed) return;
       this.restarting = false;
       const presentation = presentTuiFailure(error, {
-        summary: "MCode couldn't restart automatically.",
-        nextStep: 'Close this terminal and start MCode again.',
+        summary: "KCode couldn't restart automatically.",
+        nextStep: 'Close this terminal and start KCode again.',
         preservation: 'The update is already installed.',
       });
       this.detailsExpanded = false;
@@ -224,7 +224,7 @@ export class TuiUpdatePanel implements Component, Focusable {
     const { currentVersion, latestVersion } = this.options.plan;
     return [
       renderDecisionHeading(
-        'MCode update available',
+        'KCode update available',
         sourceLabel(this.options.plan),
         width,
         'signal',
@@ -247,7 +247,7 @@ export class TuiUpdatePanel implements Component, Focusable {
       : this.recentOutput.slice(-Math.min(2, this.recentOutput.length));
     return [
       renderDecisionHeading(
-        `${frame} Updating MCode`,
+        `${frame} Updating KCode`,
         elapsedSeconds > 0 ? `${elapsedSeconds}s` : undefined,
         width,
         'signal',
@@ -281,7 +281,7 @@ export class TuiUpdatePanel implements Component, Focusable {
   }
 
   private renderPaused(width: number): string[] {
-    const reason = this.state.status === 'paused' ? this.state.reason : 'MCode is busy.';
+    const reason = this.state.status === 'paused' ? this.state.reason : 'KCode is busy.';
     return [
       renderDecisionHeading('Update paused', sourceLabel(this.options.plan), width, 'signal'),
       ...renderWrapped(reason, width, colors.warning),
@@ -299,7 +299,7 @@ export class TuiUpdatePanel implements Component, Focusable {
         width,
         'success',
       ),
-      ...renderWrapped('The previous MCode installation remains active.', width, colors.muted),
+      ...renderWrapped('The previous KCode installation remains active.', width, colors.muted),
       '',
       chalk.bold.hex(colors.signal)('› Try again'),
       renderTuiActionHint(fit('Enter retry · Esc close', width)),
@@ -328,7 +328,7 @@ export class TuiUpdatePanel implements Component, Focusable {
     const outcome = this.state.status === 'succeeded' ? this.state.outcome : undefined;
     return [
       renderDecisionHeading(
-        `✓ MCode updated to ${this.options.plan.latestVersion}`,
+        `✓ KCode updated to ${this.options.plan.latestVersion}`,
         undefined,
         width,
         'success',
@@ -336,7 +336,7 @@ export class TuiUpdatePanel implements Component, Focusable {
       ...(outcome ? renderWrapped(outcome.message, width, colors.muted) : []),
       '',
       chalk.bold.hex(colors.signal)(
-        this.restarting ? '⠋ Restarting MCode…' : '› Restart MCode now',
+        this.restarting ? '⠋ Restarting KCode…' : '› Restart KCode now',
       ),
       renderTuiActionHint(fit('Enter restart · Esc restart later', width)),
     ];

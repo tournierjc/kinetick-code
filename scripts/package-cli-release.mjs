@@ -63,8 +63,8 @@ export function releaseManifest(importers, version) {
   }
   return {
     name: '@minimax-ai/code', version, private: true, type: 'module', license: 'MIT',
-    description: 'MiniMax Code CLI built from the tagged public source.',
-    bin: { mcode: 'cli.js' },
+    description: 'Kinetick Code CLI built from the tagged public source.',
+    bin: { kcode: 'cli.js' },
     engines: json(path.join(root, 'package.json')).engines,
     repository: { type: 'git', url: 'https://github.com/MiniMax-AI/minimax-code.git' },
     dependencies, optionalDependencies,
@@ -86,17 +86,17 @@ export async function packageCliRelease({ tag, out }) {
     writeFileSync(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
     copyLicenses(stage);
     writeFileSync(path.join(stage, 'release.json'), JSON.stringify({ version, tag, revision, buildNode: process.version }, null, 2) + '\n');
-    writeFileSync(path.join(stage, 'README.md'), `# MiniMax Code ${version}
+    writeFileSync(path.join(stage, 'README.md'), `# Kinetick Code ${version}
 
 Built from https://github.com/MiniMax-AI/minimax-code/tree/${revision}.
 Install this tar.gz with npm. Node.js must satisfy the package engines requirement.
 Keep optional dependencies enabled and allow better-sqlite3 installation scripts.
 Update by installing a newer GitHub release archive; the built-in updater follows npm.
-The archive uses the same package name, mcode command and user data as the official npm CLI.
+The archive uses the same package name, kcode command and user data as the official npm CLI.
 See https://github.com/MiniMax-AI/minimax-code/blob/${revision}/docs/installation.md.
 `);
     mkdirSync(out, { recursive: true });
-    const archive = path.join(out, `minimax-code-${version}.tar.gz`);
+    const archive = path.join(out, `kinetick-code-${version}.tar.gz`);
     if (existsSync(archive) || existsSync(`${archive}.sha256`)) throw new Error(`Output already exists: ${archive}`);
     await createTar({ file: archive, gzip: true, cwd: temporary, portable: true }, ['package']);
     writeFileSync(`${archive}.sha256`, `${digest(readFileSync(archive))}  ${path.basename(archive)}\n`, { flag: 'wx' });

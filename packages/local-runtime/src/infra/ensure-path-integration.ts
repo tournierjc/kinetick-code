@@ -11,6 +11,8 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
+// Persisted in the user's shell profile by earlier installs: keep the marker
+// text so an existing managed block is still recognized and updated in place.
 const PATH_MARKER = '# Added by MiniMax Code';
 
 export function ensurePathIntegration(dataDir: string): void {

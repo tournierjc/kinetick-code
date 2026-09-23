@@ -80,7 +80,7 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
     dependencies.supportsNodeVersion ?? ((version: string) => supportsTuiNodeVersion(version));
   if (!supportsNodeVersion(processRef.versions.node)) {
     processRef.stderr.write(
-      `Minimax Code supports Node.js ${MINIMAX_CODE_SUPPORTED_NODE_VERSIONS}; current version is ${processRef.versions.node}.\n`,
+      `Kinetick Code supports Node.js ${MINIMAX_CODE_SUPPORTED_NODE_VERSIONS}; current version is ${processRef.versions.node}.\n`,
     );
     processRef.exitCode = 1;
     return;
@@ -202,7 +202,7 @@ async function formatTuiCliError(error: unknown): Promise<string> {
   const { buildMcodePackageManagerCommand } = await import('../update/install-source.js');
   const command = buildMcodePackageManagerCommand('npm-global', MINIMAX_CODE_VERSION);
   return [
-    'MCode could not load its native SQLite dependency.',
+    'KCode could not load its native SQLite dependency.',
     'If npm reported blocked install scripts, the installation needs explicit script approval.',
     'Reinstall with the original installer. For npm installations, run:',
     `  ${command.display} --foreground-scripts`,

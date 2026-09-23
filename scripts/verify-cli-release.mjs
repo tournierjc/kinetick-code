@@ -46,7 +46,7 @@ try {
   assert.equal(release.version, version);
   assert.equal(release.tag, process.env.MCODE_RELEASE_TAG);
   assert.equal(release.revision, revision);
-  const result = execFileSync(path.join(prefix, 'bin/mcode'), ['--version'], { cwd: home, env, encoding: 'utf8', timeout: 30000 });
+  const result = execFileSync(path.join(prefix, 'bin/kcode'), ['--version'], { cwd: home, env, encoding: 'utf8', timeout: 30000 });
   assert.equal(result.trim(), version);
   const require = createRequire(path.join(installed, 'package.json'));
   const Database = require('better-sqlite3');

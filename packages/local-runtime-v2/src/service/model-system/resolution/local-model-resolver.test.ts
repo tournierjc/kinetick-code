@@ -568,7 +568,7 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
     });
   });
 
-  it('attributes OpenRouter inference requests to MiniMax Code', async () => {
+  it('attributes OpenRouter inference requests to Kinetick Code', async () => {
     const resolver = new LocalModelResolver({
       byokConfigGetter: () => ({
         custom_provider: {
@@ -599,7 +599,7 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
 
     expect(resolved.headers).toMatchObject({
       'HTTP-Referer': 'https://agent.minimax.io/',
-      'X-OpenRouter-Title': 'MiniMax Code',
+      'X-OpenRouter-Title': 'Kinetick Code',
       'X-OpenRouter-Categories': 'cli-agent',
       'X-Mavis-Session-Id': 'session-openrouter',
     });

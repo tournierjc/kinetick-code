@@ -248,7 +248,7 @@ export class TuiChromeFlow {
     const nextTitle =
       sessionTitle && sessionTitle.toLocaleLowerCase() !== 'new session'
         ? sessionTitle
-        : 'Minimax Code';
+        : 'Kinetick Code';
     if (nextTitle === this.lastTerminalTitle) return;
     this.options.setTerminalTitle(nextTitle);
     this.lastTerminalTitle = nextTitle;

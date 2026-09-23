@@ -174,6 +174,8 @@ const AUTO_FLUSH_BATCH_SIZE = 32;
 const OBSERVABILITY_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 const FILE_PREFIX = 'mcode-observability-';
 
+// Directory and file names already written under the data directory: renaming
+// them would orphan observability logs from earlier runs.
 export function resolveTuiObservabilityDirectory(dataDir: string): string {
   return join(dataDir, 'v2', 'observability', 'mcode');
 }

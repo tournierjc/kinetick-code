@@ -116,7 +116,7 @@ describe('ModelConnectionTester requests', () => {
     expect(body).not.toHaveProperty('reasoning');
   });
 
-  it('attributes OpenRouter completion tests to MiniMax Code', async () => {
+  it('attributes OpenRouter completion tests to Kinetick Code', async () => {
     const fetchImpl = vi.fn(async () => openAiOkResponse());
     const tester = new ModelConnectionTester({ fetchImpl: fetchImpl as unknown as typeof fetch });
 
@@ -134,7 +134,7 @@ describe('ModelConnectionTester requests', () => {
     const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
     const headers = new Headers(init.headers);
     expect(headers.get('http-referer')).toBe('https://agent.minimax.io/');
-    expect(headers.get('x-openrouter-title')).toBe('MiniMax Code');
+    expect(headers.get('x-openrouter-title')).toBe('Kinetick Code');
     expect(headers.get('x-openrouter-categories')).toBe('cli-agent');
   });
 

@@ -44,6 +44,8 @@ import { resolveBashEnvPolicy, type BashEnvPolicy } from '@mavis/agent-core/bash
  * Arguments are forwarded verbatim: mavis-trash already accepts rm's surface
  * (`-f`, `-r`/`-R`, `-rf`, `--`) and mirrors `rm -f`'s empty-operand success.
  */
+// The marker is written into a file on the user's PATH and must keep its
+// spelling so an existing shim is still recognized after the product rename.
 export const RM_SHIM_CONTENT = `#!/bin/bash
 # Managed by MiniMax Code. Do not edit.
 #

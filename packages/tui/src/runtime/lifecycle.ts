@@ -13,10 +13,10 @@ import {
   AuthSessionChangedError,
   MCODE_OAUTH_SCOPES,
   requiresInteractiveLogin,
-  resolveMCodeOAuthEndpointConfig,
+  resolveKCodeOAuthEndpointConfig,
   type AccessTokenLease,
   type AuthStatusSnapshot,
-  type MCodeOAuthCore,
+  type KCodeOAuthCore,
 } from '@mavis/oauth-core';
 import type { McodeToolsHostAuthSession } from '@mavis/mcode-tools-host';
 import {
@@ -117,7 +117,7 @@ export interface CreateTuiRuntimeDependencies {
   getDataEnvironment?: typeof resolveMcodeDataEnvironment;
   fetchImpl?: typeof fetch;
   sharedAuthCore?: Pick<
-    MCodeOAuthCore,
+    KCodeOAuthCore,
     'getStatus' | 'getAccessToken' | 'handleUnauthorized' | 'watch'
   >;
   prepareMcodeToolsIntegration?: typeof prepareTuiMcodeToolsIntegration;
@@ -212,7 +212,7 @@ export async function createTuiRuntime(
         dataDir: options.dataDir,
         region: authScope.region,
         buildEnv: authScope.buildEnv,
-        oauthEndpoints: resolveMCodeOAuthEndpointConfig(process.env, authScope),
+        oauthEndpoints: resolveKCodeOAuthEndpointConfig(process.env, authScope),
       });
     sharedAuthCore = activeSharedAuthCore;
     const projectSharedLease = async (
@@ -601,7 +601,7 @@ export async function createTuiRuntime(
     if (cleanupFailures.length > 0) {
       throw new AggregateError(
         [error, ...cleanupFailures],
-        'Minimax Code Runtime startup cleanup failed.',
+        'Kinetick Code Runtime startup cleanup failed.',
       );
     }
     throw error;

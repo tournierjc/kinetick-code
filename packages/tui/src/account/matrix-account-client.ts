@@ -344,10 +344,10 @@ export class TuiMatrixAccountClient {
         throw new TuiAuthenticationError(response.status);
       }
       if (!response.ok) {
-        throw new Error(`MCode account identity request failed with HTTP ${response.status}`);
+        throw new Error(`KCode account identity request failed with HTTP ${response.status}`);
       }
       const body = asRecord(await response.json());
-      if (!body) throw new Error('MCode account identity request returned an invalid response');
+      if (!body) throw new Error('KCode account identity request returned an invalid response');
       assertSuccessfulResponse(body, 'account identity request');
       const data = asRecord(body.data);
       const userInfo =
@@ -359,7 +359,7 @@ export class TuiMatrixAccountClient {
         readString(userInfo, undefined, 'realUserID') ??
         readString(userInfo, undefined, 'real_user_id');
       if (!realUserID) {
-        throw new Error('MCode account identity request returned no account ID');
+        throw new Error('KCode account identity request returned no account ID');
       }
       const identity = {
         realUserID,
@@ -406,10 +406,10 @@ export class TuiMatrixAccountClient {
         signal: scopedSignal.signal,
       });
       if (!response.ok) {
-        throw new Error(`MCode ${operation} failed with HTTP ${response.status}`);
+        throw new Error(`KCode ${operation} failed with HTTP ${response.status}`);
       }
       const responseBody = asRecord(await response.json());
-      if (!responseBody) throw new Error(`MCode ${operation} returned an invalid response`);
+      if (!responseBody) throw new Error(`KCode ${operation} returned an invalid response`);
       assertSuccessfulResponse(responseBody, operation);
       return responseBody;
     } finally {
@@ -446,13 +446,13 @@ export class TuiMatrixAccountClient {
         throw new TuiAuthenticationError(response.status);
       }
       if (!response.ok) {
-        throw new Error(`MCode token renewal failed with HTTP ${response.status}`);
+        throw new Error(`KCode token renewal failed with HTTP ${response.status}`);
       }
       const body = asRecord(await response.json());
-      if (!body) throw new Error('MCode token renewal returned an invalid response');
+      if (!body) throw new Error('KCode token renewal returned an invalid response');
       assertSuccessfulResponse(body, 'token renewal');
       const token = readString(asRecord(body.data), body, 'token');
-      if (!token) throw new Error('MCode token renewal returned no access token');
+      if (!token) throw new Error('KCode token renewal returned no access token');
       return token;
     } finally {
       scopedSignal.dispose();
@@ -463,6 +463,8 @@ export class TuiMatrixAccountClient {
     const url = new URL(pathname, MATRIX_ORIGINS[this.options.region][this.options.buildEnv]);
     const language = this.options.region === 'cn' ? 'zh' : 'en';
     url.search = new URLSearchParams({
+      // Service-side device-flow fields: `mcode` is the client identity the
+      // MiniMax account API expects.
       device_platform: 'mcode',
       biz_id: '3',
       app_id: '3001',
@@ -595,11 +597,11 @@ function assertSuccessfulResponse(body: Record<string, unknown>, operation: stri
   const statusInfo = asRecord(body.statusInfo);
   if (typeof statusInfo?.code === 'number' && statusInfo.code !== 0) {
     if (statusInfo.code === NEED_LOGIN_ERROR_CODE) throw new TuiAuthenticationError(401);
-    throw new Error(`MCode ${operation} failed with status ${statusInfo.code}`);
+    throw new Error(`KCode ${operation} failed with status ${statusInfo.code}`);
   }
   const baseResponse = asRecord(body.base_resp);
   if (typeof baseResponse?.status_code === 'number' && baseResponse.status_code !== 0) {
-    throw new Error(`MCode ${operation} failed with status ${baseResponse.status_code}`);
+    throw new Error(`KCode ${operation} failed with status ${baseResponse.status_code}`);
   }
 }
 
