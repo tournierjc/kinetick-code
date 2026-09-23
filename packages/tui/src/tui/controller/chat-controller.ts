@@ -345,6 +345,31 @@ export class TuiChatController {
     return session;
   }
 
+  /**
+   * Delete a Session the way the runtime does: rows and canonical history files
+   * are removed, and children are re-parented. There is no trash to restore
+   * from, so callers confirm first.
+   */
+  async deleteSession(sessionId: string): Promise<void> {
+    this.assertNoActiveTurn('deleting a session');
+    this.invalidateSessionCatalogRefresh();
+    const deleteSessionMethod = requireRuntimeMethod(this.runtime, 'deleteSession');
+    await deleteSessionMethod(sessionId);
+    const isCurrent = this.state.session?.sessionId === sessionId;
+    if (isCurrent) {
+      this.turnProjection.clearTodos();
+      this.transcript.clear();
+      this.durableMessageAnchor = undefined;
+    }
+    this.updateState({
+      status: 'idle',
+      session: isCurrent ? undefined : this.state.session,
+      sessions: this.state.sessions.filter((item) => item.sessionId !== sessionId),
+      error: undefined,
+      ...(isCurrent ? { lastSettledTurn: undefined } : {}),
+    });
+  }
+
   async submit(rawContent: string, options: TuiSubmitOptions = {}): Promise<TuiSubmitStatus> {
     const content = rawContent.trim();
     const displayContent = options.displayContent?.trim() ?? content;

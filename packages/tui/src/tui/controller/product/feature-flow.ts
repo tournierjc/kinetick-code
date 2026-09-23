@@ -144,7 +144,11 @@ export interface TuiFeatureFlowOptions {
   readonly onChanged: () => void;
   readonly onNewSession: () => void;
   readonly onOpenSession: (sessionId: string) => Promise<void>;
-  readonly onArchivedCurrentSession: (sessionId: string) => Promise<void>;
+  /**
+   * Fires when the visible Session disappears — archived or deleted. The host
+   * resets the shell to a fresh Session; the Session itself is already gone.
+   */
+  readonly onCurrentSessionClosed: (sessionId: string) => Promise<void>;
   readonly refreshAutocomplete: () => void;
   /** Starts the `/login` sign-in flow; absent when the host has no auth. */
   readonly onStartMiniMaxLogin?: () => void;
@@ -581,7 +585,16 @@ export class TuiFeatureFlow {
           throw new Error('Stop the running turn before archiving or restoring a Session.');
         }
         await this.options.controller.setSessionArchived(sessionId, archived);
-        if (archived && wasCurrent) await this.options.onArchivedCurrentSession(sessionId);
+        if (archived && wasCurrent) await this.options.onCurrentSessionClosed(sessionId);
+        this.options.onChanged();
+      },
+      onDelete: async (sessionId) => {
+        const wasCurrent = this.options.controller.snapshot().session?.sessionId === sessionId;
+        if (this.rejectLiveSessionNavigation('/sessions')) {
+          throw new Error('Stop the running turn before deleting a Session.');
+        }
+        await this.options.controller.deleteSession(sessionId);
+        if (wasCurrent) await this.options.onCurrentSessionClosed(sessionId);
         this.options.onChanged();
       },
       onCancel: () => this.options.surface.close(manager),

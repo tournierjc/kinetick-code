@@ -186,4 +186,21 @@ sends, the confirmation card in both modes, the running-turn guard and the
 unavailable reason; whether the clone keeps MCP connections and queued messages
 is not covered.
 
+## Deleting a Session
 
+`/sessions` can remove a Session for good: select the row, press `Ctrl+X` and
+confirm. The confirmation opens on **Archive instead**, because the delete has no
+undo — the runtime removes the Session's rows and its canonical history files on
+disk and re-parents any child Sessions. Archiving keeps the history under the
+Archived view, so the safe choice is the one Enter takes by default.
+
+Move between the two rows with the arrow keys. Choosing *Delete permanently*
+removes the row and reports that the history files are gone; `Esc` leaves the
+Session untouched. Deleting the Session you are looking at is allowed: the shell
+resets to a fresh Session, exactly as it does after archiving the visible one. A
+running turn blocks the delete.
+
+Offline tests cover the confirmation's default choice, the permanent path calling
+the runtime, the cancel path, the footer hint, the controller's removal of the row
+(including the visible Session) and the running-turn refusal. There is no trash
+and no retention window: nothing here can bring a deleted Session back.
