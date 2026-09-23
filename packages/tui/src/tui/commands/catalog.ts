@@ -128,9 +128,9 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     ...TUI_COMMAND_DESCRIPTORS.new,
+    description: 'Open a new Session in a new tab',
     aliases: ['clear'],
     category: 'Session',
-    runAvailability: 'idle',
   },
   {
     name: 'update',

@@ -149,6 +149,27 @@ wrapped, and it is not a switch: the Session on screen stays, and a running turn
 untouched. The order lives in the running TUI and is not persisted, so a restart
 reopens tabs in insertion order.
 
+A new tab is created by `/new`, or by choosing "new" in `/sessions`: the Session is
+created there and then, in the workspace of the Session you were on, so the tab appears
+before you type anything — a fresh Session with an empty Composer is what a new tab is.
+It is navigation rather than a clear, so it works while a turn is running: the Session
+you leave keeps its tab, keeps its pane and keeps streaming its turn into it. Text typed
+while no Session was on screen (after archiving one, for instance) follows into the
+Session the new tab opens.
+
+`/clear` starts the fresh conversation in the tab that is already there instead of
+adding one: the bar keeps its length and the new Session takes the replaced tab's
+position, and with it its direct `Alt+<n>` slot. The Session it replaces keeps its
+history and stays resumable from `/sessions` — nothing is closed, archived or deleted;
+only its pane goes, with the tab it lost. Because that would leave a running turn with
+no tab to return to, `/clear` is refused while the visible Session's turn runs, the same
+way closing its tab is. Closing the last tab is the third way to get a fresh
+conversation: it returns to an empty view and the next prompt creates the Session.
+
+Because a tab is always a real Session, `/new` and `/clear` show an empty conversation
+rather than the Welcome screen: Welcome is what a start with nothing opened shows, and
+with it the startup update notice.
+
 `/pin` (or `/pin on`) pins the visible Session and `/pin off` unpins it. A pin is a
 runtime-level, ordered list rather than a field on the Session, so it survives restarts
 and is shared with any other client: pinned Sessions lead the `/sessions` list and the
@@ -203,13 +224,14 @@ prompt raised by a background Session is recorded against that Session and shows
 you switch to its tab.
 
 Some commands still require a stopped Session, because they end or rebind its
-context: `/new`, `/rename`, `/parent`, and archiving or deleting a Session from
-`/sessions`. Closing the tab of a running Session is refused too, so a live Session
-is never left without a tab to return to. Offline tests cover the tab reducer, the
-bar rendering at narrow widths, the key bindings, the switch/close ordering and the
-allowances above; a Session that keeps streaming into its own pane while you are
-elsewhere is implemented, and the limits of that pane are stated in the tabs section
-above.
+context: `/rename`, `/parent`, and archiving or deleting a Session from
+`/sessions`. `/new` does not: opening a Session in a new tab leaves the one on
+screen, and its turn, alone. Closing the tab of a running Session is refused, so a
+live Session is never left without a tab to return to. Offline tests cover the tab
+reducer, the bar rendering at narrow widths, the key bindings, the switch/close
+ordering and the allowances above; a Session that keeps streaming into its own pane
+while you are elsewhere is implemented, and the limits of that pane are stated in the
+tabs section above.
 
 ## Copying a Session
 

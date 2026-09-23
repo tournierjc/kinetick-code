@@ -131,6 +131,62 @@ describe('session tab list', () => {
     ).toBe(opened);
   });
 
+  it('swaps the Session a tab shows without moving the tab', () => {
+    const opened = apply(
+      createTuiState(),
+      activate('session-a'),
+      activate('session-b'),
+      activate('session-c'),
+    );
+
+    const state = apply(opened, {
+      type: 'tabs/replace',
+      sessionId: 'session-b',
+      replacementId: 'session-d',
+    });
+
+    // The bar keeps its length and the replaced tab keeps its position, so the new
+    // Session inherits its direct slot; visibility stays where it was.
+    expect(state.tabs.order).toEqual(['session-a', 'session-d', 'session-c']);
+    expect(state.activeSessionId).toBe('session-c');
+  });
+
+  it('keeps one slot for the replacement when it was already open', () => {
+    const opened = apply(
+      createTuiState(),
+      activate('session-a'),
+      activate('session-b'),
+      activate('session-c'),
+    );
+
+    const state = apply(opened, {
+      type: 'tabs/replace',
+      sessionId: 'session-c',
+      replacementId: 'session-a',
+    });
+
+    expect(state.tabs.order).toEqual(['session-b', 'session-a']);
+  });
+
+  it('returns the same state object when there is nothing to replace', () => {
+    const opened = apply(createTuiState(), activate('session-a'));
+
+    expect(
+      reduceTuiState(opened, {
+        type: 'tabs/replace',
+        sessionId: 'session-missing',
+        replacementId: 'session-d',
+      }).state,
+    ).toBe(opened);
+    expect(
+      reduceTuiState(opened, {
+        type: 'tabs/replace',
+        sessionId: 'session-a',
+        replacementId: 'session-a',
+      }).state,
+    ).toBe(opened);
+  });
+
   it('keeps every tab it opened while Sessions are unknown', () => {
     const opened = apply(createTuiState(), activate('session-a'), activate('session-b'));
 

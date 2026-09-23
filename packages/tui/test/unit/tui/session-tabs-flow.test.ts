@@ -21,6 +21,8 @@ function createFlow(options: {
   hasLiveRun?: boolean;
   /** Workspace directory per Session, so the tab bar can group by project. */
   projects?: Readonly<Record<string, string>>;
+  /** Fail `createSession`, for the "no tab appears" path. */
+  createSessionError?: boolean;
 }) {
   let state = createTuiState();
   for (const sessionId of options.tabs) {
@@ -65,11 +67,15 @@ function createFlow(options: {
   }) as TuiSession);
   const showSessionManager = vi.fn(async () => undefined);
 
+  const createSession = vi.fn(async () => {
+    if (options.createSessionError) throw new Error('runtime unavailable');
+    return sessions.get('sess-new') as TuiSession;
+  });
   const flow = new TuiSessionFlow({
     runtime: {
       listSessionPage,
       getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? { sessionId }),
-      createSession: vi.fn(async () => sessions.get('sess-new') as TuiSession),
+      createSession,
       deleteSession: vi.fn(async () => undefined),
       getActiveRun: vi.fn(async (sessionId: string) => ({
         schemaVersion: 1 as const,
@@ -112,6 +118,7 @@ function createFlow(options: {
   return {
     flow,
     append,
+    createSession,
     dispatch,
     loadSessionProjection,
     startNewSession,
@@ -487,5 +494,101 @@ describe('tab grouping', () => {
     await flow.cycleTab(1);
 
     expect(loadSessionProjection).toHaveBeenCalledWith(TAB_B);
+  });
+});
+
+describe('openNewSessionTab', () => {
+  it('creates the Session up front so the tab exists before the first prompt', async () => {
+    const { flow, createSession, tabOrder, activeSessionId } = createFlow({
+      tabs: [TAB_A, TAB_B],
+      visible: TAB_A,
+    });
+
+    await flow.openNewSessionTab({ workspaceDir: '/work/api' });
+
+    expect(createSession).toHaveBeenCalledWith({ workspaceDir: '/work/api' });
+    expect(tabOrder()).toEqual([TAB_A, TAB_B, 'sess-new']);
+    expect(activeSessionId()).toBe('sess-new');
+  });
+
+  it('keeps the workspace of the Session it is opened from', async () => {
+    const { flow, createSession } = createFlow({
+      tabs: [TAB_A],
+      visible: TAB_A,
+      projects: { [TAB_A]: '/work/api' },
+    });
+
+    await flow.openNewSessionTab({ workspaceDir: '/elsewhere' });
+
+    expect(createSession).toHaveBeenCalledWith({ workspaceDir: '/work/api' });
+  });
+
+  it('opens the tab while a turn is live, without clearing or releasing the running Session', async () => {
+    const {
+      flow,
+      append,
+      startNewSession,
+      releaseSessionTranscript,
+      activeSessionId,
+      tabOrder,
+    } = createFlow({ tabs: [TAB_A], visible: TAB_A, hasLiveRun: true });
+
+    await flow.openNewSessionTab({ workspaceDir: '/work/api' });
+
+    expect(activeSessionId()).toBe('sess-new');
+    expect(tabOrder()).toEqual([TAB_A, 'sess-new']);
+    // No refusal hint, no clear of the Session being left, and its pane survives:
+    // the running turn goes on streaming into its own tab.
+    expect(append).not.toHaveBeenCalledWith('Stop the running turn before using /new.', 'warning');
+    expect(startNewSession).not.toHaveBeenCalled();
+    expect(releaseSessionTranscript).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed creation instead of opening an empty tab', async () => {
+    const { flow, append, activeSessionId, tabOrder } = createFlow({
+      tabs: [TAB_A],
+      visible: TAB_A,
+      createSessionError: true,
+    });
+
+    await flow.openNewSessionTab({ workspaceDir: '/work/api' });
+
+    expect(append).toHaveBeenCalledWith("Couldn't open a new Session. Try again.", 'error');
+    expect(tabOrder()).toEqual([TAB_A]);
+    expect(activeSessionId()).toBe(TAB_A);
+  });
+});
+
+describe('replaceSessionInTab', () => {
+  it('puts the fresh Session in the tab that was on screen', async () => {
+    const { flow, createSession, tabOrder, activeSessionId, releaseSessionTranscript } = createFlow({
+      tabs: [TAB_A, TAB_B, TAB_C],
+      visible: TAB_B,
+    });
+
+    await flow.replaceSessionInTab({ workspaceDir: '/work/api' });
+
+    expect(createSession).toHaveBeenCalledWith({ workspaceDir: '/work/api' });
+    // Same bar, same position: the replacement inherits the tab it replaced.
+    expect(tabOrder()).toEqual([TAB_A, 'sess-new', TAB_C]);
+    expect(activeSessionId()).toBe('sess-new');
+    // The replaced Session has no tab left, so its pane goes with it — but the
+    // Session itself is not closed, archived or deleted.
+    expect(releaseSessionTranscript).toHaveBeenCalledWith(TAB_B);
+  });
+
+  it('refuses to replace the tab of a Session whose turn is running', async () => {
+    const { flow, append, createSession, tabOrder, activeSessionId } = createFlow({
+      tabs: [TAB_A],
+      visible: TAB_A,
+      hasLiveRun: true,
+    });
+
+    await flow.replaceSessionInTab({ workspaceDir: '/work/api' });
+
+    expect(createSession).not.toHaveBeenCalled();
+    expect(tabOrder()).toEqual([TAB_A]);
+    expect(activeSessionId()).toBe(TAB_A);
+    expect(append).toHaveBeenCalledWith('Stop the running turn before clearing its tab.', 'warning');
   });
 });

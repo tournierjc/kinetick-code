@@ -521,7 +521,7 @@ describe('Kinetick Code ACP agent', () => {
               },
               {
                 name: 'new',
-                description: 'Start a fresh session in the current workspace',
+                description: 'Open a new Session',
               },
               {
                 name: 'model',
@@ -604,7 +604,7 @@ describe('Kinetick Code ACP agent', () => {
               text: [
                 'Available commands:',
                 '- /help — Show available commands',
-                '- /new — Start a fresh session in the current workspace',
+                '- /new — Open a new Session',
                 '- /model [provider/model[#variant]] — Choose a model',
                 '- /status — Show account and model status',
                 '- /doctor — Check the local config file',
