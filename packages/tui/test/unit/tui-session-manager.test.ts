@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from 'node:util';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { visibleWidth } from '../../src/tui/rendering/text.js';
 import { TuiSessionManager } from '../../src/tui/features/session/manager.js';
 import type { TuiSession } from '../../src/runtime/port.js';
@@ -687,5 +687,92 @@ describe('TuiSessionManager delete', () => {
     const { manager } = createManager();
 
     expect(renderPlain(manager)).toContain('Ctrl+X delete');
+  });
+});
+
+describe('TuiSessionManager saved-prompt search', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lists Sessions matched by a saved prompt with the prompt quoted back', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => [
+      { sessionId: 'session-current', snippet: 'Fix the login flow with a redirect' },
+    ]);
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('redirect');
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(onSearchHistory).toHaveBeenCalledWith('redirect', ['session-current']);
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Fix the login flow');
+    expect(rendered).toContain('prompt match');
+    expect(rendered).toContain('Matched “Fix the login flow with a redirect”');
+    expect(rendered).toContain('1 Session matched a saved prompt.');
+  });
+
+  it('never searches prompts when the query matches a title', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => []);
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('login');
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(onSearchHistory).not.toHaveBeenCalled();
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Fix the login flow');
+    expect(rendered).not.toContain('prompt match');
+  });
+
+  it('reports a query that matched neither titles nor saved prompts', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => []);
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('kubernetes');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('No matching sessions.');
+    expect(rendered).toContain('No title or saved prompt matched.');
+  });
+
+  it('reports a failed prompt search without listing anything', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => {
+      throw new Error('history unavailable');
+    });
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('kubernetes');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain("Couldn't search saved prompts.");
+    expect(rendered).not.toContain('prompt match');
+  });
+
+  it('drops prompt matches as soon as the query matches a title again', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => [
+      { sessionId: 'session-current', snippet: 'Fix the login flow with a redirect' },
+    ]);
+    const { manager } = createManager({ onSearchHistory, initialQuery: 'redirect' });
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(renderPlain(manager)).toContain('prompt match');
+
+    manager.handleInput('\u0001');
+    for (let index = 0; index < 'redirect'.length; index += 1) manager.handleInput('\u0004');
+    manager.handleInput('login');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Fix the login flow');
+    expect(rendered).not.toContain('prompt match');
+    expect(rendered).not.toContain('Matched');
   });
 });

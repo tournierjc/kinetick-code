@@ -28,6 +28,7 @@ import {
 } from '../../features/provider/onboarding.js';
 import { TuiPluginManager } from '../../features/plugin/manager.js';
 import { TuiSessionManager } from '../../features/session/manager.js';
+import { searchSessionPrompts } from '../../features/session/prompt-search.js';
 import { TuiTranscriptPanel } from '../../features/transcript/panel.js';
 import { TuiChangelogPanel } from '../../features/changelog/panel.js';
 import {
@@ -597,6 +598,8 @@ export class TuiFeatureFlow {
         if (wasCurrent) await this.options.onCurrentSessionClosed(sessionId);
         this.options.onChanged();
       },
+      onSearchHistory: (query, sessionIds) =>
+        searchSessionPrompts(this.options.runtime, query, sessionIds),
       onCancel: () => this.options.surface.close(manager),
       requestRender: this.options.onChanged,
       maxRows: () => this.sessionManagerMaxRows(),

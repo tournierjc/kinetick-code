@@ -83,6 +83,7 @@
       "packages/tui/test/unit/tui-scrollbar-interaction.test.ts",
       "packages/tui/test/unit/tui-image-preview.test.ts",
       "packages/tui/test/unit/tui-session-manager.test.ts",
+      "packages/tui/test/unit/tui-session-prompt-search.test.ts",
       "packages/tui/test/unit/tui-shell-block.test.ts",
       "packages/tui/test/unit/tui-status-line-items.test.ts",
       "packages/tui/test/unit/tui-terminal-image-paste.test.ts",
