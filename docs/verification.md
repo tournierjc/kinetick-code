@@ -58,7 +58,7 @@ Not run: an actual upgrade of an installed CLI (no installation is replaced on t
 
 ### Single release model, 2026-09-23
 
-Verification results for the update-module consolidation at revision `78d2b5a` (the code commit this documentation commit follows).
+Verification results for the update-module consolidation added in PR #44, at revision `78d2b5a` (the code commit the documentation commit that follows describes).
 
 `kcode update` carries one release model and one channel again. `packages/tui/src/update/release.ts` is that model: it resolves this repository's GitHub Releases through `api.github.com`, verifies the archive against the published size and `.sha256`, and installs it with the package manager that owns the running installation. The upstream signed CDN channel (`update/service.ts`, its manifest and signature model, `McodeUpdateService`), the npm-prefix staging module (`update/versioned-prefix.ts`), the upstream npm registry path (dist tags, `@minimax-ai/code` version lookups, the package-manager command builders and the `__TUI_NPM_DIST_TAG__` define) and the `KCODE_UPDATE_SOURCE=upstream` routing are removed, together with the separate `fork-release.ts` module the release module replaced. `prefix-update.ts` remains for the startup path that schedules a pending update an older installation left in its prefix.
 
