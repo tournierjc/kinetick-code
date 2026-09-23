@@ -100,9 +100,11 @@ export function releaseCli({ root, version, dryRun = false, openPullRequest = cr
   versionFromTag(tag);
   // Retired scheme: releases used to be `<upstream core>-fork.N` prereleases.
   // Refuse the suffix so it cannot come back by habit; the version is a plain
-  // number of this repository's own sequence.
-  if (/-fork\./.test(version)) {
-    throw new Error('The `-fork.N` release suffix is retired; release a plain version (see docs/releasing.md).');
+  // number of this repository's own sequence. A bare `-fork` is a valid SemVer
+  // prerelease identifier, so it needs refusing explicitly rather than by the
+  // ordinal pattern alone.
+  if (/-fork(\.|$)/.test(version)) {
+    throw new Error('The `-fork` release suffix is retired; release a plain version (see docs/releasing.md).');
   }
   const branch = `release/${tag}`;
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
