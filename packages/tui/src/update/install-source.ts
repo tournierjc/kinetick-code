@@ -1,90 +1,61 @@
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import spawn from 'cross-spawn';
-import { parseMcodeVersion } from './release.js';
-import { isManagedMcodeInstallRoot } from './service.js';
-import type { McodeUpdateOperationOptions } from './progress.js';
+import { homedir } from 'node:os';
+import {
+  KCODE_PACKAGE_DIR_PATTERN,
+  KCODE_WORKSPACE_PACKAGE_NAME,
+  isInternalKcodePackageName,
+  isKcodePackageName,
+  type KcodePackageName,
+} from '../package-identity.js';
+import { KCODE_NPM_REGISTRY } from './release.js';
 
-export const MCODE_INTERNAL_NPM_REGISTRY = 'https://npmmirror.example.invalid/';
-export const MCODE_PUBLIC_NPM_REGISTRY = 'https://registry.npmjs.org/';
-export const MCODE_PUBLIC_NPM_MIRROR_REGISTRY = 'https://registry.npmmirror.com/';
-const REGISTRY_FETCH_TIMEOUT_MS = 30_000;
-const MCODE_PACKAGE_BASENAME = 'code';
-const MCODE_INTERNAL_SCOPE = '@minimax';
-const MCODE_PUBLIC_SCOPE = '@minimax-ai';
-// Public packaging rewrites this marker together with the bundled package identity.
-const MCODE_EMBEDDED_PACKAGE_NAME = '@minimax-ai/code' as McodeNpmPackageName;
+export { isInternalKcodePackageName };
 
-export type McodeNpmDistTag = 'latest' | 'test' | 'preview';
-export type McodeNpmPackageName = '@minimax/code' | '@minimax-ai/code';
-type TuiBuildEnvironment = 'test' | 'staging' | 'prod';
-
-declare const __TUI_BUILD_ENV__: TuiBuildEnvironment | undefined;
-declare const __TUI_NPM_DIST_TAG__: McodeNpmDistTag | undefined;
-
-export type McodePackageManagerInstallSource =
+/** Identity this product is installed under, current or historical. */
+export type KcodeNpmPackageName = KcodePackageName;
+export type KcodePackageManagerInstallSource =
   | 'npm-global'
   | 'npm-prefix'
   | 'pnpm-global'
   | 'yarn-global'
   | 'bun-global';
 
-export type McodeInstallSource =
+export type KcodeInstallSource =
   | 'managed-installer'
-  | McodePackageManagerInstallSource
+  | KcodePackageManagerInstallSource
   | 'unsupported';
 
-export interface McodePackageManagerCommand {
+export interface KcodeNpmPrefixInstall {
   readonly executable: string;
-  readonly args: readonly string[];
-  readonly display: string;
-}
-
-export interface McodeNpmPrefixInstall {
-  readonly executable: string;
-  readonly packageName: McodeNpmPackageName;
+  readonly packageName: KcodeNpmPackageName;
   readonly prefix: string;
   readonly registry: string;
 }
 
-export type McodePackageManagerRunOptions = McodeUpdateOperationOptions;
-
-export interface McodeNpmDistribution {
-  readonly packageName: McodeNpmPackageName;
-  readonly registry: string;
-}
-
-export interface ResolveLatestMcodeRegistryVersionDependencies {
-  readonly platform: NodeJS.Platform;
-  readonly run: (command: string, args: readonly string[]) => Promise<string>;
-  readonly distribution: McodeNpmDistribution;
-  readonly npmExecutable: string;
-  readonly environment: NodeJS.ProcessEnv;
-  readonly runtimeExecutable: string;
-}
-
-export interface DetectMcodeInstallSourceDependencies {
+export interface DetectKcodeInstallSourceDependencies {
   readonly installRoot: string;
   readonly platform: NodeJS.Platform;
   readonly packageRoot: () => string | undefined;
   readonly npmGlobalPrefix: () => Promise<string>;
   readonly managedInstall: (installRoot: string) => boolean;
-  readonly prefixInstall: () => McodeNpmPrefixInstall | undefined;
+  readonly prefixInstall: () => KcodeNpmPrefixInstall | undefined;
 }
 
-export async function detectMcodeInstallSource(
-  dependencies: Partial<DetectMcodeInstallSourceDependencies> & { installRoot: string },
-): Promise<McodeInstallSource> {
+export async function detectKcodeInstallSource(
+  dependencies: Partial<DetectKcodeInstallSourceDependencies> & { installRoot: string },
+): Promise<KcodeInstallSource> {
   const platform = dependencies.platform ?? process.platform;
-  const resolved: DetectMcodeInstallSourceDependencies = {
+  const resolved: DetectKcodeInstallSourceDependencies = {
     installRoot: dependencies.installRoot,
     platform,
-    packageRoot: dependencies.packageRoot ?? resolveMcodePackageRoot,
+    packageRoot: dependencies.packageRoot ?? resolveKcodePackageRoot,
     npmGlobalPrefix:
       dependencies.npmGlobalPrefix ??
       (() => runText(platform === 'win32' ? 'npm.cmd' : 'npm', ['prefix', '--global'])),
-    managedInstall: dependencies.managedInstall ?? isManagedMcodeInstallRoot,
-    prefixInstall: dependencies.prefixInstall ?? resolveMcodeNpmPrefixInstall,
+    managedInstall: dependencies.managedInstall ?? isManagedKcodeInstallRoot,
+    prefixInstall: dependencies.prefixInstall ?? resolveKcodeNpmPrefixInstall,
   };
 
   if (resolved.managedInstall(resolved.installRoot)) return 'managed-installer';
@@ -92,7 +63,7 @@ export async function detectMcodeInstallSource(
 
   const packageRoot = resolved.packageRoot();
   if (!packageRoot) return 'unsupported';
-  const heuristic = classifyMcodeInstallPath(packageRoot);
+  const heuristic = classifyKcodeInstallPath(packageRoot);
   if (heuristic) return heuristic;
 
   try {
@@ -102,75 +73,74 @@ export async function detectMcodeInstallSource(
   }
 }
 
-export function classifyMcodeInstallPath(
+/**
+ * Data root for this build: it holds `update.json` (release channel) and, for
+ * an installation made by the upstream installer, that installer's
+ * `install.json` receipt. The paths are kept as they are so an installation
+ * created before the rename keeps finding its own data.
+ */
+export function resolveKcodeInstallRoot(environment: NodeJS.ProcessEnv = process.env): string {
+  if (environment.MCODE_INSTALL_ROOT) return path.resolve(environment.MCODE_INSTALL_ROOT);
+  if (process.platform === 'win32') {
+    const localAppData = environment.LOCALAPPDATA;
+    if (!localAppData)
+      throw new Error('LOCALAPPDATA is required to resolve the KCode install root.');
+    return path.join(localAppData, 'MinimaxCode');
+  }
+  const dataHome = environment.XDG_DATA_HOME || path.join(homedir(), '.local', 'share');
+  return path.join(dataHome, 'minimax-code');
+}
+
+/**
+ * Whether the upstream installer owns this installation, judged by the receipt
+ * it writes into the data root. Such an installation carries that product's
+ * identity throughout its layout, so this build does not update it in place.
+ */
+export function isManagedKcodeInstallRoot(installRoot: string): boolean {
+  const metadataFile = path.join(installRoot, 'install.json');
+  try {
+    const metadata = JSON.parse(readFileSync(metadataFile, 'utf8')) as Record<string, unknown>;
+    return metadata.product === 'minimax-code' && metadata.updateOwner === 'mcode-installer';
+  } catch {
+    return false;
+  }
+}
+
+export function classifyKcodeInstallPath(
   packageRoot: string,
-): McodePackageManagerInstallSource | undefined {
+): KcodePackageManagerInstallSource | undefined {
   const normalized = packageRoot.replaceAll('\\', '/').toLocaleLowerCase();
   if (
-    /\/pnpm\/global\/(?:v11\/[^/]+|[^/]+)\/node_modules\/@minimax(?:-ai)?\/code$/u.test(normalized)
+    new RegExp(`/pnpm/global/(?:v11/[^/]+|[^/]+)/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)
   ) {
     return 'pnpm-global';
   }
   if (
-    /\/(?:\.config\/yarn|\.yarn)\/global\/node_modules\/@minimax(?:-ai)?\/code$/u.test(normalized)
+    new RegExp(`/(?:\\.config/yarn|\\.yarn)/global/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)
   ) {
     return 'yarn-global';
   }
-  if (/\/\.bun\/install\/global\/node_modules\/@minimax(?:-ai)?\/code$/u.test(normalized)) {
+  if (new RegExp(`/\\.bun/install/global/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)) {
     return 'bun-global';
   }
   if (
-    /\/lib\/node_modules\/@minimax(?:-ai)?\/code$/u.test(normalized) ||
-    /\/npm\/node_modules\/@minimax(?:-ai)?\/code$/u.test(normalized)
+    new RegExp(`/lib/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized) ||
+    new RegExp(`/npm/node_modules/${KCODE_PACKAGE_DIR_PATTERN}$`, 'u').test(normalized)
   ) {
     return 'npm-global';
   }
   return undefined;
 }
 
-export function resolveMcodeNpmDistribution(
-  packageName: McodeNpmPackageName = resolveMcodePackageName() ?? MCODE_EMBEDDED_PACKAGE_NAME,
-  registry?: string,
-): McodeNpmDistribution {
-  if (packageName === mcodePackageName(MCODE_INTERNAL_SCOPE)) {
-    const resolvedRegistry = registry ? new URL(registry).href : MCODE_INTERNAL_NPM_REGISTRY;
-    if (resolvedRegistry === MCODE_INTERNAL_NPM_REGISTRY) {
-      return { packageName, registry: resolvedRegistry };
-    }
-    throw new Error(`Unsupported MCode npm registry: ${resolvedRegistry}`);
-  }
-  if (packageName === mcodePackageName(MCODE_PUBLIC_SCOPE)) {
-    const resolvedRegistry = registry ? new URL(registry).href : MCODE_PUBLIC_NPM_REGISTRY;
-    if (
-      resolvedRegistry === MCODE_PUBLIC_NPM_REGISTRY ||
-      resolvedRegistry === MCODE_PUBLIC_NPM_MIRROR_REGISTRY
-    ) {
-      return { packageName, registry: resolvedRegistry };
-    }
-    throw new Error(`Unsupported MCode npm registry: ${resolvedRegistry}`);
-  }
-  throw new Error(`Unsupported MCode npm package: ${String(packageName)}`);
-}
-
-export function resolveMcodeNpmDistTag(
-  environment: TuiBuildEnvironment | undefined = readEmbeddedTuiBuildEnvironment(),
-  embeddedTag: McodeNpmDistTag | undefined = readEmbeddedTuiNpmDistTag(),
-): McodeNpmDistTag {
-  if (embeddedTag) return embeddedTag;
-  if (environment === 'test') return 'test';
-  if (environment === 'staging') return 'preview';
-  return 'latest';
-}
-
 export function classifyNpmGlobalInstall(
   packageRoot: string,
   globalPrefix: string,
   platform: NodeJS.Platform = process.platform,
-): McodeInstallSource {
+): KcodeInstallSource {
   const normalizedRoot = normalizeResolvedPath(packageRoot, platform);
   const platformPath = platform === 'win32' ? path.win32 : path.posix;
   const packageName =
-    mcodePackageNameFromPath(packageRoot) ?? mcodePackageName(MCODE_INTERNAL_SCOPE);
+    kcodePackageNameFromPath(packageRoot) ?? KCODE_WORKSPACE_PACKAGE_NAME;
   const candidates =
     platform === 'win32'
       ? [platformPath.join(globalPrefix, 'node_modules', packageName)]
@@ -185,183 +155,7 @@ export function classifyNpmGlobalInstall(
     : 'unsupported';
 }
 
-export function buildMcodePackageManagerCommand(
-  source: McodePackageManagerInstallSource,
-  version: string,
-  platform: NodeJS.Platform = process.platform,
-  distribution: McodeNpmDistribution = resolveMcodeNpmDistribution(),
-  prefixInstall?: McodeNpmPrefixInstall,
-): McodePackageManagerCommand {
-  const targetVersion = ['latest', 'preview', 'test'].includes(version)
-    ? version
-    : parseMcodeVersion(version);
-  const target = `${distribution.packageName}@${targetVersion}`;
-  const registryArgs = ['--registry', distribution.registry] as const;
-  const registryDisplay = `--registry ${distribution.registry}`;
-  const npmInstallArgs = [
-    '--ignore-scripts=false',
-    '--include=optional',
-    `--allow-scripts=${distribution.packageName},better-sqlite3`,
-  ];
-  const npmInstallDisplay = npmInstallArgs.join(' ');
-  switch (source) {
-    case 'npm-prefix': {
-      if (!prefixInstall) throw new Error('MCode npm prefix ownership metadata is missing.');
-      if (
-        prefixInstall.packageName !== distribution.packageName ||
-        new URL(prefixInstall.registry).href !== distribution.registry
-      ) {
-        throw new Error('MCode npm prefix ownership does not match the installed package.');
-      }
-      return {
-        executable: prefixInstall.executable,
-        args: [
-          'install',
-          '--global',
-          '--prefix',
-          prefixInstall.prefix,
-          target,
-          ...npmInstallArgs,
-          ...registryArgs,
-        ],
-        display:
-          `${prefixInstall.executable} install --global --prefix ${prefixInstall.prefix} ` +
-          `${target} ${npmInstallDisplay} ${registryDisplay}`,
-      };
-    }
-    case 'npm-global':
-      return {
-        executable: platform === 'win32' ? 'npm.cmd' : 'npm',
-        args: ['install', '--global', target, ...npmInstallArgs, ...registryArgs],
-        display: `npm install --global ${target} ${npmInstallDisplay} ${registryDisplay}`,
-      };
-    case 'pnpm-global':
-      return {
-        executable: platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        args: ['add', '--global', target, ...registryArgs],
-        display: `pnpm add --global ${target} ${registryDisplay}`,
-      };
-    case 'yarn-global':
-      return {
-        executable: platform === 'win32' ? 'yarn.cmd' : 'yarn',
-        args: ['global', 'add', target, ...registryArgs],
-        display: `yarn global add ${target} ${registryDisplay}`,
-      };
-    case 'bun-global':
-      return {
-        executable: platform === 'win32' ? 'bun.exe' : 'bun',
-        args: ['add', '--global', target, ...registryArgs],
-        display: `bun add --global ${target} ${registryDisplay}`,
-      };
-  }
-}
-
-export async function resolveLatestMcodeRegistryVersion(
-  tag: McodeNpmDistTag,
-  dependencies: Partial<ResolveLatestMcodeRegistryVersionDependencies> = {},
-): Promise<string> {
-  const platform = dependencies.platform ?? process.platform;
-  const distribution = dependencies.distribution ?? resolveMcodeNpmDistribution();
-  const run =
-    dependencies.run ??
-    ((executable, args) => {
-      const command = { executable, args, display: executable };
-      const bound = dependencies.runtimeExecutable
-        ? bindMcodeNpmCommandToRuntime(command, dependencies.runtimeExecutable)
-        : command;
-      return runText(bound.executable, bound.args, dependencies.environment);
-    });
-  const npmExecutable = dependencies.npmExecutable ?? (platform === 'win32' ? 'npm.cmd' : 'npm');
-  const output = await run(npmExecutable, [
-    'view',
-    `${distribution.packageName}@${tag}`,
-    'version',
-    '--json',
-    '--registry',
-    distribution.registry,
-    '--fetch-timeout',
-    String(REGISTRY_FETCH_TIMEOUT_MS),
-  ]);
-  let version: unknown;
-  try {
-    version = JSON.parse(output);
-  } catch {
-    version = output.trim();
-  }
-  if (Array.isArray(version)) {
-    if (version.length !== 1) {
-      throw new Error('MCode registry returned an invalid latest version.');
-    }
-    version = version[0];
-  }
-  if (typeof version !== 'string') {
-    throw new Error('MCode registry returned an invalid latest version.');
-  }
-  const parsed = parseMcodeVersion(version);
-  if (tag === 'latest' && parsed.includes('-')) {
-    throw new Error('MCode latest must resolve to a stable semantic version.');
-  }
-  return parsed;
-}
-
-function readEmbeddedTuiBuildEnvironment(): TuiBuildEnvironment | undefined {
-  if (typeof __TUI_BUILD_ENV__ === 'undefined') return undefined;
-  return __TUI_BUILD_ENV__;
-}
-
-function readEmbeddedTuiNpmDistTag(): McodeNpmDistTag | undefined {
-  if (typeof __TUI_NPM_DIST_TAG__ === 'undefined') return undefined;
-  return __TUI_NPM_DIST_TAG__;
-}
-
-export function bindMcodeNpmCommandToRuntime(
-  command: McodePackageManagerCommand,
-  runtimeExecutable: string,
-): McodePackageManagerCommand {
-  const npmExecutable = realpathSync(command.executable);
-  const npmDirectory = path.dirname(npmExecutable);
-  // Unix npm is normally a symlink to npm-cli.js. Windows npm.cmd prefers its
-  // adjacent node.exe over PATH, so bypass that shim and invoke the JS entry.
-  const candidates = [
-    ...(path.basename(npmExecutable) === 'npm-cli.js' ? [npmExecutable] : []),
-    path.join(npmDirectory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(npmDirectory, '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ];
-  const npmCli =
-    candidates.find((file) => existsSync(file) && statSync(file).isFile()) ??
-    resolvePnpmNpmShim(npmExecutable);
-  if (!npmCli)
-    throw new Error(`Cannot locate npm-cli.js for the owned npm executable: ${command.executable}`);
-  return { ...command, executable: runtimeExecutable, args: [npmCli, ...command.args] };
-}
-
-function resolvePnpmNpmShim(npmExecutable: string): string | undefined {
-  // pnpm env places npm behind a shell shim in PNPM_HOME. Read only its literal
-  // versioned CLI target; never execute/source the shim or search other runtimes.
-  try {
-    const metadata = statSync(npmExecutable);
-    if (!metadata.isFile() || metadata.size > 64 * 1024) return undefined;
-    const lines = readFileSync(npmExecutable, 'utf8').split(/\r?\n/u);
-    if (lines[0] !== '#!/bin/sh') return undefined;
-    const commands = lines.map((line) => line.trim()).filter((line) => /^exec\s/u.test(line));
-    if (commands.length === 0) return undefined;
-    const targets = commands.map((line) =>
-      /^exec (?:"\$basedir\/node"|node) "\$basedir\/(nodejs\/\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\/lib\/node_modules\/npm\/bin\/npm-cli\.js)" "\$@"$/u.exec(line)?.[1],
-    );
-    const target = targets[0];
-    if (!target || targets.some((candidate) => candidate !== target)) return undefined;
-    const npmDirectory = path.dirname(npmExecutable);
-    const versionRoot = path.join(npmDirectory, ...target.split('/').slice(0, 2));
-    const cli = realpathSync(path.join(npmDirectory, target));
-    // Reject symlinks that redirect the target outside this pnpm Node version.
-    if (!isResolvedPathInside(versionRoot, cli, path) || !statSync(cli).isFile()) return undefined;
-    return cli;
-  } catch {
-    return undefined;
-  }
-}
-
-export function createMcodeNpmRuntimeEnvironment(
+export function createKcodeNpmRuntimeEnvironment(
   environment: NodeJS.ProcessEnv,
   runtimeExecutable: string,
   platform: NodeJS.Platform = process.platform,
@@ -381,89 +175,33 @@ export function createMcodeNpmRuntimeEnvironment(
   return result;
 }
 
-export function runMcodePackageManagerCommand(
-  command: McodePackageManagerCommand,
-  environment: NodeJS.ProcessEnv = process.env,
-  options: McodePackageManagerRunOptions = {},
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const child = spawn(command.executable, [...command.args], {
-      env: environment,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdout.push(chunk);
-      notifyPackageManagerOutput(options, chunk);
-    });
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr.push(chunk);
-      notifyPackageManagerOutput(options, chunk);
-    });
-    child.once('error', (error) => {
-      if (settled) return;
-      settled = true;
-      reject(error);
-    });
-    child.once('exit', (code, signal) => {
-      if (settled) return;
-      settled = true;
-      if (code === 0) {
-        resolve();
-        return;
-      }
-      const details = Buffer.concat([...stderr, ...stdout])
-        .toString('utf8')
-        .trim();
-      reject(
-        new Error(
-          `${command.executable} failed (${
-            signal ? `signal ${signal}` : `exit ${String(code)}`
-          })${details ? `: ${details}` : ''}`,
-        ),
-      );
-    });
-  });
-}
-
-function notifyPackageManagerOutput(options: McodePackageManagerRunOptions, chunk: Buffer): void {
-  try {
-    options.onOutput?.(chunk.toString('utf8'));
-  } catch {
-    // Progress rendering must never change the package-manager result.
-  }
-}
-
-export function resolveMcodePackageName(
+export function resolveKcodePackageName(
   entryFile = process.argv[1],
-): McodeNpmPackageName | undefined {
-  return resolveMcodePackageIdentity(entryFile)?.packageName;
+): KcodeNpmPackageName | undefined {
+  return resolveKcodePackageIdentity(entryFile)?.packageName;
 }
 
-export function isInternalMcodePackageName(packageName: string | undefined): boolean {
-  return packageName === mcodePackageName(MCODE_INTERNAL_SCOPE);
-}
-
-export function resolveInstalledMcodePackageVersion(
+export function resolveInstalledKcodePackageVersion(
   entryFile = process.argv[1],
 ): string | undefined {
-  return resolveMcodePackageIdentity(entryFile)?.version;
+  return resolveKcodePackageIdentity(entryFile)?.version;
 }
 
-export function resolveMcodeNpmPrefixInstall(
+export function resolveKcodeNpmPrefixInstall(
   entryFile = process.argv[1],
   platform: NodeJS.Platform = process.platform,
   nodeExecutable = process.execPath,
-): McodeNpmPrefixInstall | undefined {
-  const identity = resolveMcodePackageIdentity(entryFile);
+): KcodeNpmPrefixInstall | undefined {
+  const identity = resolveKcodePackageIdentity(entryFile);
   if (!identity) return undefined;
   const platformPath = platform === 'win32' ? path.win32 : path.posix;
-  const nodeModules = platformPath.dirname(platformPath.dirname(identity.packageRoot));
-  if (platformPath.basename(nodeModules).toLocaleLowerCase() !== 'node_modules') return undefined;
+  // The package sits either directly in `node_modules` or behind a scope directory,
+  // so the containing `node_modules` is found rather than assumed at a fixed depth.
+  const packageParent = platformPath.dirname(identity.packageRoot);
+  const nodeModules = [packageParent, platformPath.dirname(packageParent)].find(
+    (candidate) => platformPath.basename(candidate).toLocaleLowerCase() === 'node_modules',
+  );
+  if (!nodeModules) return undefined;
   const nodeModulesParent = platformPath.dirname(nodeModules);
   const packagePrefix =
     platform !== 'win32' && platformPath.basename(nodeModulesParent) === 'lib'
@@ -482,22 +220,23 @@ export function resolveMcodeNpmPrefixInstall(
     platform === 'win32' ? 'npm.cmd' : 'npm',
   );
   if (!existsSync(adjacentNpm)) return undefined;
-  const distribution = resolveMcodeNpmDistribution(identity.packageName);
+  // No receipt beside the package: this is the installer's layout, described
+  // here only so the installation is classified rather than claimed.
   return {
     executable: adjacentNpm,
     packageName: identity.packageName,
     prefix: packagePrefix,
-    registry: distribution.registry,
+    registry: KCODE_NPM_REGISTRY,
   };
 }
 
-function resolveMcodePackageRoot(entryFile = process.argv[1]): string | undefined {
-  return resolveMcodePackageIdentity(entryFile)?.packageRoot;
+function resolveKcodePackageRoot(entryFile = process.argv[1]): string | undefined {
+  return resolveKcodePackageIdentity(entryFile)?.packageRoot;
 }
 
-function resolveMcodePackageIdentity(
+function resolveKcodePackageIdentity(
   entryFile: string | undefined,
-): { packageName: McodeNpmPackageName; packageRoot: string; version?: string } | undefined {
+): { packageName: KcodeNpmPackageName; packageRoot: string; version?: string } | undefined {
   if (!entryFile) return undefined;
   let current: string;
   try {
@@ -515,7 +254,7 @@ function resolveMcodePackageIdentity(
           name?: unknown;
           version?: unknown;
         };
-        const packageName = parseMcodePackageName(manifest.name);
+        const packageName = parseKcodePackageName(manifest.name);
         if (packageName) {
           return {
             packageName,
@@ -538,7 +277,7 @@ function findNpmPrefixReceipt(
   packageRoot: string,
   platform: NodeJS.Platform,
   platformPath: typeof path.posix | typeof path.win32,
-): McodeNpmPrefixInstall | undefined {
+): KcodeNpmPrefixInstall | undefined {
   let candidate = packagePrefix;
   for (let depth = 0; depth < 3; depth += 1) {
     const receipt = readNpmPrefixReceipt(
@@ -562,7 +301,7 @@ function readNpmPrefixReceipt(
   packageRoot: string,
   platform: NodeJS.Platform,
   platformPath: typeof path.posix | typeof path.win32,
-): McodeNpmPrefixInstall | undefined {
+): KcodeNpmPrefixInstall | undefined {
   try {
     const raw = readFileSync(platformPath.join(prefix, 'install.json'), 'utf8').replace(
       /^\uFEFF/u,
@@ -582,7 +321,7 @@ function readNpmPrefixReceipt(
       releasesDirectory?: unknown;
       currentFile?: unknown;
     };
-    const packageName = parseMcodePackageName(value.packageName);
+    const packageName = parseKcodePackageName(value.packageName);
     const legacyLayout = value.schemaVersion === 1 && value.layoutVersion === undefined;
     const versionedLayout =
       value.schemaVersion === 2 &&
@@ -602,10 +341,9 @@ function readNpmPrefixReceipt(
     ) {
       return undefined;
     }
-    const distribution = resolveMcodeNpmDistribution(packageName, value.registry);
+    const registry = new URL(value.registry).href;
     if (
       normalizeResolvedPath(value.prefix, platform) !== normalizeResolvedPath(prefix, platform) ||
-      new URL(value.registry).href !== distribution.registry ||
       !existsSync(value.npmExecutable)
     ) {
       return undefined;
@@ -634,7 +372,7 @@ function readNpmPrefixReceipt(
       executable: value.npmExecutable,
       packageName,
       prefix,
-      registry: distribution.registry,
+      registry,
     };
   } catch {
     return undefined;
@@ -653,21 +391,21 @@ function isResolvedPathInside(
   return relative !== '' && !relative.startsWith('..') && !platformPath.isAbsolute(relative);
 }
 
-function parseMcodePackageName(value: unknown): McodeNpmPackageName | undefined {
-  if (value === mcodePackageName(MCODE_INTERNAL_SCOPE)) return value as McodeNpmPackageName;
-  if (value === mcodePackageName(MCODE_PUBLIC_SCOPE)) return value as McodeNpmPackageName;
-  return undefined;
+function parseKcodePackageName(value: unknown): KcodeNpmPackageName | undefined {
+  return isKcodePackageName(value) ? value : undefined;
 }
 
-function mcodePackageName(scope: string): McodeNpmPackageName {
-  return `${scope}/${MCODE_PACKAGE_BASENAME}` as McodeNpmPackageName;
-}
-
-function mcodePackageNameFromPath(packageRoot: string): McodeNpmPackageName | undefined {
+/**
+ * Identity of the package directory a build is running from: the product's own
+ * name directly under `node_modules`, or a scoped historical name, which needs
+ * its scope segment to be read back.
+ */
+function kcodePackageNameFromPath(packageRoot: string): KcodeNpmPackageName | undefined {
   const normalized = packageRoot.replaceAll('\\', '/');
   const segments = normalized.split('/');
-  if (segments.at(-1) !== MCODE_PACKAGE_BASENAME) return undefined;
-  return parseMcodePackageName(`${segments.at(-2)}/${MCODE_PACKAGE_BASENAME}`);
+  const last = segments.at(-1);
+  const scoped = parseKcodePackageName(`${segments.at(-2)}/${last}`);
+  return parseKcodePackageName(last) ?? scoped;
 }
 
 function normalizeResolvedPath(value: string, platform: NodeJS.Platform): string {

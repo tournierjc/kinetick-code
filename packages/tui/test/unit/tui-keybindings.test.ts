@@ -6,7 +6,7 @@ import {
   resolveTuiKeybinding,
   formatTuiKeybinding,
 } from "../../src/tui/shell/keybindings.js";
-import { MINIMAX_CODE_COMMANDS } from "../../src/tui/commands/catalog.js";
+import { KCODE_COMMANDS } from "../../src/tui/commands/catalog.js";
 
 describe("TUI shell keybindings", () => {
   it("maps terminal sequences to semantic shell actions", () => {
@@ -252,7 +252,7 @@ describe("TUI shell keybindings", () => {
       rows.find((row) => row.ids.includes("interaction.scroll-up"))?.ids,
     ).toEqual(["interaction.scroll-up", "interaction.scroll-down"]);
     expect(
-      MINIMAX_CODE_COMMANDS.find((command) => command.name === "transcript")
+      KCODE_COMMANDS.find((command) => command.name === "transcript")
         ?.shortcut,
     ).toBeUndefined();
     expect(rows).toContainEqual({
@@ -409,6 +409,22 @@ describe("TUI shell keybindings", () => {
         hasLiveRun: true,
       }),
     ).toBe("toggle-tasks");
+  });
+
+  it("resolves the tab order keys from the sequences a terminal actually sends", () => {
+    const context = {
+      interactionActive: false,
+      hasLiveRun: false,
+    };
+
+    // `Shift+Alt+←/→` as xterm sends a modified arrow (CSI 1;4). This is the whole
+    // point of the binding: the bar keys must work from bytes, not from a test-only
+    // key id.
+    expect(resolveTuiKeybinding("\u001b[1;4D", context)).toBe("move-tab-earlier");
+    expect(resolveTuiKeybinding("\u001b[1;4C", context)).toBe("move-tab-later");
+    // The cycling keys keep their own sequences.
+    expect(resolveTuiKeybinding("\u001b[1;6D", context)).toBe("previous-tab");
+    expect(resolveTuiKeybinding("\u001b[1;6C", context)).toBe("next-tab");
   });
 
   it("checks reload candidates against host defaults instead of stale user bindings", () => {

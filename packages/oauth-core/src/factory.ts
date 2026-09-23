@@ -1,5 +1,5 @@
 import type { AuthNamespaceInput } from './contracts.js';
-import { MCodeOAuthCore } from './auth-core.js';
+import { KCodeOAuthCore } from './auth-core.js';
 import { createCredentialStore } from './credential-store/factory.js';
 import { createAuthNamespace } from './namespace.js';
 import { migrateLegacyAuthNamespace } from './namespace-migration.js';
@@ -7,11 +7,11 @@ import { HttpOAuthClient, type HttpOAuthClientOptions } from './oauth-client.js'
 import {
   createAuthManager,
   createTokenProvider,
-  type MCodeAuthManager,
-  type MCodeTokenProvider,
+  type KCodeAuthManager,
+  type KCodeTokenProvider,
 } from './token-provider.js';
 
-export interface CreateMCodeLocalAuthOptions extends AuthNamespaceInput {
+export interface CreateKCodeLocalAuthOptions extends AuthNamespaceInput {
   fetchImpl?: typeof fetch;
   endpoints: Pick<
     HttpOAuthClientOptions,
@@ -22,17 +22,17 @@ export interface CreateMCodeLocalAuthOptions extends AuthNamespaceInput {
   >;
 }
 
-export function createMCodeTokenProvider(options: CreateMCodeLocalAuthOptions): MCodeTokenProvider {
+export function createKCodeTokenProvider(options: CreateKCodeLocalAuthOptions): KCodeTokenProvider {
   return createTokenProvider(createCore(options));
 }
 
-export function createMCodeAuthManager(options: CreateMCodeLocalAuthOptions): MCodeAuthManager {
+export function createKCodeAuthManager(options: CreateKCodeLocalAuthOptions): KCodeAuthManager {
   return createAuthManager(createCore(options));
 }
 
-function createCore(options: CreateMCodeLocalAuthOptions): MCodeOAuthCore {
+function createCore(options: CreateKCodeLocalAuthOptions): KCodeOAuthCore {
   const namespace = createAuthNamespace(options);
-  return new MCodeOAuthCore({
+  return new KCodeOAuthCore({
     namespace,
     credentialStore: createCredentialStore({ authHome: namespace.namespaceHome }),
     oauthClient: new HttpOAuthClient({ ...options.endpoints, fetchImpl: options.fetchImpl }),

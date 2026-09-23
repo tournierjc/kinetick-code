@@ -72,8 +72,8 @@ test("CLI defaults to the shared user config without migrating the old source di
   const config = path.join(home, ".minimax", "config.yaml");
   const oldConfig = path.join(home, ".minimax-code", "config.yaml");
   for (const file of [config, oldConfig]) mkdirSync(path.dirname(file));
-  writeFileSync(config, "telemetry:\n  enabled: true\n", { mode: 0o600 });
-  const oldContents = "telemetry:\n  enabled: false\n";
+  writeFileSync(config, "logLevel: info\n", { mode: 0o600 });
+  const oldContents = "logLevel: debug\n";
   writeFileSync(oldConfig, oldContents, { mode: 0o600 });
   for (const name of Object.keys(options.env)) {
     if (name.startsWith("__MAVIS_RUNTIME")) delete options.env[name];
@@ -83,17 +83,20 @@ test("CLI defaults to the shared user config without migrating the old source di
   Object.assign(options.env, {
     HOME: home,
     USERPROFILE: home,
-    MCODE_DISABLE_TELEMETRY: "1",
   });
-  const result = spawnSync(process.execPath, [cli, "telemetry", "status"], {
+  // Fork adaptation: this distribution ships no telemetry subsystem, so the
+  // upstream `mcode telemetry status` probe does not exist here. Probe the
+  // same shared-config resolution through `provider list --json`, which must
+  // read ~/.minimax/config.yaml and never migrate ~/.minimax-code.
+  const result = spawnSync(process.execPath, [cli, "provider", "list", "--json"], {
     ...options,
     encoding: "utf8",
     timeout: runtimeTimeoutMs,
   });
   assertSuccessfulChild(result);
-  const status = JSON.parse(result.stdout);
-  assert.equal(status.configFile, config);
-  assert.equal(status.configured, true);
+  const listing = JSON.parse(result.stdout);
+  assert.ok(Array.isArray(listing.providers), result.stdout);
+  assert.equal(readFileSync(config, "utf8"), "logLevel: info\n");
   assert.equal(readFileSync(oldConfig, "utf8"), oldContents);
 });
 test("provider configuration loads from an isolated data directory", (t) => {

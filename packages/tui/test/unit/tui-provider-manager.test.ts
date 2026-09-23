@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { stripAnsi } from "../../src/tui/rendering/text.js";
 import { TuiProviderManager } from "../../src/tui/features/provider/manager.js";
-import type { McodeProviderSnapshot } from "../../src/provider/contract.js";
+import type { KcodeProviderSnapshot } from "../../src/provider/contract.js";
 
-const snapshot: McodeProviderSnapshot = {
+const snapshot: KcodeProviderSnapshot = {
   minimaxModelSource: "token_plan",
   providers: [
     {
@@ -43,7 +43,7 @@ const snapshot: McodeProviderSnapshot = {
   ],
 };
 
-const snapshotWithCodex: McodeProviderSnapshot = {
+const snapshotWithCodex: KcodeProviderSnapshot = {
   ...snapshot,
   providers: [
     {
@@ -63,7 +63,7 @@ const snapshotWithCodex: McodeProviderSnapshot = {
 
 function withSource(
   source: "token_plan" | "minimax_api_key",
-): McodeProviderSnapshot {
+): KcodeProviderSnapshot {
   return {
     ...snapshot,
     minimaxModelSource: source,
@@ -80,6 +80,24 @@ function withSource(
     ),
   };
 }
+
+const snapshotWithCopilot: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    {
+      providerId: "github-copilot",
+      name: "GitHub Copilot",
+      kind: "copilot-oauth",
+      active: false,
+      enabled: true,
+      readOnly: true,
+      hasApiKey: false,
+      status: { state: "disconnected" },
+      models: [],
+    },
+    ...snapshot.providers,
+  ],
+};
 
 function createManager(
   overrides: Partial<ConstructorParameters<typeof TuiProviderManager>[0]> = {},
@@ -126,7 +144,7 @@ describe("TuiProviderManager", () => {
       providerId: "openai-codex" as const,
       authUrl: "https://auth.openai.example/authorize",
     }));
-    const pendingSnapshot: McodeProviderSnapshot = {
+    const pendingSnapshot: KcodeProviderSnapshot = {
       ...snapshotWithCodex,
       providers: snapshotWithCodex.providers.map((provider) =>
         provider.kind === "codex-oauth"
@@ -143,6 +161,75 @@ describe("TuiProviderManager", () => {
     manager.handleInput("\r");
 
     await vi.waitFor(() => expect(onConnectCodex).toHaveBeenCalledOnce());
+  });
+
+
+  it("starts the independent Copilot OAuth flow from its provider row", async () => {
+    const onConnectCopilot = vi.fn();
+    const manager = createManager({
+      snapshot: snapshotWithCopilot,
+      onConnectCopilot,
+    });
+
+    manager.handleInput("\u001b[A");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Not connected · Enter or Space to connect",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onConnectCopilot).toHaveBeenCalledOnce());
+  });
+
+  it("reports the Copilot row as connected without restarting sign-in", async () => {
+    const onConnectCopilot = vi.fn();
+    const connected: KcodeProviderSnapshot = {
+      ...snapshotWithCopilot,
+      providers: snapshotWithCopilot.providers.map((provider) =>
+        provider.kind === "copilot-oauth"
+          ? {
+              ...provider,
+              status: { state: "connected" },
+              models: [{ modelId: "claude-opus-4.8", displayName: "Claude Opus 4.8" }],
+            }
+          : provider,
+      ),
+    };
+    const manager = createManager({ snapshot: connected, onConnectCopilot });
+
+    manager.handleInput("\u001b[A");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Connected with GitHub OAuth · 1 model",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+        "GitHub Copilot is already connected.",
+      ),
+    );
+    expect(onConnectCopilot).not.toHaveBeenCalled();
+  });
+
+  it("routes Copilot connectivity and editing through its sign-in flow", async () => {
+    const onConnectCopilot = vi.fn();
+    const manager = createManager({
+      snapshot: snapshotWithCopilot,
+      onConnectCopilot,
+    });
+
+    manager.handleInput("\u001b[A");
+    manager.handleInput("t");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+        "Copilot OAuth connectivity is managed by its sign-in flow.",
+      ),
+    );
+
+    manager.handleInput("e");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Use Enter or Space on the GitHub Copilot row to start sign-in.",
+    );
   });
 
   it("uses the Pi cancel binding to close the provider list", () => {
@@ -337,7 +424,7 @@ describe("TuiProviderManager", () => {
     // Regression caught in review: `active` means "current MiniMax credential
     // source" for MiniMax rows but "owns the selected model" for custom rows.
     // Rendering both as ● made two rows look selected at once.
-    const withSelectedCustomModel: McodeProviderSnapshot = {
+    const withSelectedCustomModel: KcodeProviderSnapshot = {
       ...withSource("minimax_api_key"),
       providers: withSource("minimax_api_key").providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -371,7 +458,7 @@ describe("TuiProviderManager", () => {
   });
 
   it("redacts credentials and URL parameters from a custom provider", () => {
-    const credentialed: McodeProviderSnapshot = {
+    const credentialed: KcodeProviderSnapshot = {
       ...snapshot,
       providers: snapshot.providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -430,7 +517,7 @@ describe("TuiProviderManager", () => {
   it("renders a disabled custom provider without the in-use marker", () => {
     // Regression caught: a leftover selected model rendered `● … Disabled`,
     // claiming a provider Runtime no longer resolves is the active source.
-    const disabled: McodeProviderSnapshot = {
+    const disabled: KcodeProviderSnapshot = {
       ...snapshot,
       providers: snapshot.providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -542,4 +629,75 @@ it("shows discovery failures and allows a retry", async () => {
       "Models are already up to date.",
     ),
   );
+});
+
+const snapshotWithBuiltin: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    ...snapshot.providers,
+    {
+      providerId: "openrouter",
+      name: "OpenRouter",
+      kind: "builtin",
+      active: false,
+      enabled: true,
+      readOnly: true,
+      apiFormat: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      hasApiKey: false,
+      maskedApiKey: "sk-o****MPLE",
+      models: [{ modelId: "openai/gpt-5-mini", displayName: "GPT-5 Mini" }],
+    },
+  ],
+};
+
+it("lists a connection the builtin tree owns and tests it in place", async () => {
+  const onTest = vi.fn(async () => ({
+    success: true,
+    status: { state: "available" },
+  }));
+  const manager = createManager({ snapshot: snapshotWithBuiltin, onTest });
+
+  manager.handleInput("\u001b[A");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  const rendered = stripAnsi(manager.render(110).join("\n"));
+  expect(rendered).toContain("OpenRouter");
+  expect(rendered).toContain("https://openrouter.ai/api/v1");
+  expect(rendered).toContain("GPT-5 Mini");
+
+  manager.handleInput("t");
+  await vi.waitFor(() => expect(onTest).toHaveBeenCalledWith("openrouter"));
+});
+
+it("points a builtin-tree row at config.yaml instead of editing it here", () => {
+  const manager = createManager({ snapshot: snapshotWithBuiltin });
+
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("e");
+
+  const rendered = stripAnsi(manager.render(140).join("\n"));
+  expect(rendered).toContain("OpenRouter is defined in config.yaml");
+  expect(rendered).toContain("Press a to connect it as a provider you manage here");
+});
+
+it("connects a provider from the panel without leaving the catalogue behind", () => {
+  const onAddProvider = vi.fn();
+  const manager = createManager({ onAddProvider });
+
+  expect(stripAnsi(manager.render(110).join("\n"))).toContain("a add provider");
+  manager.handleInput("a");
+
+  expect(onAddProvider).toHaveBeenCalledOnce();
+});
+
+it("keeps the add-provider action out of hosts that cannot save one", () => {
+  const manager = createManager();
+
+  const rendered = stripAnsi(manager.render(110).join("\n"));
+  expect(rendered).not.toContain("a add provider");
+  expect(rendered).toContain("Select a custom connection and press r");
 });

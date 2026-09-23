@@ -1,5 +1,6 @@
 import type { TuiPendingPermission, TuiQueuedMessage } from '../../types/runtime-models.js';
 import type { ActiveTuiQuestionnaire } from '../interaction/questionnaire.js';
+import { EMPTY_TUI_TAB_LIST, type TuiTabListState } from './tabs.js';
 
 export type TuiConnectionPhase =
   | 'disconnected'
@@ -64,6 +65,11 @@ export interface TuiSessionViewState {
 export interface TuiState {
   readonly activeSessionId?: string;
   readonly sessions: ReadonlyMap<string, TuiSessionViewState>;
+  /**
+   * Ordered open tabs. The active Session is always present; see
+   * `state/tabs.ts` for the ordering and close rules.
+   */
+  readonly tabs: TuiTabListState;
   readonly connection: {
     readonly phase: TuiConnectionPhase;
     readonly generation: number;
@@ -78,6 +84,7 @@ export interface TuiState {
 export function createTuiState(): TuiState {
   return {
     sessions: new Map(),
+    tabs: EMPTY_TUI_TAB_LIST,
     connection: {
       phase: 'snapshotting',
       generation: 0,

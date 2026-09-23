@@ -25,6 +25,55 @@ The product, TUI, and root workspace use the same 0.4.12 version. The embedded t
 
 See [TUI capability coverage](tui-capabilities.md) for individual features, [Verification records](verification.md) for evidence, and [Publication scope](publication-authorization.md) for the repository boundary.
 
+## Product identity
+
+The fork ships as **Kinetick Code** with the `kcode` command, the `KINETICK CODE` welcome wordmark, and
+`kinetick-code-*` release and source-archive names. Documentation, the CLI/TUI/ACP display strings, the
+OpenRouter app-attribution header, and the release tooling carry that identity. Internal names follow the
+same rename: TypeScript identifiers (`Kcode*`, `KCODE_*`), the workspace package names (`@mavis/code`,
+`kinetick-code` at the repository root), and the strings this build writes into user files
+(`# Added by Kinetick Code`, `# Managed by Kinetick Code`, `process.title = 'kinetick-code'`).
+
+These spellings are deliberately unchanged, and the product rename does not alter them:
+
+- `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` keep the upstream attribution text.
+- The ACP extension namespace and method names (`minimax-code/extensions`, `mcode/session/*`), the
+  `minimax-code-login` authentication-method id, and the ACP agent `name` are the wire contract that ACP
+  clients already implement.
+- Account device-flow client fields (`device_platform`/`browser_name`/`client`: `mcode`), the reported
+  `Client  mcode <version>` identity in feedback diagnostics, and the remote-control headers (`X-MCode-*`)
+  belong to MiniMax service contracts.
+- Update-channel values (`product: minimax-code`, `updateOwner: mcode-installer`) and the `mcode` launcher
+  names the prefix updater looks for identify installs created by the upstream installer. They are read to
+  recognize such an installation, not to follow its channel: an installation whose `install.json` carries
+  that identity is not replaced in place, and every installation this build owns — an archive install or a
+  global npm/pnpm/yarn/bun install — updates from this repository's GitHub Releases (see
+  [Updating](installation.md#updating)).
+- Data locations (`v2/mcode/drafts`, `v2/observability/mcode`, `.minimax*`, `.mcode`) and environment
+  variables (`MINIMAX_*`, `MCODE_*`) are persisted user state; renaming them would orphan existing
+  drafts, logs, and configuration. The same reasoning keeps the `.mcode-update-*` files the updater leaves
+  in an install prefix. The path marker and the `rm`-shim header do carry the fork name now
+  (`# Added by Kinetick Code`, `# Managed by Kinetick Code`); the spellings earlier releases wrote are
+  still recognized so an existing managed block in a user's shell profile is never duplicated and an older
+  shim is rewritten in place on the next startup.
+- The release archives install under this product's own package name, `kinetick-code`, which the build
+  manifest, the release manifest, `kcode update` and install-source detection all resolve a running
+  installation against (`packages/tui/src/package-identity.ts`, mirrored by `scripts/lib/package-identity.mjs`
+  for the build and release scripts). The names the distribution used earlier — `@minimax-ai/code` for
+  distributed builds, `@minimax/code` for old workspace installs — are still recognized and never written, so
+  an existing installation is classified and keeps updating instead of being reported as a foreign package.
+  `@minimax/mcode-sandbox-runtime` is an upstream dependency pinned in `packages/local-runtime-v2`.
+- The bundled runtime prompts and agent assets (including the `kinetick-code-product` skill) are upstream
+  product material that states its own ownership; changing them is a runtime-content change, not a
+  documentation rename. The vendored `third_party/**` packages keep their own notices and identifications
+  for the same reason, and the recorded demo assets and the local CHANGELOG entries describing earlier
+  releases keep their provenance from the version that produced them.
+- `mcode-tools` and its `@minimax/*` package names, plus the plugin manifest key `mcode`, are separate
+  feature and manifest contracts. The `--harness minimax-code` argument the performance driver passes is a
+  workload name the external benchmark harness recognizes, and the two issue-automation workflows
+  (`label-issue-product`, `sync-issue-to-feishu`) stay guarded on the upstream repository, so they remain
+  inert here.
+
 ## Repository baseline
 
 The initial CLI source snapshot was imported into `MiniMax-AI/minimax-code` on 2026-09-18 at commit `c59cf5377045aa1a3e699c242d089b73b7cdc2ad`. Commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image above the download links. The import preserved the repository's Desktop issue history and support workflow while adding the CLI source without internal Git history.

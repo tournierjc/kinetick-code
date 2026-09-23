@@ -104,7 +104,7 @@ jobs:
           path: ${{ runner.temp }}/package
       - run: pnpm verify --profile package
         env:
-          MCODE_RELEASE_ARCHIVE: ${{ runner.temp }}/package/minimax-code-${{ needs.build.outputs.version }}.tar.gz
+          MCODE_RELEASE_ARCHIVE: ${{ runner.temp }}/package/kinetick-code-${{ needs.build.outputs.version }}.tar.gz
           MCODE_VERIFY_REPORT_DIR: ${{ runner.temp }}/install-report
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         if: ${{ always() }}

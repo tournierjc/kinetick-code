@@ -44,6 +44,10 @@
       "types": "./src/models-dev.ts",
       "import": "./dist/models-dev.js"
     },
+    "./egress-guard": {
+      "types": "./src/egress-guard.ts",
+      "import": "./dist/egress-guard.js"
+    },
     "./llm-retry-event": {
       "types": "./src/llm-retry-event.ts",
       "import": "./dist/llm-retry-event.js"
@@ -223,6 +227,9 @@
       ],
       "models-dev": [
         "src/models-dev.ts"
+      ],
+      "egress-guard": [
+        "src/egress-guard.ts"
       ],
       "llm-retry-event": [
         "src/llm-retry-event.ts"

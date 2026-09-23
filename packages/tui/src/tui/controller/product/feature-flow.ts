@@ -1,7 +1,6 @@
 import { formatContextWindow } from '../../features/model/context-window.js';
 import type {
   TuiConfigurationPort,
-  TuiDailyCheckin,
   TuiInspectionPort,
   TuiInteractionPort,
   TuiModel,
@@ -20,6 +19,7 @@ import {
 import { TuiReportInspectionPanel } from '../../features/inspection/report-panel.js';
 import { TuiModelPicker } from '../../features/model/picker.js';
 import { TuiCodexLogin } from '../../features/auth/codex-login.js';
+import { TuiCopilotLogin } from '../../features/auth/copilot-login.js';
 import { TuiProviderManager } from '../../features/provider/manager.js';
 import {
   TuiProviderOnboarding,
@@ -27,12 +27,20 @@ import {
 } from '../../features/provider/onboarding.js';
 import { TuiPluginManager } from '../../features/plugin/manager.js';
 import { TuiSessionManager } from '../../features/session/manager.js';
+import { searchSessionPrompts } from '../../features/session/prompt-search.js';
 import { TuiTranscriptPanel } from '../../features/transcript/panel.js';
 import { TuiChangelogPanel } from '../../features/changelog/panel.js';
 import {
   extractTuiChangelogMarkdown,
   readPackagedTuiChangelog,
 } from '../../features/changelog/content.js';
+import {
+  aggregateSessionCost,
+  buildSessionCostRows,
+  type SessionCostBreakdown,
+  type SessionCostRow,
+} from '../../../application/session-cost.js';
+import { collectTuiDelegatedSessions } from '../../../runtime/delegation.js';
 import {
   createTuiAccountStatusInspection,
   createTuiConfigInspection,
@@ -68,17 +76,20 @@ import type { TuiChatController } from '../chat-controller.js';
 import { TuiModelState } from './model-state.js';
 import { isRuntimeErrorCode, isRuntimeMethodNotImplemented } from '../support.js';
 import { resolveTuiThinkingChoice } from '../../features/model/thinking.js';
-import { McodeProviderApplication } from '../../../provider/application.js';
-import type { McodeCodexOAuthStatus, McodeProviderTemplate } from '../../../provider/contract.js';
-import { McodePluginApplication } from '../../../plugin/application.js';
-import type { McodePluginRuntimeAccess, McodePluginView } from '../../../plugin/contract.js';
+import { KcodeProviderApplication } from '../../../provider/application.js';
+import type {
+  KcodeCodexOAuthStatus,
+  KcodeCopilotOAuthStatus,
+  KcodeProviderTemplate,
+} from '../../../provider/contract.js';
+import { KcodePluginApplication } from '../../../plugin/application.js';
+import type { KcodePluginRuntimeAccess, KcodePluginView } from '../../../plugin/contract.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 import type { TuiTranscriptExporter } from '../../../host/transcript-export.js';
 import { TuiSessionForkFlow } from '../session-fork-flow.js';
 import { hyperlink } from '../../engine/public.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
-import { MINIMAX_CODE_VERSION } from '../../../build-info.js';
-import { formatTuiDailyCheckinOutcome } from '../../../checkin/presentation.js';
+import { KCODE_VERSION } from '../../../build-info.js';
 
 const OFFICIAL_MODEL_LOGIN_HINT = 'Sign in with /login to use official MiniMax models.';
 const SESSION_MANAGER_PAGE_SIZE = 50;
@@ -87,11 +98,10 @@ const SESSION_EXPORT_PAGE_SIZE = 200;
 
 type FeatureRuntime = TuiSessionPort &
   TuiConfigurationPort &
-  TuiDailyCheckin &
   TuiInspectionPort &
   TuiInteractionPort &
   TuiWorkspaceGitPort &
-  McodePluginRuntimeAccess &
+  KcodePluginRuntimeAccess &
   Partial<TuiSessionForkPort>;
 
 type AppendLocalCell = (
@@ -132,11 +142,15 @@ export interface TuiFeatureFlowOptions {
   readonly onChanged: () => void;
   readonly onNewSession: () => void;
   readonly onOpenSession: (sessionId: string) => Promise<void>;
-  readonly onArchivedCurrentSession: (sessionId: string) => Promise<void>;
+  /**
+   * Fires when the visible Session disappears — archived or deleted. The host
+   * resets the shell to a fresh Session; the Session itself is already gone.
+   */
+  readonly onCurrentSessionClosed: (sessionId: string) => Promise<void>;
   readonly refreshAutocomplete: () => void;
   /** Starts the `/login` sign-in flow; absent when the host has no auth. */
   readonly onStartMiniMaxLogin?: () => void;
-  readonly loadProviderTemplates?: () => Promise<readonly McodeProviderTemplate[]>;
+  readonly loadProviderTemplates?: () => Promise<readonly KcodeProviderTemplate[]>;
   readonly isStopped?: () => boolean;
   readonly hasLiveRun?: () => boolean;
 }
@@ -148,14 +162,15 @@ export interface TuiSessionManagerOpenOptions {
 
 export class TuiFeatureFlow {
   private readonly modelState: TuiModelState;
-  private readonly providerApplication: McodeProviderApplication;
-  private readonly pluginApplication: McodePluginApplication;
+  private readonly providerApplication: KcodeProviderApplication;
+  private readonly pluginApplication: KcodePluginApplication;
   private readonly sessionForkFlow: TuiSessionForkFlow;
   private skillCommandsValue: TuiCommand[] = [];
   private inspectionPanel: Component | undefined;
   private modelPicker: Component | undefined;
   private providerManager: Component | undefined;
   private codexLogin: TuiCodexLogin | undefined;
+  private copilotLogin: TuiCopilotLogin | undefined;
   private providerOnboarding: Component | undefined;
   private transcriptScreen: TuiFeatureScreenHandle | undefined;
   private pluginScreen: TuiFeatureScreenHandle | undefined;
@@ -182,8 +197,8 @@ export class TuiFeatureFlow {
       onChanged: options.onChanged,
       isStopped: () => this.isStopped(),
     });
-    this.providerApplication = new McodeProviderApplication(options.runtime);
-    this.pluginApplication = new McodePluginApplication(options.runtime);
+    this.providerApplication = new KcodeProviderApplication(options.runtime);
+    this.pluginApplication = new KcodePluginApplication(options.runtime);
     this.sessionForkFlow = new TuiSessionForkFlow({
       runtime: options.runtime,
       currentSession: () => options.controller.snapshot().session,
@@ -258,6 +273,7 @@ export class TuiFeatureFlow {
   stop(): void {
     this.stopped = true;
     void this.codexLogin?.cancel();
+    void this.copilotLogin?.cancel();
     this.invalidateFeatureLoads({ includeSkillRefresh: true });
     this.modelState.stop();
     this.setCompacting(false);
@@ -375,7 +391,7 @@ export class TuiFeatureFlow {
         const session = this.options.controller.snapshot().session;
         return {
           sessionId: session?.sessionId,
-          title: session?.title || 'MCode Transcript',
+          title: session?.title || 'KCode Transcript',
           exportedAtMs: Date.now(),
         };
       },
@@ -424,7 +440,7 @@ export class TuiFeatureFlow {
       if (this.isStopped()) return;
       const panel = new TuiChangelogPanel({
         markdown: extractTuiChangelogMarkdown(source),
-        version: MINIMAX_CODE_VERSION,
+        version: KCODE_VERSION,
         onClose: () => this.closeInspectionPanel(panel),
         requestRender: this.options.onChanged,
       });
@@ -434,7 +450,7 @@ export class TuiFeatureFlow {
       this.options.append(
         formatTuiActionFailure(error, {
           summary: "Couldn't load the packaged changelog.",
-          nextStep: 'Reinstall or update MCode, then retry /changelog.',
+          nextStep: 'Reinstall or update KCode, then retry /changelog.',
         }),
         'warning',
       );
@@ -470,7 +486,10 @@ export class TuiFeatureFlow {
   ): Promise<void> {
     if (this.isStopped()) return;
     const sourceCommand = openOptions.initialRenameSessionId ? '/rename' : '/sessions';
-    if (this.rejectLiveSessionNavigation(sourceCommand)) return;
+    // The list only reads and switches, and switching is allowed while a turn
+    // runs, so opening it is allowed too. `/rename` still needs a stopped Session,
+    // and the row actions below keep their own guards.
+    if (sourceCommand === '/rename' && this.rejectLiveSessionNavigation(sourceCommand)) return;
     this.closeInspectionPanel();
     const sessionGeneration = this.sessionGeneration;
     const loadSequence = ++this.sessionManagerLoadSequence;
@@ -508,7 +527,7 @@ export class TuiFeatureFlow {
     ) {
       return;
     }
-    if (this.rejectLiveSessionNavigation(sourceCommand)) return;
+    if (sourceCommand === '/rename' && this.rejectLiveSessionNavigation(sourceCommand)) return;
     let loadedScope: 'workspace' | 'all' = 'workspace';
     let nextCursor = firstPage.nextCursor;
     const sessions =
@@ -542,14 +561,14 @@ export class TuiFeatureFlow {
         };
       },
       onSelect: async (sessionId) => {
-        if (this.rejectLiveSessionNavigation('/sessions')) {
-          throw new Error('Stop the running turn before switching Sessions.');
-        }
+        // Selecting is the same activation a tab switch performs: the Session on
+        // screen changes, the previous one keeps running in the background.
         await this.options.onOpenSession(sessionId);
         this.options.surface.close(manager);
       },
       onNew: async () => {
-        if (this.rejectLiveSessionNavigation('/new')) return;
+        // Opening a Session in a new tab is navigation: the Session on screen
+        // keeps its tab and a running turn keeps streaming into its pane.
         this.options.onNewSession();
         this.options.surface.close(manager);
       },
@@ -567,9 +586,20 @@ export class TuiFeatureFlow {
           throw new Error('Stop the running turn before archiving or restoring a Session.');
         }
         await this.options.controller.setSessionArchived(sessionId, archived);
-        if (archived && wasCurrent) await this.options.onArchivedCurrentSession(sessionId);
+        if (archived && wasCurrent) await this.options.onCurrentSessionClosed(sessionId);
         this.options.onChanged();
       },
+      onDelete: async (sessionId) => {
+        const wasCurrent = this.options.controller.snapshot().session?.sessionId === sessionId;
+        if (this.rejectLiveSessionNavigation('/sessions')) {
+          throw new Error('Stop the running turn before deleting a Session.');
+        }
+        await this.options.controller.deleteSession(sessionId);
+        if (wasCurrent) await this.options.onCurrentSessionClosed(sessionId);
+        this.options.onChanged();
+      },
+      onSearchHistory: (query, sessionIds) =>
+        searchSessionPrompts(this.options.runtime, query, sessionIds),
       onCancel: () => this.options.surface.close(manager),
       requestRender: this.options.onChanged,
       maxRows: () => this.sessionManagerMaxRows(),
@@ -585,21 +615,29 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.modelLoadSequence;
     let models: TuiModel[];
     let managedTokenPresent = false;
-    let codexOAuthStatus: McodeCodexOAuthStatus;
+    let codexOAuthStatus: KcodeCodexOAuthStatus;
+    let copilotOAuthStatus: KcodeCopilotOAuthStatus;
     try {
-      const [modelCatalog, account, codexStatus] = await Promise.all([
+      const [modelCatalog, account, codexStatus, copilotStatus] = await Promise.all([
         this.options.runtime.listModels(sessionId),
         this.options.runtime.getAccountStatus(sessionId),
         this.options.runtime.getCodexOAuthStatus().catch(
-          (): McodeCodexOAuthStatus => ({
+          (): KcodeCodexOAuthStatus => ({
             state: 'hidden',
             providerId: 'openai-codex',
+          }),
+        ),
+        this.options.runtime.getCopilotOAuthStatus().catch(
+          (): KcodeCopilotOAuthStatus => ({
+            state: 'hidden',
+            providerId: 'github-copilot',
           }),
         ),
       ]);
       models = modelCatalog;
       managedTokenPresent = account.managedTokenPresent === true;
       codexOAuthStatus = codexStatus;
+      copilotOAuthStatus = copilotStatus;
     } catch (error) {
       if (this.isCurrentSessionRequest(sessionId, sessionGeneration, loadSequence)) {
         this.options.append(
@@ -717,6 +755,23 @@ export class TuiFeatureFlow {
                 },
               },
             }),
+        ...(copilotOAuthStatus.state === 'hidden'
+          ? {}
+          : {
+              copilotOAuth: {
+                state: copilotOAuthStatus.state,
+                onConnect: () => {
+                  if (
+                    this.modelPicker !== picker ||
+                    !this.isCurrentSessionRequest(sessionId, sessionGeneration, loadSequence)
+                  ) {
+                    return;
+                  }
+                  this.closeModelPicker();
+                  this.showCopilotLogin('model');
+                },
+              },
+            }),
         onAddProvider: () => {
           this.closeModelPicker();
           void this.showProviderOnboarding();
@@ -761,7 +816,7 @@ export class TuiFeatureFlow {
     this.options.surface.show(picker);
   }
 
-  private async showProviderOnboarding(): Promise<void> {
+  private async showProviderOnboarding(returnTo: 'model' | 'provider' = 'model'): Promise<void> {
     if (this.isStopped()) return;
     this.closeProviderManager();
     this.closeProviderOnboarding();
@@ -770,7 +825,7 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.providerLoadSequence;
     this.options.setHint('Loading provider catalog…');
     this.options.onChanged();
-    let templates: readonly McodeProviderTemplate[] = [];
+    let templates: readonly KcodeProviderTemplate[] = [];
     let catalogWarning: string | undefined;
     try {
       templates = await (
@@ -815,8 +870,13 @@ export class TuiFeatureFlow {
       ...(catalogWarning ? { catalogWarning } : {}),
       onSave: (input) => this.providerApplication.saveCandidate(input),
       onComplete: (result) =>
-        this.completeProviderOnboarding(onboarding, result, sessionId, sessionGeneration),
-      onCancel: () => this.closeProviderOnboarding(),
+        this.completeProviderOnboarding(onboarding, result, sessionId, sessionGeneration, returnTo),
+      onCancel: () => {
+        this.closeProviderOnboarding();
+        // The panel asked for this flow, so hand the list back instead of
+        // dropping the user at the composer with the surface gone.
+        if (returnTo === 'provider') void this.showProviderManager();
+      },
       requestRender: this.options.onChanged,
     });
     this.providerOnboarding = onboarding;
@@ -828,6 +888,7 @@ export class TuiFeatureFlow {
     result: TuiProviderOnboardingResult,
     sessionId: string | undefined,
     sessionGeneration: number,
+    returnTo: 'model' | 'provider',
   ): Promise<void> {
     if (!this.isCurrentSession(sessionId, sessionGeneration)) return;
     let selected = !sessionId;
@@ -869,7 +930,10 @@ export class TuiFeatureFlow {
         'warning',
       );
     }
-    await this.showModelPicker('');
+    // The panel that started the flow gets its list back, now carrying the new
+    // connection and its test verdict; the model picker keeps the old return.
+    if (returnTo === 'provider') await this.showProviderManager();
+    else await this.showModelPicker('');
   }
 
   private warnModelCacheImpact(
@@ -898,7 +962,7 @@ export class TuiFeatureFlow {
     const loadSequence = ++this.providerLoadSequence;
     let snapshot;
     try {
-      snapshot = await this.providerApplication.snapshot({ includeCodexOAuth: true });
+      snapshot = await this.providerApplication.snapshot({ includeCodexOAuth: true, includeCopilotOAuth: true });
     } catch (error) {
       if (!this.isStopped() && loadSequence === this.providerLoadSequence) {
         this.options.append(
@@ -913,7 +977,7 @@ export class TuiFeatureFlow {
     }
     if (this.isStopped() || loadSequence !== this.providerLoadSequence) return;
     const refresh = async () => {
-      const next = await this.providerApplication.snapshot({ includeCodexOAuth: true });
+      const next = await this.providerApplication.snapshot({ includeCodexOAuth: true, includeCopilotOAuth: true });
       // Await the roster before repainting: disabling a provider drops its
       // models, and a stale status line would keep advertising a model the
       // Runtime no longer resolves.
@@ -928,6 +992,16 @@ export class TuiFeatureFlow {
       onConnectCodex: () => {
         this.closeProviderManager();
         this.showCodexLogin('provider');
+      },
+      onConnectCopilot: () => {
+        this.closeProviderManager();
+        this.showCopilotLogin('provider');
+      },
+      onAddProvider: () => {
+        // The catalogue is the same one `/model` offers; OpenRouter is pinned in
+        // it, so a connection that is not configured yet is reachable from the
+        // panel that manages connections.
+        void this.showProviderOnboarding('provider');
       },
       onRefreshModels: (provider) => this.providerApplication.refreshModels(provider),
       onSaveCustom: (input) => this.providerApplication.saveCandidate(input),
@@ -993,6 +1067,51 @@ export class TuiFeatureFlow {
     }
   }
 
+  private showCopilotLogin(returnTo: 'provider' | 'model'): void {
+    if (this.isStopped()) return;
+    const panel = new TuiCopilotLogin({
+      application: this.providerApplication,
+      openExternalTarget:
+        this.options.openExternalTarget ?? createTuiExternalTargetOpener(this.options.workspaceDir),
+      onConnected: () => {
+        if (this.copilotLogin !== panel || this.isStopped()) return;
+        this.closeCopilotLogin();
+        void this.finishCopilotLogin(returnTo);
+      },
+      onClose: () => this.closeCopilotLogin(),
+      requestRender: this.options.onChanged,
+    });
+    this.copilotLogin = panel;
+    this.options.surface.show(panel);
+    void panel.resume();
+  }
+
+  private async finishCopilotLogin(returnTo: 'provider' | 'model'): Promise<void> {
+    try {
+      await this.modelState.refresh();
+      if (this.isStopped()) return;
+      this.options.controller.refreshStatusMetricsNow();
+      this.options.append('GitHub Copilot connected.');
+      if (returnTo === 'model') await this.showModelPicker('');
+      else await this.showProviderManager();
+    } catch (error) {
+      if (!this.isStopped())
+        this.options.append(
+          formatTuiActionFailure(error, {
+            summary: "Couldn't refresh Copilot models.",
+            nextStep: 'Reopen /model to retry.',
+          }),
+          'error',
+        );
+    }
+  }
+
+  private closeCopilotLogin(): void {
+    const panel = this.copilotLogin;
+    this.copilotLogin = undefined;
+    if (panel) this.options.surface.close(panel);
+  }
+
   async showPlugins(initialQuery = ''): Promise<void> {
     if (this.isStopped() || this.pluginScreen?.isActive()) return;
     this.closePlugins();
@@ -1026,7 +1145,7 @@ export class TuiFeatureFlow {
           this.options.append(
             formatTuiActionFailure(error, {
               summary: 'Plugin updated, but its Skills could not be refreshed.',
-              nextStep: 'Restart MCode or retry /plugins.',
+              nextStep: 'Restart KCode or retry /plugins.',
             }),
             'warning',
           );
@@ -1034,8 +1153,8 @@ export class TuiFeatureFlow {
       }
     };
     const refreshSkillsAfterMutation = async (
-      operation: () => Promise<McodePluginView>,
-    ): Promise<McodePluginView> => {
+      operation: () => Promise<KcodePluginView>,
+    ): Promise<KcodePluginView> => {
       const plugin = await operation();
       await refreshSkills();
       return plugin;
@@ -1108,7 +1227,7 @@ export class TuiFeatureFlow {
 
   async showAccountStatus(): Promise<void> {
     await this.showReportInspection(
-      'MCode status',
+      'KCode status',
       'Loading status…',
       async (publish) => {
         const session = this.options.controller.snapshot().session;
@@ -1126,7 +1245,7 @@ export class TuiFeatureFlow {
           this.options.runtime.getInstructionSources(workspaceDir).catch(() => undefined),
         ]);
         const presentation = {
-          version: this.options.version ?? MINIMAX_CODE_VERSION,
+          version: this.options.version ?? KCODE_VERSION,
           model: this.selectedModel(),
           effort: this.selectedEffort(),
           workspaceDir,
@@ -1153,24 +1272,6 @@ export class TuiFeatureFlow {
     );
   }
 
-  async hasManagedAccountLogin(): Promise<boolean> {
-    const sessionId = this.options.controller.snapshot().session?.sessionId;
-    const account = await this.options.runtime.getAccountStatus(sessionId, { forceRefresh: true });
-    return account.managedTokenPresent === true;
-  }
-
-  async runDailyCheckin(): Promise<void> {
-    try {
-      const outcome = await this.options.runtime.runDailyCheckin();
-      this.options.append(formatTuiDailyCheckinOutcome(outcome));
-    } catch {
-      this.options.append(
-        "Couldn't complete daily check-in. Check the connection, then retry /checkin.",
-        'warning',
-      );
-    }
-  }
-
   async showSessionUsage(): Promise<void> {
     await this.showReportInspection(
       'Usage',
@@ -1182,18 +1283,20 @@ export class TuiFeatureFlow {
           includeMembership: true,
           forceRefresh: true,
         });
-        const [usage, context, account] = session
+        const [usage, context, account, cost] = session
           ? await Promise.all([
               this.options.runtime.getSessionUsage(session.sessionId),
               this.options.runtime.getContextSnapshot(session.sessionId).catch(() => undefined),
               accountRequest.catch(() => undefined),
+              this.loadSessionCost(session).catch(() => undefined),
             ])
-          : [{ summary: undefined, rows: [] }, undefined, await accountRequest];
+          : [{ summary: undefined, rows: [] }, undefined, await accountRequest, undefined];
         const presentation = {
           context,
           model: this.selectedModel(),
           account,
           scope: session ? ('session' as const) : ('account' as const),
+          ...(cost ? { cost } : {}),
         };
         const inspection = createTuiUsageInspection(usage, presentation);
         return {
@@ -1203,6 +1306,66 @@ export class TuiFeatureFlow {
       },
       { summary: "Couldn't load usage.", nextStep: 'Retry /usage.' },
     );
+  }
+
+  /**
+   * Builds the session-tree cost breakdown for the detail view.
+   *
+   * Uses the row-level usage API so each assistant message is attributed to
+   * the model that actually generated it; delegated child Sessions (including
+   * nested delegations) are folded in as the sub-agent scope.
+   */
+  private async loadSessionCost(session: TuiSession): Promise<SessionCostBreakdown | undefined> {
+    const getSessionUsageWithRows = this.options.runtime.getSessionUsageWithRows;
+    if (!getSessionUsageWithRows) return undefined;
+    const rootModel = sessionModelLabel(session.model) ?? this.selectedModel()?.modelId;
+    const [rootUsage, subagentSessions] = await Promise.all([
+      getSessionUsageWithRows.call(this.options.runtime, session.sessionId),
+      this.loadDelegatedSessionTree(session.sessionId),
+    ]);
+    const rows: SessionCostRow[] = [
+      ...buildSessionCostRows(
+        {
+          scope: 'agent',
+          model: rootModel ?? 'unknown',
+          summary: rootUsage.summary ?? {},
+          ...(rootUsage.rows ? { rows: rootUsage.rows } : {}),
+        },
+        rootModel,
+      ),
+    ];
+    const childUsages = await Promise.all(
+      subagentSessions.map((child) =>
+        getSessionUsageWithRows
+          .call(this.options.runtime, child.sessionId)
+          .catch(() => undefined),
+      ),
+    );
+    for (const [index, childUsage] of childUsages.entries()) {
+      if (!childUsage) continue;
+      const childModel = sessionModelLabel(subagentSessions[index]!.model) ?? rootModel;
+      rows.push(
+        ...buildSessionCostRows(
+          {
+            scope: 'subagent',
+            model: childModel ?? 'unknown',
+            summary: childUsage.summary ?? {},
+            ...(childUsage.rows ? { rows: childUsage.rows } : {}),
+          },
+          childModel,
+        ),
+      );
+    }
+    return aggregateSessionCost(rows);
+  }
+
+  private async loadDelegatedSessionTree(sessionId: string): Promise<readonly TuiSession[]> {
+    const getSessionTree = this.options.runtime.getSessionTree;
+    if (getSessionTree) {
+      const sessions = await getSessionTree.call(this.options.runtime).catch(() => undefined);
+      if (sessions) return collectTuiDelegatedSessions(sessions, sessionId);
+    }
+    return collectTuiDelegatedSessions(this.options.controller.snapshot().sessions, sessionId);
   }
 
   private async showReportInspection(
@@ -1435,6 +1598,7 @@ export class TuiFeatureFlow {
     if (panel === this.modelPicker) this.modelPicker = undefined;
     if (panel === this.providerManager) this.providerManager = undefined;
     if (panel === this.codexLogin) this.codexLogin = undefined;
+    if (panel === this.copilotLogin) this.copilotLogin = undefined;
     if (panel === this.providerOnboarding) this.providerOnboarding = undefined;
   }
 
@@ -1557,4 +1721,11 @@ function parseExportPath(rawPath: string): string | undefined {
     throw new Error('Usage: /export [path.md]');
   }
   return path;
+}
+
+function sessionModelLabel(
+  model: { providerId?: string; modelId?: string } | undefined,
+): string | undefined {
+  if (!model?.modelId) return undefined;
+  return model.providerId ? `${model.providerId}/${model.modelId}` : model.modelId;
 }

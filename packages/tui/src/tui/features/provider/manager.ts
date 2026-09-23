@@ -10,11 +10,11 @@ import {
   tuiColors as colors,
 } from '../../theme/runtime.js';
 import type {
-  McodeProviderSnapshot,
-  McodeProviderTestResult,
-  McodeProviderView,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
+  KcodeProviderSnapshot,
+  KcodeProviderTestResult,
+  KcodeProviderView,
+  KcodeSaveProviderCandidateInput,
+  KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { TuiProviderEditor } from './editor.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -22,19 +22,25 @@ import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 /**
  * `/provider` owns the independent Codex connect action and MiniMax credential
  * source. The MiniMax API Key can be replaced and OAuth can start a fresh
- * sign-in. Custom connections are edited through revision-checked candidate saves.
+ * sign-in. Every other connection the runtime resolves is listed: the user's
+ * `custom_provider` entries are edited through revision-checked candidate saves,
+ * and entries from the builtin `provider` tree are shown and testable but
+ * owned by config.yaml. `a` connects a new provider without leaving the panel.
  */
 type ProviderManagerMode =
   | { readonly kind: 'list' }
   | { readonly kind: 'minimax-key'; readonly replacing: boolean };
 
 export interface TuiProviderManagerOptions {
-  snapshot: McodeProviderSnapshot;
-  onRefresh(): Promise<McodeProviderSnapshot>;
-  onRefreshModels?(provider: McodeProviderView): Promise<number>;
-  onTest(providerId: string, modelId?: string): Promise<McodeProviderTestResult>;
+  snapshot: KcodeProviderSnapshot;
+  onRefresh(): Promise<KcodeProviderSnapshot>;
+  onRefreshModels?(provider: KcodeProviderView): Promise<number>;
+  onTest(providerId: string, modelId?: string): Promise<KcodeProviderTestResult>;
   onConnectCodex?(): void;
-  onSaveCustom?(input: McodeSaveProviderCandidateInput): Promise<McodeSaveProviderCandidateResult>;
+  onConnectCopilot?(): void;
+  /** Opens the known-provider catalogue; absent when the host cannot save one. */
+  onAddProvider?(): void;
+  onSaveCustom?(input: KcodeSaveProviderCandidateInput): Promise<KcodeSaveProviderCandidateResult>;
   onSetMiniMaxApiKey(apiKey: string): Promise<void>;
   onSetMiniMaxSource(source: 'token_plan' | 'minimax_api_key'): Promise<void>;
   /** Starts the same sign-in flow as `/login`; absent when the host has no auth. */
@@ -45,7 +51,7 @@ export interface TuiProviderManagerOptions {
 
 export class TuiProviderManager implements Component, Focusable {
   private editor?: TuiProviderEditor;
-  private snapshotValue: McodeProviderSnapshot;
+  private snapshotValue: KcodeProviderSnapshot;
   private selectedIndex = 0;
   private mode: ProviderManagerMode = { kind: 'list' };
   private readonly secretInput = new Input({ mask: '•' });
@@ -102,6 +108,7 @@ export class TuiProviderManager implements Component, Focusable {
     if (key === 'r') void this.refreshSelectedModels();
     else if (key === 't') void this.testSelected();
     else if (key === 'e') this.editSelected();
+    else if (key === 'a') this.addProvider();
     else if (key === ' ') void this.useSelected();
   }
 
@@ -163,8 +170,8 @@ export class TuiProviderManager implements Component, Focusable {
     if (provider) {
       lines.push(frameDivider(width));
       lines.push(frameRow(renderTuiActionHint(providerDetail(provider)), width));
-      if (provider.kind === 'custom') {
-        if (provider.baseUrl) {
+      if (showsConnectionDetails(provider)) {
+        if (provider.kind !== 'copilot-oauth' && provider.baseUrl) {
           lines.push(frameRow(chalk.hex(colors.dim)(sanitizeTuiUrl(provider.baseUrl)), width));
         }
         const models = providerModelList(provider);
@@ -184,20 +191,26 @@ export class TuiProviderManager implements Component, Focusable {
     lines.push(
       frameDivider(width),
       frameRow(
-        renderTuiActionHint(
-          this.busy
-            ? 'Working…'
-            : '↑↓ move · Space use · r refresh models · e edit · t test · Esc close',
-        ),
+        renderTuiActionHint(this.busy ? 'Working…' : this.actionHint()),
         width,
       ),
       frameRow(
-        chalk.hex(colors.dim)('Select a custom connection and press r to fetch its latest models.'),
+        chalk.hex(colors.dim)(
+          this.options.onAddProvider
+            ? 'a connects a provider: OpenRouter, OpenAI, Anthropic, and the models.dev catalog.'
+            : 'Select a custom connection and press r to fetch its latest models.',
+        ),
         width,
       ),
       frameBottom(width),
     );
     return lines;
+  }
+
+  private actionHint(): string {
+    const actions = ['↑↓ move', 'Space use', 'r refresh models', 'e edit', 't test'];
+    if (this.options.onAddProvider) actions.push('a add provider');
+    return `${actions.join(' · ')} · Esc close`;
   }
 
   private renderMiniMaxKey(width: number): string[] {
@@ -227,11 +240,11 @@ export class TuiProviderManager implements Component, Focusable {
     ];
   }
 
-  private providers(): readonly McodeProviderView[] {
+  private providers(): readonly KcodeProviderView[] {
     return this.snapshotValue.providers;
   }
 
-  private selectedProvider(): McodeProviderView | undefined {
+  private selectedProvider(): KcodeProviderView | undefined {
     return this.providers()[this.selectedIndex];
   }
 
@@ -277,6 +290,10 @@ export class TuiProviderManager implements Component, Focusable {
       await this.connectCodex(provider);
       return;
     }
+    if (provider.kind === 'copilot-oauth') {
+      await this.connectCopilot(provider);
+      return;
+    }
     if (provider.kind === 'minimax-oauth') {
       await this.setMiniMaxSource('token_plan');
       return;
@@ -287,6 +304,13 @@ export class TuiProviderManager implements Component, Focusable {
         return;
       }
       await this.setMiniMaxSource('minimax_api_key');
+      return;
+    }
+    if (provider.kind === 'builtin') {
+      this.setStatus(
+        `${provider.name} comes from config.yaml. Press t to test it, or choose one of its models in /model.`,
+        'info',
+      );
       return;
     }
     this.editSelected();
@@ -314,6 +338,17 @@ export class TuiProviderManager implements Component, Focusable {
     }
     if (provider.kind === 'codex-oauth') {
       this.setStatus('Use Enter or Space on the Codex row to start sign-in.', 'info');
+      return;
+    }
+    if (provider.kind === 'copilot-oauth') {
+      this.setStatus('Use Enter or Space on the GitHub Copilot row to start sign-in.', 'info');
+      return;
+    }
+    if (provider.kind === 'builtin') {
+      this.setStatus(
+        `${provider.name} is defined in config.yaml, where its key and endpoint live. Press a to connect it as a provider you manage here.`,
+        'info',
+      );
       return;
     }
     if (provider.readOnly || !this.options.onSaveCustom) {
@@ -356,7 +391,22 @@ export class TuiProviderManager implements Component, Focusable {
     this.requestRender();
   }
 
-  private async connectCodex(provider: McodeProviderView): Promise<void> {
+  /**
+   * `a` connects a new provider from here, using the same known-provider
+   * catalogue the model picker offers — OpenRouter and the other pinned plans
+   * included. The host closes this panel for the flow and reopens `/provider`
+   * with the saved connection in the list.
+   */
+  private addProvider(): void {
+    const addProvider = this.options.onAddProvider;
+    if (!addProvider) {
+      this.setStatus('Adding a provider is unavailable in this host.', 'error');
+      return;
+    }
+    addProvider();
+  }
+
+  private async connectCodex(provider: KcodeProviderView): Promise<void> {
     const state = provider.status?.state;
     if (state === 'connected') {
       this.setStatus('OpenAI Codex is already connected.', 'info');
@@ -367,6 +417,19 @@ export class TuiProviderManager implements Component, Focusable {
       return;
     }
     this.options.onConnectCodex();
+  }
+
+  private async connectCopilot(provider: KcodeProviderView): Promise<void> {
+    const state = provider.status?.state;
+    if (state === 'connected') {
+      this.setStatus('GitHub Copilot is already connected.', 'info');
+      return;
+    }
+    if (!this.options.onConnectCopilot) {
+      this.setStatus('Copilot sign-in is unavailable in this host.', 'error');
+      return;
+    }
+    this.options.onConnectCopilot();
   }
 
   private startMiniMaxKey(replacing = false): void {
@@ -403,6 +466,10 @@ export class TuiProviderManager implements Component, Focusable {
     if (!provider) return;
     if (provider.kind === 'codex-oauth') {
       this.setStatus('Codex OAuth connectivity is managed by its sign-in flow.', 'info');
+      return;
+    }
+    if (provider.kind === 'copilot-oauth') {
+      this.setStatus('Copilot OAuth connectivity is managed by its sign-in flow.', 'info');
       return;
     }
     if (provider.kind === 'minimax-oauth') {
@@ -500,28 +567,43 @@ export class TuiProviderManager implements Component, Focusable {
  * never claims the glyph — rendering both made two rows look simultaneously
  * selected.
  */
-function isSelectedSource(provider: McodeProviderView): boolean {
+function isSelectedSource(provider: KcodeProviderView): boolean {
   return (
     (provider.kind === 'minimax-oauth' || provider.kind === 'minimax-api-key') && provider.active
   );
 }
 
-function markerFor(provider: McodeProviderView): string {
-  if (provider.kind === 'codex-oauth') {
+function markerFor(provider: KcodeProviderView): string {
+  if (provider.kind === 'codex-oauth' || provider.kind === 'copilot-oauth') {
     return provider.status?.state === 'connected' ? '✓' : '○';
   }
-  if (provider.kind === 'custom') return provider.enabled ? '○' : '–';
+  if (provider.kind === 'custom' || provider.kind === 'builtin') {
+    return provider.enabled ? '○' : '–';
+  }
   return provider.active ? '●' : '○';
 }
 
-function providerModelList(provider: McodeProviderView): string | undefined {
+/**
+ * Rows that describe an endpoint the runtime dials itself — a saved custom
+ * connection, a builtin-tree one, or the Copilot connector's entry — carry a
+ * base URL and a model roster worth printing. MiniMax's two credential sources
+ * route through the managed gateway instead, and the Codex row's endpoint is
+ * owned by its OAuth transport.
+ */
+function showsConnectionDetails(provider: KcodeProviderView): boolean {
+  return (
+    provider.kind === 'custom' || provider.kind === 'builtin' || provider.kind === 'copilot-oauth'
+  );
+}
+
+function providerModelList(provider: KcodeProviderView): string | undefined {
   if (provider.models.length === 0) return undefined;
   return sanitizeTerminalText(
     provider.models.map((model) => model.displayName ?? model.modelId).join(', '),
   );
 }
 
-function providerDetail(provider: McodeProviderView): string {
+function providerDetail(provider: KcodeProviderView): string {
   if (provider.kind === 'codex-oauth') {
     if (provider.status?.state === 'connected') return 'Connected with OpenAI OAuth';
     if (provider.status?.state === 'pending') {
@@ -531,6 +613,20 @@ function providerDetail(provider: McodeProviderView): string {
       return `${provider.status.lastErrorMessage ?? 'Sign-in failed'} · Enter or Space to retry`;
     }
     return 'Not connected · Enter or Space to connect';
+  }
+  if (provider.kind === 'copilot-oauth') {
+    // The connected row is the connector's own entry, so it also carries the
+    // model roster the sign-in unlocked.
+    const models = provider.models.length;
+    const roster = models > 0 ? ` · ${models} model${models === 1 ? '' : 's'}` : '';
+    if (provider.status?.state === 'connected') return `Connected with GitHub OAuth${roster}`;
+    if (provider.status?.state === 'pending') {
+      return `Sign-in pending · Enter or Space to continue${roster}`;
+    }
+    if (provider.status?.state === 'failed') {
+      return `${provider.status.lastErrorMessage ?? 'Sign-in failed'} · Enter or Space to retry${roster}`;
+    }
+    return `Not connected · Enter or Space to connect${roster}`;
   }
   if (provider.kind === 'minimax-oauth') {
     return 'Sign-in managed by /login · Space to use · e to sign in again';
@@ -548,8 +644,14 @@ function providerDetail(provider: McodeProviderView): string {
   ].join(' · ');
 }
 
-function providerSummary(provider: McodeProviderView): string {
+function providerSummary(provider: KcodeProviderView): string {
   if (provider.kind === 'codex-oauth') {
+    if (provider.status?.state === 'connected') return 'Connected';
+    if (provider.status?.state === 'pending') return 'Waiting for sign-in';
+    if (provider.status?.state === 'failed') return 'Sign-in failed';
+    return 'Not connected';
+  }
+  if (provider.kind === 'copilot-oauth') {
     if (provider.status?.state === 'connected') return 'Connected';
     if (provider.status?.state === 'pending') return 'Waiting for sign-in';
     if (provider.status?.state === 'failed') return 'Sign-in failed';

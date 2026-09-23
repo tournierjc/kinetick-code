@@ -14,6 +14,8 @@ import {
   type ModelConnectionTestTarget,
   type UserModelProviderCandidateView,
 } from '../contracts.js';
+import { providerFamilyForLookup } from '../catalog/provider-families.js';
+import { hasDedicatedConnectionSurface } from '../identity.js';
 import type { ModelDiscoveryTarget } from '../connectivity/discover-models.js';
 import { modelConnectionTestFingerprint } from '../catalog/config-fingerprint.js';
 import { minimaxApiBaseUrl, minimaxApiModels } from '../catalog/list-models.js';
@@ -128,7 +130,14 @@ function candidateModelFields(
 ): Pick<LocalCustomProviderConfig, 'models'> | Record<string, never> {
   if (input.models !== undefined) {
     return {
-      models: mergeModelsFromInputs(current?.models, input.models, implicitCustomProviderThinking),
+      models: mergeModelsFromInputs(
+        current?.models,
+        input.models,
+        implicitCustomProviderThinking,
+        providerFamilyForLookup({
+          baseUrl: input.baseUrl ?? current?.options?.baseURL,
+        }),
+      ),
     };
   }
   return current?.models ? { models: current.models } : {};
@@ -362,7 +371,53 @@ export class ModelProviderServiceContext {
         ...(options.minimaxModelOverride ? { modelOverride: options.minimaxModelOverride } : {}),
       });
     }
+    if (parseProviderId(providerId)?.source === 'provider') {
+      // The connectors and the managed MiniMax identity own their own surfaces;
+      // their config entries must not be testable through the generic BYOK path.
+      if (!hasDedicatedConnectionSurface(providerId)) {
+        return this.resolveBuiltinTestTarget(config, providerId, modelId, options);
+      }
+    }
     return this.resolveCustomTestTarget(config, providerId, modelId, options);
+  }
+
+  /**
+   * A connection the builtin `provider` tree owns — a hand-written
+   * `provider.openrouter`, or an entry an earlier build left behind — is tested
+   * against its own endpoint and key, exactly like a saved one, and the verdict
+   * lands in the same cache the model rows read. Only the writing paths differ:
+   * that tree belongs to config.yaml, so nothing here writes it back.
+   */
+  private resolveBuiltinTestTarget(
+    config: LocalRuntimeConfig,
+    providerId: string,
+    modelId: string | undefined,
+    options: ResolveTestTargetOptions,
+  ): ResolvedConnectionTestTarget {
+    const provider = config.provider?.[providerId];
+    if (!provider) {
+      throw new LocalModelProviderError(404, 'Model provider not found', 'PROVIDER_NOT_FOUND');
+    }
+    const { apiKey, baseUrl } = requireCustomProviderCredentials(provider, options.apiKeyOverride);
+    const chosenModelId = requireCustomProviderModelId(provider, modelId);
+    const api = normalizeApiFormat(provider.api) ?? 'anthropic-messages';
+    const model = provider.models?.[chosenModelId];
+    const effortOptions = normalizeModelThinkingEffortOptions(model?.thinking?.effortOptions);
+    const headers = mergeProviderHeaders(provider.options?.headers, model?.headers);
+    const target: ModelConnectionTestTarget = {
+      api,
+      baseUrl: normalizeProviderBaseUrl(api, baseUrl),
+      apiKey,
+      modelId: chosenModelId,
+      ...(headers ? { headers } : {}),
+      outputLimit: byokEffectiveOutputLimit(model),
+    };
+    return {
+      cacheKey: providerTestCacheKey(providerId, modelId),
+      fingerprint: modelConnectionTestFingerprint(target, model),
+      target,
+      ...(effortOptions ? { effortOptions } : {}),
+    };
   }
 
   private resolveCustomTestTarget(

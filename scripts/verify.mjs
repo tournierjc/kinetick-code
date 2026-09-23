@@ -35,7 +35,7 @@ if (profile === 'package' && !['darwin', 'linux'].includes(process.platform))
 const temporary = values.list
   ? undefined
   : mkdtempSync(path.join(tmpdir(), "mcode-verify-"));
-const preview = path.join(temporary ?? tmpdir(), "minimax-code-source.tar.gz");
+const preview = path.join(temporary ?? tmpdir(), "kinetick-code-source.tar.gz");
 
 const steps = [
   { name: "check:source", script: "check:source", docs: true, windows: true },
@@ -54,6 +54,7 @@ const steps = [
   { name: "typecheck", script: "typecheck", fullOnly: true },
   { name: "build", script: "build", windows: true },
   { name: "check:standalone", script: "check:standalone", windows: true },
+  { name: "check:egress", script: "check:egress" },
   { name: "test:artifact", script: "test:artifact", windows: true },
   { name: "test:capabilities", script: "test:capabilities" },
   { name: "test:windows", script: "test:windows", platforms: ["win32"], windows: true },

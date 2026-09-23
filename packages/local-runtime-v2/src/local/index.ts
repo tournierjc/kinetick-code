@@ -42,6 +42,8 @@ export type {
   ListQueueMessagesResult as ListQueueMessagesResp,
   ListPendingPermissionsInput as ListPendingPermissionsReq,
   ListPendingPermissionsResult as ListPendingPermissionsResp,
+  PinSessionInput as PinSessionReq,
+  PinSessionResult as PinSessionResp,
   InstalledPluginSummary,
   PluginMarketplaceSummary,
   PendingPermissionItem,

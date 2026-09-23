@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { runTuiLogin, runTuiLogout } from '../../src/cli/auth-command.js';
 
-describe('Minimax Code auth commands', () => {
+describe('Kinetick Code auth commands', () => {
   it.each([true, false])('returns after dispatching browser logout (%s)', async (openBrowser) => {
     const writeError = vi.fn();
     const logoutUrl =
@@ -110,7 +110,7 @@ describe('Minimax Code auth commands', () => {
     expect(stderr.join('')).not.toContain('device-secret');
   });
 
-  it('keeps mcode login usable without a desktop browser when explicitly disabled', async () => {
+  it('keeps kcode login usable without a desktop browser when explicitly disabled', async () => {
     const stderr: string[] = [];
     const openedTargets: string[] = [];
     const login = vi.fn(async (onProgress) => {

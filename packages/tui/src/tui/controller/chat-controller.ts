@@ -1,4 +1,4 @@
-import type { TuiSession } from '../../runtime/port.js';
+import type { TuiMessage, TuiSession } from '../../runtime/port.js';
 import type { TuiStreamEvent } from '../../runtime/stream-events.js';
 import { TuiRunCoordinator } from '../../application/run-coordinator.js';
 import { executeTuiInteractiveTurn } from '../../application/interactive-turn-delivery.js';
@@ -8,8 +8,9 @@ import {
   toTuiTranscriptAttachments,
 } from '../features/composer/attachments.js';
 import type { TranscriptStore } from '../transcript/store.js';
+import { UNSCOPED_TRANSCRIPT_SESSION } from '../transcript/store.js';
 import type { TranscriptAttachment, TranscriptUserPresentation } from '../transcript/model.js';
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from '../../product-context.js';
+import { KCODE_DEFAULT_AGENT_NAME } from '../../product-context.js';
 import { TuiTurnProjection } from './projection/turn-projection.js';
 import type { OptimisticUserCommitMode } from './projection/turn-projection.js';
 import { TuiStatusMetricsFlow } from './projection/status-metrics-flow.js';
@@ -56,6 +57,21 @@ export type {
   TuiSubmitOptions,
 } from './chat-controller-types.js';
 
+/**
+ * How many Sessions keep their cells in the transcript store. The visible one is
+ * never evicted; the others are dropped oldest first, and closing a tab releases
+ * its Session immediately, so retention follows the tabs the user keeps open.
+ */
+const MAX_RETAINED_TRANSCRIPT_SESSIONS = 6;
+
+function backgroundTurnKey(sessionId: string, turnId: string): string {
+  return `${sessionId}\u0000${turnId}`;
+}
+
+function streamEventTimestamp(event: TuiStreamEvent): number | undefined {
+  return 'timestamp' in event && typeof event.timestamp === 'number' ? event.timestamp : undefined;
+}
+
 export class TuiChatController {
   private readonly runtime: TuiChatRuntimeLike;
   private readonly transcript: TranscriptStore;
@@ -82,6 +98,9 @@ export class TuiChatController {
   private sessionProjectionSequence = 0;
   private durableMessageAnchor?: string;
   private pendingHistoryRefresh = false;
+  private readonly retainedTranscriptSessions = new Set<string>();
+  private readonly backgroundTurnProjections = new Map<string, TuiTurnProjection>();
+  private readonly backgroundTurnAnchors = new Set<string>();
   private readonly idleWaiters = new Set<() => void>();
   private notificationBatchDepth = 0;
   private notificationPending = false;
@@ -91,7 +110,7 @@ export class TuiChatController {
     this.transcript = options.transcript;
     this.workspaceDir = options.workspaceDir;
     this.version = options.version ?? 'development';
-    this.defaultAgentName = options.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME;
+    this.defaultAgentName = options.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME;
     this.createTurnId = options.createTurnId ?? createTuiTurnId;
     this.runCoordinator = options.runCoordinator ?? new TuiRunCoordinator(options.runtime);
     this.retirementWarningTimeoutMs = options.retirementWarningTimeoutMs ?? 5_000;
@@ -124,6 +143,7 @@ export class TuiChatController {
       runtime: this.runtime,
       currentSessionId: () => this.state.session?.sessionId,
       currentAccount: () => this.state.account,
+      currentModelLabel: () => selectedModelLabel(this.state.session?.model),
       apply: (patch) => this.updateState(patch),
     });
   }
@@ -135,6 +155,7 @@ export class TuiChatController {
       session: this.state.session ? { ...this.state.session } : undefined,
       account: cloneAccountStatus(this.state.account),
       sessionUsage: this.state.sessionUsage ? { ...this.state.sessionUsage } : undefined,
+      sessionCost: this.state.sessionCost ? { ...this.state.sessionCost } : undefined,
       lastSettledTurn: this.state.lastSettledTurn ? { ...this.state.lastSettledTurn } : undefined,
     };
   }
@@ -144,6 +165,7 @@ export class TuiChatController {
       error: undefined,
       lastSettledTurn: undefined,
       sessionUsage: undefined,
+      sessionCost: undefined,
       contextSnapshot: undefined,
     });
     const [sessionsResult] = await Promise.allSettled([
@@ -192,7 +214,18 @@ export class TuiChatController {
     return new Promise<void>((resolve) => this.idleWaiters.add(resolve));
   }
 
-  async loadSessionProjection(sessionId: string): Promise<void> {
+  /**
+   * Open `sessionId` in the pane.
+   *
+   * `rebuild` forces the pane to be projected from saved messages again, for a
+   * caller that rewrote the Session's history (a rewind): the cells kept for it
+   * describe content that no longer exists, so adopting them would show it.
+   */
+  async loadSessionProjection(
+    sessionId: string,
+    options: { rebuild?: boolean } = {},
+  ): Promise<void> {
+    if (options.rebuild) this.releaseSessionTranscript(sessionId);
     this.detachActiveTurnForSessionSwitch();
     this.invalidateSessionCatalogRefresh();
     this.invalidateSessionCreation();
@@ -204,6 +237,7 @@ export class TuiChatController {
       error: undefined,
       lastSettledTurn: undefined,
       sessionUsage: undefined,
+      sessionCost: undefined,
       contextSnapshot: undefined,
     });
     try {
@@ -216,9 +250,7 @@ export class TuiChatController {
         ? await this.setSessionArchived(storedSession.sessionId, false)
         : storedSession;
       if (projectionSequence !== this.sessionProjectionSequence) return;
-      this.turnProjection.clearTodos();
-      this.transcript.clear();
-      this.turnProjection.hydrateHistory(messages);
+      this.projectSessionIntoPane(sessionId, messages);
       this.durableMessageAnchor = latestHistoryMessageId(messages);
       if (projectionSequence !== this.sessionProjectionSequence) return;
       this.updateState({
@@ -238,6 +270,150 @@ export class TuiChatController {
         }),
       });
       throw error;
+    }
+  }
+
+  /**
+   * Point the pane at `sessionId` and project its history into it.
+   *
+   * A Session this store has already projected is adopted: it keeps the cells the
+   * pane already showed — including a turn that is still streaming — and only its
+   * durable content is reconciled. Only a Session that was never projected (or was
+   * released) is rebuilt from scratch, because re-projecting a Session that is
+   * still on screen would drop the live tail of its running turn.
+   */
+  private projectSessionIntoPane(sessionId: string, messages: readonly TuiMessage[]): void {
+    this.transcript.setActiveSession(sessionId);
+    // This Session is the pane now, so the visible projection owns its turn again.
+    this.releaseBackgroundTurnProjection(sessionId);
+    if (this.retainedTranscriptSessions.has(sessionId)) {
+      this.transcript.replaceDurableProjection(() => this.turnProjection.hydrateHistory(messages));
+      return;
+    }
+    this.turnProjection.clearTodos();
+    this.transcript.clear(sessionId);
+    this.turnProjection.hydrateHistory(messages);
+    this.retainSessionTranscript(sessionId);
+  }
+
+  /** Mark a Session as projected here, evicting the oldest pane past the cap. */
+  private retainSessionTranscript(sessionId: string): void {
+    this.retainedTranscriptSessions.add(sessionId);
+    while (this.retainedTranscriptSessions.size > MAX_RETAINED_TRANSCRIPT_SESSIONS) {
+      const victim = [...this.retainedTranscriptSessions].find(
+        (id) => id !== this.transcript.activeSessionId,
+      );
+      if (!victim) return;
+      this.releaseSessionTranscript(victim);
+    }
+  }
+
+  /**
+   * Make a freshly created Session the one the pane belongs to. When the pane had
+   * no Session yet (first turn of a new conversation), the cells it already wrote —
+   * the user's message being the important one — become this Session's cells, so a
+   * later switch away and back still shows them.
+   */
+  private claimPaneForSession(sessionId: string): void {
+    if (this.transcript.activeSessionId === UNSCOPED_TRANSCRIPT_SESSION) {
+      this.transcript.moveSession(UNSCOPED_TRANSCRIPT_SESSION, sessionId);
+    }
+    this.transcript.setActiveSession(sessionId);
+    this.retainSessionTranscript(sessionId);
+  }
+
+  /** Whether this store keeps a pane for `sessionId` (i.e. its tab was opened). */
+  retainsTranscript(sessionId: string): boolean {
+    return this.retainedTranscriptSessions.has(sessionId);
+  }
+
+  /**
+   * Forget the cells kept for a Session. Called when its tab closes and when it is
+   * archived or deleted: a Session that comes back is projected from durable
+   * history again, so nothing stale can outlive it.
+   */
+  releaseSessionTranscript(sessionId: string): void {
+    this.releaseBackgroundTurnProjection(sessionId);
+    this.retainedTranscriptSessions.delete(sessionId);
+    this.transcript.dropSession(sessionId);
+  }
+
+  /**
+   * The projection a background Session's live turn writes through. It targets that
+   * Session's pane and nothing else: a background turn never touches the visible
+   * Session's state — usage, cost, output throughput, the todo panel and the
+   * interaction panel all belong to the Session on screen.
+   */
+  private backgroundTurnProjection(sessionId: string): TuiTurnProjection {
+    const existing = this.backgroundTurnProjections.get(sessionId);
+    if (existing) return existing;
+    const projection = new TuiTurnProjection({
+      transcript: this.transcript.scoped(sessionId),
+      now: this.now,
+      onChange: () => this.notify(),
+    });
+    this.backgroundTurnProjections.set(sessionId, projection);
+    return projection;
+  }
+
+  /**
+   * Anchor a background turn in its own pane, once per Session and Turn: the cells a
+   * watcher streams into need a turn to belong to, and the visible projection is not
+   * the one writing them.
+   */
+  beginBackgroundTurn(sessionId: string, turnId: string, startedAtMs: number): void {
+    const key = backgroundTurnKey(sessionId, turnId);
+    if (this.backgroundTurnAnchors.has(key)) return;
+    this.backgroundTurnAnchors.add(key);
+    this.backgroundTurnProjection(sessionId).beginTurn(turnId, startedAtMs);
+    this.notify();
+  }
+
+  /**
+   * Apply one event of a turn whose Session is not the one on screen. A Session that
+   * became visible mid-turn goes back through the visible projection, so a turn never
+   * has two writers.
+   */
+  applyBackgroundTurnEvent(
+    sessionId: string,
+    turnId: string,
+    event: TuiStreamEvent,
+  ): string | undefined {
+    if (this.state.session?.sessionId === sessionId) {
+      return this.applyRuntimeTurnEvent(turnId, event);
+    }
+    try {
+      this.beginBackgroundTurn(sessionId, turnId, streamEventTimestamp(event) ?? this.now());
+      return this.backgroundTurnProjection(sessionId).applyStreamEvent(turnId, event);
+    } catch (error) {
+      return formatTuiActionFailure(error, {
+        summary: "Couldn't show a background Session's output.",
+        nextStep: 'Reopen that Session to load its saved messages.',
+        preservation: 'Its saved messages are unchanged.',
+      });
+    }
+  }
+
+  /** Settle a background turn in its own pane, leaving the visible Session alone. */
+  settleBackgroundTurn(
+    sessionId: string,
+    turnId: string,
+    status: TuiSettledTurn['status'],
+    durationMs?: number,
+  ): void {
+    if (this.state.session?.sessionId === sessionId) return;
+    const projection = this.backgroundTurnProjections.get(sessionId);
+    this.backgroundTurnAnchors.delete(backgroundTurnKey(sessionId, turnId));
+    if (!projection) return;
+    projection.markTurn(turnId, status, durationMs);
+    projection.clearTurn(turnId);
+    this.notify();
+  }
+
+  private releaseBackgroundTurnProjection(sessionId: string): void {
+    this.backgroundTurnProjections.delete(sessionId);
+    for (const key of [...this.backgroundTurnAnchors]) {
+      if (key.startsWith(`${sessionId}\u0000`)) this.backgroundTurnAnchors.delete(key);
     }
   }
 
@@ -325,9 +501,12 @@ export class TuiChatController {
       ? { ...existing, archived: true }
       : { ...(await this.resolveSession(sessionId, true)), archived: false };
     const isCurrent = this.state.session?.sessionId === sessionId;
+    if (archived) {
+      // An archived Session leaves the bar, and with it the store's retention.
+      this.releaseSessionTranscript(sessionId);
+    }
     if (archived && isCurrent) {
       this.turnProjection.clearTodos();
-      this.transcript.clear();
       this.durableMessageAnchor = undefined;
     }
     this.updateState({
@@ -340,6 +519,54 @@ export class TuiChatController {
       ...(archived && isCurrent ? { lastSettledTurn: undefined } : {}),
     });
     return session;
+  }
+
+  /**
+   * Pin or unpin a Session.
+   *
+   * The runtime owns the ordered pin list, so the answer of record is its next read of
+   * the catalogue; the local state carries the same flag meanwhile so the bar and the
+   * manager do not flicker. Pinning changes no visibility: the Session keeps its tab.
+   */
+  async pinSession(sessionId: string, pinned: boolean): Promise<TuiSession> {
+    this.invalidateSessionCatalogRefresh();
+    const existing = await this.resolveSession(sessionId);
+    const pinSession = requireRuntimeMethod(this.runtime, 'pinSession');
+    await pinSession({ sessionId, pinned });
+    const session = { ...existing, pinned };
+    const isCurrent = this.state.session?.sessionId === sessionId;
+    this.updateState({
+      status: 'idle',
+      ...(isCurrent ? { session } : {}),
+      sessions: upsertSession(this.state.sessions, session),
+      error: undefined,
+    });
+    return session;
+  }
+
+  /**
+   * Delete a Session the way the runtime does: rows and canonical history files
+   * are removed, and children are re-parented. There is no trash to restore
+   * from, so callers confirm first.
+   */
+  async deleteSession(sessionId: string): Promise<void> {
+    this.assertNoActiveTurn('deleting a session');
+    this.invalidateSessionCatalogRefresh();
+    const deleteSessionMethod = requireRuntimeMethod(this.runtime, 'deleteSession');
+    await deleteSessionMethod(sessionId);
+    const isCurrent = this.state.session?.sessionId === sessionId;
+    this.releaseSessionTranscript(sessionId);
+    if (isCurrent) {
+      this.turnProjection.clearTodos();
+      this.durableMessageAnchor = undefined;
+    }
+    this.updateState({
+      status: 'idle',
+      session: isCurrent ? undefined : this.state.session,
+      sessions: this.state.sessions.filter((item) => item.sessionId !== sessionId),
+      error: undefined,
+      ...(isCurrent ? { lastSettledTurn: undefined } : {}),
+    });
   }
 
   async submit(rawContent: string, options: TuiSubmitOptions = {}): Promise<TuiSubmitStatus> {
@@ -735,7 +962,11 @@ export class TuiChatController {
     this.sessionProjectionSequence += 1;
     this.turnProjection.clearTodos();
     this.outputRate.reset();
-    this.transcript.clear();
+    // The new conversation has no Session yet: empty the pane's unscoped cells and
+    // leave the Session being left with its cells, so switching back to it shows
+    // what it showed before.
+    this.transcript.clear(UNSCOPED_TRANSCRIPT_SESSION);
+    this.transcript.setActiveSession(UNSCOPED_TRANSCRIPT_SESSION);
     this.durableMessageAnchor = undefined;
     if (markSessionCleared) this.options.onSessionLifecycle?.();
     this.state = {
@@ -776,6 +1007,7 @@ export class TuiChatController {
           session,
           sessions: upsertSession(this.state.sessions, session),
         });
+        this.claimPaneForSession(session.sessionId);
         return session;
       })
       .finally(() => {
@@ -806,6 +1038,13 @@ export class TuiChatController {
     if (this.state.session?.sessionId !== sessionId) return;
     void this.statusMetrics.refreshSessionUsage(sessionId);
     void this.statusMetrics.refreshContext(sessionId);
+  }
+
+  /** Recomputes the session-tree cost (for example when a sub-agent finishes). */
+  refreshSessionCostNow(): void {
+    const sessionId = this.state.session?.sessionId;
+    if (!sessionId) return;
+    void this.statusMetrics.refreshSessionCost(sessionId);
   }
 
   async requireLoginForAgentAction(): Promise<void> {
@@ -882,6 +1121,9 @@ export class TuiChatController {
       ...(currentSessionId !== nextSessionId && !('sessionUsage' in patch)
         ? { sessionUsage: undefined }
         : {}),
+      ...(currentSessionId !== nextSessionId && !('sessionCost' in patch)
+        ? { sessionCost: undefined }
+        : {}),
       ...(currentSessionId !== nextSessionId && !('contextSnapshot' in patch)
         ? { contextSnapshot: undefined }
         : {}),
@@ -915,4 +1157,12 @@ export class TuiChatController {
     for (const resolve of this.idleWaiters) resolve();
     this.idleWaiters.clear();
   }
+}
+
+function selectedModelLabel(
+  model: { providerId?: string; modelId?: string; variant?: string } | undefined,
+): string | undefined {
+  if (!model?.modelId) return undefined;
+  const base = model.providerId ? `${model.providerId}/${model.modelId}` : model.modelId;
+  return model.variant && model.variant !== 'thinking' ? `${base}#${model.variant}` : base;
 }

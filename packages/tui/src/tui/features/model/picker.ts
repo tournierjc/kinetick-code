@@ -5,7 +5,10 @@ import { visibleWidth } from '../../rendering/text.js';
 import { SelectList } from '../../widgets/select-list.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
 import type { TuiModel } from '../../../runtime/port.js';
-import type { McodeCodexOAuthState } from '../../../provider/contract.js';
+import type {
+  KcodeCodexOAuthState,
+  KcodeCopilotOAuthState,
+} from '../../../provider/contract.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 import {
   tuiChalk as chalk,
@@ -35,6 +38,7 @@ const MODEL_CONTROL_ROWS = 3;
 
 type ModelKey = string;
 const CONNECT_CODEX_ITEM_VALUE = '\u0000connect-codex';
+const CONNECT_COPILOT_ITEM_VALUE = '\u0000connect-copilot';
 const ADD_PROVIDER_ITEM_VALUE = '\u0000add-provider';
 
 interface ModelGroup {
@@ -68,7 +72,11 @@ export class TuiModelPicker implements Component, Focusable {
       onUnavailable?: (model: TuiModel) => void;
       unavailableHint?: string;
       codexOAuth?: {
-        readonly state: Exclude<McodeCodexOAuthState, 'hidden'>;
+        readonly state: Exclude<KcodeCodexOAuthState, 'hidden'>;
+        readonly onConnect: () => void;
+      };
+      copilotOAuth?: {
+        readonly state: Exclude<KcodeCopilotOAuthState, 'hidden'>;
         readonly onConnect: () => void;
       };
       onAddProvider?: () => void;
@@ -197,7 +205,9 @@ export class TuiModelPicker implements Component, Focusable {
       ...(layout.bodyHeight >= 2 ? [`${searchPrompt}${search}`] : []),
       ...(layout.bodyHeight >= 4 &&
       this.visibleModels().length === 0 &&
-      (this.availability.onAddProvider || this.availability.codexOAuth)
+      (this.availability.onAddProvider ||
+        this.availability.codexOAuth ||
+        this.availability.copilotOAuth)
         ? [chalk.hex(colors.muted)('No matching models')]
         : []),
     ];
@@ -211,7 +221,8 @@ export class TuiModelPicker implements Component, Focusable {
         ...header,
         ...(this.visibleModels().length === 0 &&
         !this.availability.onAddProvider &&
-        !this.availability.codexOAuth
+        !this.availability.codexOAuth &&
+        !this.availability.copilotOAuth
           ? [chalk.hex(colors.muted)('No matching models')]
           : this.list.renderViewport(
               layout.contentWidth,
@@ -307,6 +318,13 @@ export class TuiModelPicker implements Component, Focusable {
         groupLabel: 'Providers',
       });
     }
+    if (this.availability.copilotOAuth) {
+      items.push({
+        value: CONNECT_COPILOT_ITEM_VALUE,
+        ...copilotOAuthAction(this.availability.copilotOAuth.state),
+        groupLabel: 'Providers',
+      });
+    }
 
     const list = new SelectList(items, Math.min(Math.max(items.length, 1), 10), modelPickerTheme, {
       minPrimaryColumnWidth: 26,
@@ -318,6 +336,10 @@ export class TuiModelPicker implements Component, Focusable {
     list.onSelect = (item) => {
       if (item.value === CONNECT_CODEX_ITEM_VALUE) {
         this.availability.codexOAuth?.onConnect();
+        return;
+      }
+      if (item.value === CONNECT_COPILOT_ITEM_VALUE) {
+        this.availability.copilotOAuth?.onConnect();
         return;
       }
       if (item.value === ADD_PROVIDER_ITEM_VALUE) {
@@ -366,6 +388,9 @@ export class TuiModelPicker implements Component, Focusable {
   private renderHint(): string {
     if (this.list.getSelectedItem()?.value === CONNECT_CODEX_ITEM_VALUE) {
       return '↑↓ select · type to search · enter connect Codex · esc cancel';
+    }
+    if (this.list.getSelectedItem()?.value === CONNECT_COPILOT_ITEM_VALUE) {
+      return '↑↓ select · type to search · enter connect Copilot · esc cancel';
     }
     if (this.list.getSelectedItem()?.value === ADD_PROVIDER_ITEM_VALUE) {
       return '↑↓ select · type to search · enter add provider · esc cancel';
@@ -509,7 +534,29 @@ export class TuiModelPicker implements Component, Focusable {
   }
 }
 
-function codexOAuthAction(state: Exclude<McodeCodexOAuthState, 'hidden'>): {
+function copilotOAuthAction(state: Exclude<KcodeCopilotOAuthState, 'hidden'>): {
+  readonly label: string;
+  readonly description: string;
+} {
+  if (state === 'connected') {
+    return { label: '✓ GitHub Copilot connected', description: 'The account model catalog is ready' };
+  }
+  if (state === 'pending') {
+    return {
+      label: '↻ Continue GitHub Copilot sign-in…',
+      description: 'Enter the device code to finish signing in',
+    };
+  }
+  if (state === 'failed') {
+    return {
+      label: '↻ Retry GitHub Copilot sign-in…',
+      description: 'The previous sign-in failed',
+    };
+  }
+  return { label: '+ Connect GitHub Copilot…', description: 'Sign in with your Copilot subscription' };
+}
+
+function codexOAuthAction(state: Exclude<KcodeCodexOAuthState, 'hidden'>): {
   readonly label: string;
   readonly description: string;
 } {

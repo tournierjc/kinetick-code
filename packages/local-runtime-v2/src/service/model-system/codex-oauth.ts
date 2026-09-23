@@ -15,6 +15,7 @@ import {
   type CodexModelCredentials,
 } from './connectivity/codex-model-discovery.js';
 import { OPENAI_CODEX_PROVIDER_ID } from './identity.js';
+import { PROVIDER_CREDENTIALS_FILE } from './provider-credentials.js';
 
 export { OPENAI_CODEX_PROVIDER_ID } from './identity.js';
 
@@ -392,7 +393,9 @@ export class CodexOAuthManager {
   }
 
   private authStorage(): CodexAuthStorage {
-    return this.authStorageFactory(join(this.deps.configGetter().dataDir, 'codex-auth.json'));
+    return this.authStorageFactory(
+      join(this.deps.configGetter().dataDir, PROVIDER_CREDENTIALS_FILE),
+    );
   }
 
   private hasConfiguredProvider(): boolean {

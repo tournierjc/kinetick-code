@@ -26,49 +26,38 @@ import type { TuiRuntime, TuiWorkspaceRoot } from '../runtime/port.js';
 import { createDeferredTuiRuntime } from '../runtime/deferred.js';
 import {
   captureTuiIncidentBestEffort,
-  createTuiIncidentReporter,
   createTuiObservability,
-  noopTuiIncidentReporter,
-  type CreateTuiIncidentReporterOptions,
+  noopTuiIncidentSink,
   type TuiIncidentReporter,
+  type TuiIncidentSink,
   type TuiObservability,
 } from '../observability/index.js';
-import { resolveMcodeAuthEnvironment } from '../auth/environment.js';
+import { resolveKcodeAuthEnvironment } from '../auth/environment.js';
 import { TuiMatrixAccountClient } from '../account/matrix-account-client.js';
+import { createDefaultKcodeAuthApplication } from '../auth/factory.js';
+import { createKcodeSharedAuthSession } from '../runtime/auth-session.js';
 import {
-  createMcodeBusinessTelemetry,
-  resolveMcodeBusinessTelemetryPolicy,
-  type CreateMcodeBusinessTelemetryOptions,
-  type McodeBusinessTelemetry,
-} from '../analytics/business-telemetry.js';
-import { createDefaultMcodeAuthApplication } from '../auth/factory.js';
-import { createMcodeSharedAuthSession } from '../runtime/auth-session.js';
-import {
-  MCODE_OAUTH_SCOPES,
-  resolveMCodeOAuthEndpointConfig,
+  KCODE_OAUTH_SCOPES,
+  resolveKCodeOAuthEndpointConfig,
   type AccessTokenLease,
-  type MCodeOAuthCore,
+  type KCodeOAuthCore,
 } from '@mavis/oauth-core';
 import {
   resolveTuiManagedBackendLane,
   resolveTuiStartupEnvironmentOption,
 } from '../cli/environment.js';
-import { resolveMcodeStartupUpdateNotice } from '../update/startup-notice.js';
-import type { McodeUpdateApplication } from '../update/application.js';
+import { resolveKcodeStartupUpdateNotice } from '../update/startup-notice.js';
+import type { KcodeUpdateApplication } from '../update/application.js';
 import { tuiErrorDiagnostic } from '../user-facing-failure.js';
 import { getConfig, resetConfig, writeTuiStatusLineSetting, type MavisRegion } from '@mavis/config';
 import { markLoginRestartHandoff } from './login-restart-handoff.js';
-import {
-  readTuiModeSetting,
-  readTuiThemeSetting,
-  writeTuiModeSetting,
-  writeTuiThemeSetting,
-} from '../host/tui-settings.js';
-import { schedulePendingMcodePrefixUpdate } from '../update/prefix-update.js';
-import { MCODE_TUI_RESULT_PATH_ENV } from './automation/result-writer.js';
+  readTuiTheme?: typeof readTuiThemeSetting;
+  writeTuiTheme?: typeof writeTuiThemeSetting;
+  createSharedAuthSession?: typeof createKcodeSharedAuthSession;
+  createAuthApplication?: typeof createDefaultKcodeAuthApplication;
 import { startTuiStartupStatus, type TuiStartupStatus } from './startup-status.js';
 
-const MINIMAX_CODE_EXIT_SLOGAN = 'Intelligence with everyone, bye~';
+const KCODE_EXIT_SLOGAN = 'Intelligence with everyone, bye~';
 export interface LaunchTuiOptions {
   version: string;
   initialPrompt?: string;
@@ -124,7 +113,7 @@ export interface LaunchTuiDependencies {
   loadRuntimeLifecycle?: () => Promise<RuntimeLifecycleModule>;
   loadUpdateApplication?: (
     currentVersion: string,
-  ) => Promise<Pick<McodeUpdateApplication, 'inspect' | 'apply'>>;
+  ) => Promise<Pick<KcodeUpdateApplication, 'inspect' | 'apply'>>;
   writeExitMessage?: (message: string) => void;
   prepareDataDir?: typeof prepareTuiDataDir;
   restartProcess?: (
@@ -132,29 +121,13 @@ export interface LaunchTuiDependencies {
     region?: MavisRegion,
     initialPrompt?: string,
   ) => Promise<void>;
-  createBusinessTelemetry?: typeof createMcodeBusinessTelemetry;
-  readTelemetryEnabled?: () => boolean;
-  createIncidentReporter?: typeof createTuiIncidentReporter;
+  createIncidentReporter?: () => TuiIncidentReporter;
   readTuiMode?: typeof readTuiModeSetting;
   writeTuiMode?: typeof writeTuiModeSetting;
   readTuiTheme?: typeof readTuiThemeSetting;
   writeTuiTheme?: typeof writeTuiThemeSetting;
-  createSharedAuthSession?: typeof createMcodeSharedAuthSession;
-  createAuthApplication?: typeof createDefaultMcodeAuthApplication;
-}
-
-export function createConfiguredTuiBusinessTelemetry(options: {
-  readonly configEnabled: boolean;
-  readonly environment: NodeJS.ProcessEnv;
-  readonly telemetryOptions: CreateMcodeBusinessTelemetryOptions;
-  readonly createTelemetry?: typeof createMcodeBusinessTelemetry;
-}): McodeBusinessTelemetry | undefined {
-  const policy = resolveMcodeBusinessTelemetryPolicy({
-    configEnabled: options.configEnabled,
-    environment: options.environment,
-  });
-  if (!policy.enabled) return undefined;
-  return (options.createTelemetry ?? createMcodeBusinessTelemetry)(options.telemetryOptions);
+  createSharedAuthSession?: typeof createKcodeSharedAuthSession;
+  createAuthApplication?: typeof createDefaultKcodeAuthApplication;
 }
 
 export async function launchTui(
@@ -168,7 +141,7 @@ export async function launchTui(
     );
   }
   if (!options.terminal && (!process.stdin.isTTY || !process.stdout.isTTY)) {
-    throw new Error('Minimax Code interactive mode requires a TTY.');
+    throw new Error('Kinetick Code interactive mode requires a TTY.');
   }
 
   const homeDirectory = options.homeDir ?? homedir();
@@ -178,17 +151,17 @@ export async function launchTui(
   const tuiMode = options.tuiMode ?? (dependencies.readTuiMode ?? readTuiModeSetting)(dataDir);
   const theme = options.theme ?? (dependencies.readTuiTheme ?? readTuiThemeSetting)(dataDir);
   const terminalCapabilities = detectProcessTerminalCapabilities();
-  const authEnvironment = resolveMcodeAuthEnvironment({
+  const authEnvironment = resolveKcodeAuthEnvironment({
     runtimeRegion: process.env.MAVIS_REGION === 'en' ? 'en' : 'cn',
   });
   const bedrockLane = resolveTuiManagedBackendLane(options.lane, authEnvironment.buildEnv);
   const routingContext = bedrockLane ? { bedrockLane } : undefined;
-  const sharedAuthCore: MCodeOAuthCore = (
-    dependencies.createSharedAuthSession ?? createMcodeSharedAuthSession
+  const sharedAuthCore: KCodeOAuthCore = (
+    dependencies.createSharedAuthSession ?? createKcodeSharedAuthSession
   )({
     dataDir,
     ...authEnvironment,
-    oauthEndpoints: resolveMCodeOAuthEndpointConfig(process.env, authEnvironment),
+    oauthEndpoints: resolveKCodeOAuthEndpointConfig(process.env, authEnvironment),
   });
   let accountAuthContext: { accessToken: string; realUserID?: string } | undefined;
   const accountIdentityClient = new TuiMatrixAccountClient({
@@ -199,7 +172,7 @@ export async function launchTui(
   const resolveAccessTokenLease = async (): Promise<AccessTokenLease | undefined> => {
     try {
       const lease = await sharedAuthCore.getAccessToken({
-        requiredScopes: [...MCODE_OAUTH_SCOPES],
+        requiredScopes: [...KCODE_OAUTH_SCOPES],
         minValidityMs: 30_000,
       });
       if (accountAuthContext?.accessToken !== lease.accessToken) {
@@ -211,33 +184,8 @@ export async function launchTui(
       return undefined;
     }
   };
-  const resolveIdentityForToken = createTokenScopedAsyncResolver(async () => {
-    const accessToken = accountAuthContext?.accessToken;
-    if (!accessToken) return undefined;
-    const realUserID = await accountIdentityClient.getRealUserID();
-    if (realUserID && accountAuthContext?.accessToken === accessToken) {
-      accountAuthContext = { ...accountAuthContext, realUserID };
-    }
-    return realUserID;
-  });
-  const incidentReporterOptions = {
-    dataDir,
-    appVersion: options.version,
-    ...authEnvironment,
-    terminal: terminalCapabilities.terminalId,
-    tuiMode,
-    resolveAuthContext: async () => {
-      const auth = await resolveAccessTokenLease();
-      if (!auth) return undefined;
-      const realUserID = await resolveIdentityForToken(auth.accessToken.trim());
-      return realUserID ? { accessToken: auth.accessToken, realUserID } : undefined;
-    },
-  } satisfies CreateTuiIncidentReporterOptions;
-  const incidentReporter: TuiIncidentReporter = dependencies.createIncidentReporter
-    ? dependencies.createIncidentReporter(incidentReporterOptions)
-    : isVitestRuntime()
-      ? noopTuiIncidentReporter
-      : createTuiIncidentReporter(incidentReporterOptions);
+  const incidentReporter: TuiIncidentReporter =
+    dependencies.createIncidentReporter?.() ?? noopTuiIncidentSink;
   const onUncaughtExceptionMonitor = (error: Error, origin: string): void => {
     const operation = origin === 'unhandledRejection' ? 'unhandledRejection' : 'uncaughtException';
     captureTuiIncidentBestEffort(incidentReporter, {
@@ -250,31 +198,6 @@ export async function launchTui(
       impact: 'exit',
       handled: false,
     });
-  };
-  const businessTelemetry = createConfiguredTuiBusinessTelemetry({
-    configEnabled: (dependencies.readTelemetryEnabled ?? (() => getConfig().telemetry.enabled))(),
-    environment: process.env,
-    telemetryOptions: {
-      ...authEnvironment,
-      version: options.version,
-    },
-    ...(dependencies.createBusinessTelemetry
-      ? { createTelemetry: dependencies.createBusinessTelemetry }
-      : isVitestRuntime()
-        ? {
-            createTelemetry: () => ({
-              track: () => undefined,
-              flush: async () => undefined,
-            }),
-          }
-        : {}),
-  });
-  const trackTuiLaunch = (launchType: 'cold' | 'hot'): void => {
-    try {
-      businessTelemetry?.track('tui_launch', { launch_type: launchType });
-    } catch {
-      // Business telemetry must not affect TUI lifecycle.
-    }
   };
   const observability: TuiObservability = (
     dependencies.createObservability ?? createTuiObservability
@@ -303,8 +226,8 @@ export async function launchTui(
   const loadUpdateApplication =
     dependencies.loadUpdateApplication ??
     (async (currentVersion: string) => {
-      const { McodeUpdateApplication } = await import('../update/application.js');
-      return new McodeUpdateApplication({ currentVersion });
+      const { KcodeUpdateApplication } = await import('../update/application.js');
+      return new KcodeUpdateApplication({ currentVersion });
     });
   let updateApplicationPromise: ReturnType<typeof loadUpdateApplication> | undefined;
   const updateApplication = () => {
@@ -399,8 +322,8 @@ export async function launchTui(
         ...(presentationConfig.notifications
           ? { notifications: presentationConfig.notifications }
           : {}),
-        ...(process.env[MCODE_TUI_RESULT_PATH_ENV]
-          ? { automationResultPath: process.env[MCODE_TUI_RESULT_PATH_ENV] }
+        ...(process.env[KCODE_TUI_RESULT_PATH_ENV]
+          ? { automationResultPath: process.env[KCODE_TUI_RESULT_PATH_ENV] }
           : {}),
         ...(options.workspaceRoots ? { workspaceRoots: options.workspaceRoots } : {}),
         homeDir: homeDirectory,
@@ -414,13 +337,10 @@ export async function launchTui(
         externalEditorCommand: options.externalEditorCommand,
         observability,
         incidentReporter,
-        ...(businessTelemetry ? { businessTelemetry } : {}),
-        auth: (dependencies.createAuthApplication ?? createDefaultMcodeAuthApplication)({
+        auth: (dependencies.createAuthApplication ?? createDefaultKcodeAuthApplication)({
           dataDir,
           ...authEnvironment,
           sharedAuthCore,
-          ...(businessTelemetry ? { telemetry: businessTelemetry } : {}),
-          telemetrySource: 'mcode_tui',
         }),
         notifyAuthContextChanged: async (authState: 'authenticated' | 'logged_out') => {
           const activeRuntime = await initializingRuntime;
@@ -469,7 +389,7 @@ export async function launchTui(
         },
         ...(options.resumeDraftAfterLogin ? { resumeDraftAfterLogin: true } : {}),
         checkForUpdate: async () =>
-          resolveMcodeStartupUpdateNotice(await (await updateApplication()).inspect()),
+          resolveKcodeStartupUpdateNotice(await (await updateApplication()).inspect()),
         inspectUpdate: async () => (await updateApplication()).inspect(),
         applyUpdate: async (plan, progress) => (await updateApplication()).apply(plan, progress),
       });
@@ -483,7 +403,7 @@ export async function launchTui(
         report: (error) => {
           try {
             process.stderr.write(
-              `Minimax Code TUI stopped unexpectedly: ${tuiErrorDiagnostic(error)}. Restart MCode; if it keeps happening, report it through an available support channel.\n`,
+              `Kinetick Code TUI stopped unexpectedly: ${tuiErrorDiagnostic(error)}. Restart KCode; if it keeps happening, report it through an available support channel.\n`,
             );
           } catch {
             // The terminal may already be disconnected.
@@ -499,7 +419,6 @@ export async function launchTui(
               suspend: () => app?.suspend?.(),
               resume: async () => {
                 await app?.resume?.();
-                trackTuiLaunch('hot');
               },
               suspendProcess: () => process.kill(process.pid, 'SIGTSTP'),
             }),
@@ -565,7 +484,6 @@ export async function launchTui(
       return;
     }
     tuiRunning = true;
-    trackTuiLaunch('cold');
     incidentReporter.setPhase('runtime');
     incidentReporter.breadcrumb('cli.first-frame.rendered');
 
@@ -637,9 +555,9 @@ export async function launchTui(
       });
     }
     try {
-      await businessTelemetry?.flush();
+      await incidentReporter.drain();
     } catch {
-      // Business telemetry must not affect TUI shutdown.
+      // Incident reporting must not affect TUI shutdown.
     }
     incidentReporter.completeRun();
     await incidentReporter.flush();
@@ -817,7 +735,7 @@ export async function restartTuiProcess(
   const args = resolveRestartArguments(process.execPath, process.argv, sessionId, initialPrompt);
   const environment = resolveRestartEnvironment(process.env, region);
   if (
-    await schedulePendingMcodePrefixUpdate(
+    await schedulePendingKcodePrefixUpdate(
       process.argv[1],
       process.execPath,
       process.pid,
@@ -865,7 +783,7 @@ export function resolveRestartArguments(
   if (!nodeExecutable) return [...environmentArgs, ...resumeArgs, ...promptArgs];
   const entryFile = argv[1];
   if (!entryFile || !isExistingFile(entryFile)) {
-    throw new Error('Unable to restart MCode because its Node.js entry file is unavailable.');
+    throw new Error('Unable to restart KCode because its Node.js entry file is unavailable.');
   }
   return [entryFile, ...environmentArgs, ...resumeArgs, ...promptArgs];
 }
@@ -892,13 +810,13 @@ function isExistingFile(file: string): boolean {
 
 export function formatTuiExitMessage(sessionId?: string): string {
   const sessionHint = sessionId ? formatTuiSessionHint(sessionId) : undefined;
-  return `${sessionHint ?? '\n'}${sessionHint ? '\n' : ''}${MINIMAX_CODE_EXIT_SLOGAN}\n`;
+  return `${sessionHint ?? '\n'}${sessionHint ? '\n' : ''}${KCODE_EXIT_SLOGAN}\n`;
 }
 
 export function formatTuiSessionHint(sessionId: string): string | undefined {
   const normalized = sessionId.trim();
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/u.test(normalized)) return undefined;
-  return `\nContinue this session with:\n  mcode --session ${normalized}\n`;
+  return `\nContinue this session with:\n  kcode --session ${normalized}\n`;
 }
 
 async function prepareInitialTuiState(

@@ -33,7 +33,7 @@ export interface ExecTokenUsage {
 
 export type ExecUsageSource = 'completed_responses' | 'analytics_fallback' | 'unavailable';
 
-/** Stable public result emitted by mcode exec. */
+/** Stable public result emitted by kcode exec. */
 export interface ExecResult {
   readonly schemaVersion: 1;
   readonly type: 'exec.result';

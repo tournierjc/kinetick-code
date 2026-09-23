@@ -2,6 +2,7 @@ import type { SlashCommand } from '../widgets/autocomplete.js';
 import { fuzzyFilter } from '../engine/public.js';
 import { TuiContributionRegistry } from '../../contributions/index.js';
 import { TUI_COMMAND_DESCRIPTORS } from '../../application/command-descriptors.js';
+import { KCODE_LOGIN_PROVIDERS } from '../../provider/contract.js';
 import { sessionHistoryText, sessionMutationText } from '../features/session-mutation/copy.js';
 
 export type TuiCommandCategory =
@@ -42,6 +43,7 @@ export const SIDE_MODE_READ_ONLY_COMMANDS = new Set([
   'context',
   'status',
   'usage',
+  'cost',
   'export',
   'transcript',
   'copy',
@@ -127,19 +129,19 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     ...TUI_COMMAND_DESCRIPTORS.new,
+    description: 'Open a new Session in a new tab',
     aliases: ['clear'],
     category: 'Session',
-    runAvailability: 'idle',
   },
   {
     name: 'update',
-    description: 'Check for and install an MCode update',
+    description: 'Check for and install an KCode update',
     category: 'Application',
     discoverability: 'search-only',
   },
   {
     name: 'changelog',
-    description: 'Show the packaged MCode update history',
+    description: 'Show the packaged KCode update history',
     category: 'Application',
   },
   {
@@ -149,6 +151,22 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     category: 'Session',
     argumentHint: '[query]',
     runAvailability: 'idle',
+  },
+  {
+    name: 'tabs',
+    description: 'Switch between the open Session tabs',
+    category: 'Session',
+    argumentHint:
+      '<next | prev | close | move <left|right> | rename [title] | group [on|off] | collapse | 1-9>',
+    getArgumentCompletions: argumentCompleter([
+      ['next', 'Switch to the next open tab'],
+      ['prev', 'Switch to the previous open tab'],
+      ['close', 'Close the visible tab and show its neighbour'],
+      ['move', 'Move the visible tab one slot along the bar'],
+      ['rename', 'Rename the visible tab'],
+      ['group', 'Group the tabs by project'],
+      ['collapse', 'Fold every other project group, or unfold them all'],
+    ]),
   },
   {
     name: 'goal',
@@ -225,6 +243,15 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     unavailableReason: sessionMutationText('sessionMutation.command.fork.unavailable', 'en'),
   },
   {
+    name: 'clone',
+    description: sessionMutationText('sessionMutation.command.clone.description', 'en'),
+    category: 'Session',
+    discoverability: 'contextual',
+    runAvailability: 'idle',
+    visibleWhen: (context) => context.hasSession,
+    unavailableReason: sessionMutationText('sessionMutation.command.clone.unavailable', 'en'),
+  },
+  {
     name: 'rewind',
     description: sessionMutationText('sessionMutation.command.rewind.description', 'en'),
     category: 'Session',
@@ -267,6 +294,14 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     audience: 'internal',
   },
   {
+    name: 'pin',
+    description: 'Pin the active session to the top of the session list',
+    category: 'Session',
+    argumentHint: '[on | off]',
+    visibleWhen: (context) => context.hasSession,
+    unavailableReason: 'Start or resume a Session before pinning it.',
+  },
+  {
     ...TUI_COMMAND_DESCRIPTORS.compact,
     category: 'Session',
     argumentHint: '[instructions]',
@@ -304,8 +339,15 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'login',
-    description: 'Sign in to use MiniMax Code Agent features',
+    description: 'Sign in to MiniMax; /provider connects the rest',
     category: 'Runtime',
+    argumentHint: `[${KCODE_LOGIN_PROVIDERS.map((provider) => provider.providerId).join(' | ')}]`,
+    getArgumentCompletions: argumentCompleter(
+      KCODE_LOGIN_PROVIDERS.map((provider) => [
+        provider.providerId,
+        `Sign in to ${provider.name}`,
+      ]),
+    ),
     discoverability: 'contextual',
     visibleWhen: (context) => !context.managedTokenPresent,
   },
@@ -351,15 +393,8 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
     discoverability: 'search-only',
   },
   {
-    name: 'checkin',
-    description: 'Claim the daily MiniMax account reward',
-    category: 'Application',
-    readiness: 'controller',
-    preparingHint: 'Checking daily reward…',
-  },
-  {
     name: 'settings',
-    description: 'Configure the MCode terminal interface',
+    description: 'Configure the KCode terminal interface',
     category: 'Application',
   },
   {
@@ -400,7 +435,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'provider',
-    description: 'View providers and edit MiniMax credentials',
+    description: 'View, connect, and edit model providers',
     category: 'Runtime',
   },
   {
@@ -436,6 +471,11 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     ...TUI_COMMAND_DESCRIPTORS.usage,
+    category: 'Transcript',
+    discoverability: 'contextual',
+  },
+  {
+    ...TUI_COMMAND_DESCRIPTORS.cost,
     category: 'Transcript',
     discoverability: 'contextual',
   },
@@ -509,7 +549,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   {
     name: 'quit',
     aliases: ['exit'],
-    description: 'Exit Minimax Code',
+    description: 'Exit Kinetick Code',
     category: 'Application',
     readiness: 'immediate',
   },
@@ -774,10 +814,10 @@ export function isTuiCommandAvailable(command: TuiCommand, context: TuiCommandCo
 
 const DEFAULT_COMMAND_CATALOG = createTuiCommandCatalog();
 
-export const MINIMAX_CODE_COMMANDS: readonly TuiCommand[] = DEFAULT_COMMAND_CATALOG.commands;
-export const MINIMAX_CODE_ACTIVE_RUN_COMMANDS: readonly TuiCommand[] =
+export const KCODE_COMMANDS: readonly TuiCommand[] = DEFAULT_COMMAND_CATALOG.commands;
+export const KCODE_ACTIVE_RUN_COMMANDS: readonly TuiCommand[] =
   DEFAULT_COMMAND_CATALOG.activeRunCommands;
-export const MINIMAX_CODE_DISCOVERABLE_COMMANDS: readonly TuiCommand[] =
+export const KCODE_DISCOVERABLE_COMMANDS: readonly TuiCommand[] =
   DEFAULT_COMMAND_CATALOG.discoverableCommands;
 
 export function formatTuiCommandUsage(command: TuiCommand): string {

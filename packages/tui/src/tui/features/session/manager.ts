@@ -15,6 +15,7 @@ import { truncateToWidth, visibleWidth } from '../../rendering/text.js';
 import { Input } from '../../widgets/input.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
 import type { TuiSession } from '../../../runtime/port.js';
+import type { TuiSessionHistoryMatch } from './prompt-search.js';
 import {
   isTuiDelegatedSession,
   isTuiInternalSubagentSession,
@@ -25,10 +26,12 @@ import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 
 type SessionManagerView = 'active' | 'archived';
 type SessionManagerScope = 'workspace' | 'all';
-type SessionManagerMode = 'list' | 'rename' | 'confirm-archive';
+type SessionManagerMode = 'list' | 'rename' | 'confirm-archive' | 'confirm-delete';
 type SessionRecencySection = 'today' | 'yesterday' | 'previous-7-days' | 'older';
 const SESSION_LIST_VISIBLE_LIMIT = 10;
 const SESSION_SEARCH_DEBOUNCE_MS = 200;
+/** Sessions sent to the saved-prompt search in one query. */
+const SESSION_CONTENT_SEARCH_LIMIT = 50;
 
 export interface TuiSessionManagerOptions {
   sessions: readonly TuiSession[];
@@ -49,6 +52,20 @@ export interface TuiSessionManagerOptions {
   onNew(): Promise<void> | void;
   onRename(sessionId: string, title: string): Promise<TuiSession>;
   onSetArchived(sessionId: string, archived: boolean): Promise<void> | void;
+  /**
+   * Permanently removes the Session and its history files. There is no trash:
+   * offer the archive path beside it, never a bare delete.
+   */
+  onDelete(sessionId: string): Promise<void> | void;
+  /**
+   * Saved-prompt search. Called only when the query matches no title, path,
+   * Agent or model, and only with the Sessions the manager has loaded, so the
+   * host can bound the work. Matches list those Sessions.
+   */
+  onSearchHistory?(
+    query: string,
+    sessionIds: readonly string[],
+  ): Promise<readonly TuiSessionHistoryMatch[]>;
   onCancel(): void;
   requestRender(): void;
   now?: () => number;
@@ -68,11 +85,21 @@ export class TuiSessionManager implements Component, Focusable {
   private selectedIndex = 0;
   private selectedSessionId?: string;
   private actionTargetId?: string;
+  /** `/sessions` delete has no trash, so the safe choice is selected first. */
+  private deleteChoice: 'archive' | 'delete' = 'archive';
   private busy = false;
   private hasMore: boolean;
   private loadingMore = false;
   private pageLoad?: Promise<boolean>;
   private searchLoadTimer?: ReturnType<typeof setTimeout>;
+  private contentSearchTimer?: ReturnType<typeof setTimeout>;
+  /** Session id → the saved prompt that matched it. Empty for title matches. */
+  private contentMatches = new Map<string, string>();
+  private contentSearchSequence = 0;
+  private contentSearching = false;
+  /** Project grouping replaces the recency headers when it is on. */
+  private groupByProject = false;
+  private collapsedGroups = new Set<string>();
   private status?: { tone: 'info' | 'error'; text: string };
   private _focused = false;
   private disposed = false;
@@ -88,6 +115,7 @@ export class TuiSessionManager implements Component, Focusable {
     this.actionInput.onEscape = () => this.exitActionMode();
     this.clampSelection();
     if (this.searchInput.getValue()) this.scheduleRemainingSearchLoad();
+    if (this.searchInput.getValue()) this.scheduleContentSearch();
     if (options.initialRenameSessionId) {
       this.startRename(options.initialRenameSessionId);
     }
@@ -138,6 +166,16 @@ export class TuiSessionManager implements Component, Focusable {
       else if (getKeybindings().matches(data, 'tui.select.cancel')) this.exitActionMode();
       return;
     }
+    if (this.mode === 'confirm-delete') {
+      if (matchesKey(data, Key.up) || matchesKey(data, Key.down)) {
+        this.deleteChoice = this.deleteChoice === 'delete' ? 'archive' : 'delete';
+        this.requestRender();
+        return;
+      }
+      if (matchesKey(data, Key.enter)) this.confirmDelete();
+      else if (getKeybindings().matches(data, 'tui.select.cancel')) this.exitActionMode();
+      return;
+    }
 
     if (matchesKey(data, Key.up)) {
       this.moveSelection(-1);
@@ -164,6 +202,14 @@ export class TuiSessionManager implements Component, Focusable {
       void this.changeScope();
       return;
     }
+    if (!searchActive && matchesKey(data, Key.ctrl('g'))) {
+      this.toggleProjectGrouping();
+      return;
+    }
+    if (!searchActive && this.groupByProject && matchesKey(data, Key.ctrl('o'))) {
+      this.toggleSelectedGroupCollapse();
+      return;
+    }
     if (matchesKey(data, Key.tab)) {
       this.view = this.view === 'active' ? 'archived' : 'active';
       this.resetSelection();
@@ -181,6 +227,10 @@ export class TuiSessionManager implements Component, Focusable {
       this.toggleSelectedArchived();
       return;
     }
+    if (!searchActive && matchesKey(data, Key.ctrl('x'))) {
+      this.openDeleteConfirmation();
+      return;
+    }
     if (matchesKey(data, Key.enter)) {
       this.openSelected();
       return;
@@ -188,6 +238,7 @@ export class TuiSessionManager implements Component, Focusable {
     if (getKeybindings().matches(data, 'tui.select.cancel')) {
       if (this.searchInput.getValue()) {
         this.searchInput.setValue('');
+        this.setContentMatches([]);
         this.resetSelection();
       } else {
         this.options.onCancel();
@@ -200,6 +251,7 @@ export class TuiSessionManager implements Component, Focusable {
     if (this.searchInput.getValue() !== previousQuery) {
       this.resetSelection();
       this.scheduleRemainingSearchLoad();
+      this.scheduleContentSearch();
     } else this.requestRender();
   }
 
@@ -212,6 +264,8 @@ export class TuiSessionManager implements Component, Focusable {
     this.disposed = true;
     if (this.searchLoadTimer) clearTimeout(this.searchLoadTimer);
     this.searchLoadTimer = undefined;
+    if (this.contentSearchTimer) clearTimeout(this.contentSearchTimer);
+    this.contentSearchTimer = undefined;
     this.searchInput.focused = false;
     this.actionInput.focused = false;
   }
@@ -236,6 +290,12 @@ export class TuiSessionManager implements Component, Focusable {
     if (this.mode === 'confirm-archive') {
       return this.fitLines(
         this.fitToRows(this.renderArchiveConfirmation(safeWidth, maxRows), maxRows),
+        safeWidth,
+      );
+    }
+    if (this.mode === 'confirm-delete') {
+      return this.fitLines(
+        this.fitToRows(this.renderDeleteConfirmation(safeWidth, maxRows), maxRows),
         safeWidth,
       );
     }
@@ -278,9 +338,11 @@ export class TuiSessionManager implements Component, Focusable {
     }${listPosition}`;
     const secondaryFooter = !showSecondaryFooter
       ? undefined
-      : `Ctrl+A ${this.scope === 'workspace' ? 'all' : 'current'} · Ctrl+N new · Ctrl+R rename · Ctrl+D ${
+      : `Ctrl+A ${this.scope === 'workspace' ? 'all' : 'current'} · Ctrl+N new · Ctrl+R rename · Ctrl+G ${
+          this.groupByProject ? 'recency' : 'projects'
+        }${this.groupByProject ? ' · Ctrl+O fold' : ''} · Ctrl+D ${
           this.view === 'active' ? 'archive' : 'restore'
-        }${this.hasMore ? ' · More sessions available · Ctrl+L more' : ''} · Esc close`;
+        } · Ctrl+X delete${this.hasMore ? ' · More sessions available · Ctrl+L more' : ''} · Esc close`;
     const footerRows = renderPanelFooter(
       [primaryFooter, ...(secondaryFooter ? [secondaryFooter] : [])],
       Math.max(1, width - 4),
@@ -316,7 +378,7 @@ export class TuiSessionManager implements Component, Focusable {
     if (!compact) {
       lines.push(
         frameRow(
-          chalk.hex(colors.dim)('Filter title, ID, workspace, model, status, or branch'),
+          chalk.hex(colors.dim)('Filter title, ID, workspace, model, status, branch, or prompt'),
           width,
         ),
       );
@@ -329,7 +391,9 @@ export class TuiSessionManager implements Component, Focusable {
             this.searchInput.getValue()
               ? this.loadingMore || this.hasMore
                 ? 'Searching saved sessions…'
-                : 'No matching sessions.'
+                : this.contentSearching
+                  ? 'Searching saved prompts…'
+                  : 'No matching sessions.'
               : `No ${viewLabel.toLowerCase()} sessions in this workspace.`,
           ),
           width,
@@ -339,7 +403,7 @@ export class TuiSessionManager implements Component, Focusable {
       const reservedFooterRows = footerRows.length + 2;
       const statusRows = this.status ? 1 : 0;
       const detailRows = this.detailRowBudget(width, maxRows);
-      const showSections =
+      const showGroups =
         !this.searchInput.getValue().trim() &&
         width >= 48 &&
         (maxRows === undefined || maxRows >= 20);
@@ -351,8 +415,8 @@ export class TuiSessionManager implements Component, Focusable {
           statusRows -
           detailRows,
       );
-      const window = this.sessionWindow(visible, listBudget, showSections);
-      lines.push(...this.renderSessionWindow(window.sessions, width, listBudget, showSections));
+      const window = this.sessionWindow(visible, listBudget, showGroups);
+      lines.push(...this.renderSessionWindow(window.sessions, width, listBudget, showGroups));
     }
 
     const detailRowBudget = this.detailRowBudget(width, maxRows);
@@ -414,15 +478,27 @@ export class TuiSessionManager implements Component, Focusable {
         }
       }
       if (detailRowBudget >= 6) {
-        const updated = formatSessionTime(selected.updatedAt, this.now());
-        const created = formatSessionTime(selected.createdAt, this.now());
-        const timestamps = [
-          updated ? `Updated ${updated}` : undefined,
-          created ? `Created ${created}` : undefined,
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        if (timestamps) lines.push(frameRow(chalk.hex(colors.dim)(timestamps), width));
+        const snippet = this.contentMatches.get(selected.sessionId);
+        if (snippet) {
+          lines.push(
+            frameRow(
+              chalk.hex(colors.accent)(
+                `Matched “${truncateToWidth(sanitizeTerminalText(snippet), Math.max(1, width - 14), '…')}”`,
+              ),
+              width,
+            ),
+          );
+        } else {
+          const updated = formatSessionTime(selected.updatedAt, this.now());
+          const created = formatSessionTime(selected.createdAt, this.now());
+          const timestamps = [
+            updated ? `Updated ${updated}` : undefined,
+            created ? `Created ${created}` : undefined,
+          ]
+            .filter(Boolean)
+            .join(' · ');
+          if (timestamps) lines.push(frameRow(chalk.hex(colors.dim)(timestamps), width));
+        }
       }
     }
     if (this.status) {
@@ -457,7 +533,9 @@ export class TuiSessionManager implements Component, Focusable {
     const emptyMessage = query
       ? this.loadingMore || this.hasMore
         ? 'Searching saved sessions…'
-        : 'No matching sessions.'
+        : this.contentSearching
+          ? 'Searching saved prompts…'
+          : 'No matching sessions.'
       : `No ${viewLabel.toLowerCase()} sessions in this workspace.`;
     const selectedLine = selected
       ? this.renderSessionLine(selected, true, width - 4)
@@ -488,6 +566,7 @@ export class TuiSessionManager implements Component, Focusable {
       : title;
     const status = formatSessionStatus(session.status);
     const suffix = [
+      this.contentMatches.has(session.sessionId) ? 'prompt match' : undefined,
       formatSessionTime(session.updatedAt, this.now()),
       isCurrent ? 'current' : undefined,
       status,
@@ -506,7 +585,7 @@ export class TuiSessionManager implements Component, Focusable {
   private sessionWindow(
     visible: readonly TuiSession[],
     rowBudget: number,
-    showSections: boolean,
+    showGroups: boolean,
   ): { readonly sessions: readonly TuiSession[]; readonly start: number } {
     if (visible.length === 0) return { sessions: [], start: 0 };
     let count = Math.max(1, Math.min(SESSION_LIST_VISIBLE_LIMIT, rowBudget, visible.length));
@@ -516,24 +595,25 @@ export class TuiSessionManager implements Component, Focusable {
         Math.min(this.selectedIndex - Math.floor(count / 2), Math.max(0, visible.length - count)),
       );
       const sessions = visible.slice(start, start + count);
-      if (count === 1 || this.sessionWindowRowCount(sessions, showSections) <= rowBudget) {
+      if (count === 1 || this.sessionWindowRowCount(sessions, showGroups) <= rowBudget) {
         return { sessions, start };
       }
       count -= 1;
     }
   }
 
-  private sessionWindowRowCount(sessions: readonly TuiSession[], showSections: boolean): number {
-    if (!showSections) return sessions.length;
+  private sessionWindowRowCount(sessions: readonly TuiSession[], showGroups: boolean): number {
+    if (!showGroups) return sessions.length;
+    const collapsed = this.collapsedGroupKeys(sessions);
     let rows = 0;
-    let section: SessionRecencySection | undefined;
+    let key: string | undefined;
     for (const session of sessions) {
-      const nextSection = this.sessionSection(session);
-      if (nextSection !== section) {
+      const group = this.sessionGroup(session);
+      if (group.key !== key) {
         rows += 1;
-        section = nextSection;
+        key = group.key;
       }
-      rows += 1;
+      if (!collapsed.has(group.key)) rows += 1;
     }
     return rows;
   }
@@ -542,17 +622,34 @@ export class TuiSessionManager implements Component, Focusable {
     sessions: readonly TuiSession[],
     width: number,
     rowBudget: number,
-    showSections: boolean,
+    showGroups: boolean,
   ): string[] {
     const rows: string[] = [];
-    let section: SessionRecencySection | undefined;
+    const collapsed = this.collapsedGroupKeys(sessions);
+    const groupSizes = new Map<string, number>();
     for (const session of sessions) {
-      const nextSection = this.sessionSection(session);
-      if (showSections && nextSection !== section && rows.length < rowBudget - 1) {
-        rows.push(frameRow(chalk.bold.hex(colors.text)(sessionSectionLabel(nextSection)), width));
+      const key = this.sessionGroup(session).key;
+      groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
+    }
+    let key: string | undefined;
+    for (const session of sessions) {
+      const group = this.sessionGroup(session);
+      if (showGroups && group.key !== key && rows.length < rowBudget - 1) {
+        const size = groupSizes.get(group.key) ?? 0;
+        rows.push(
+          frameRow(
+            chalk.bold.hex(colors.text)(
+              collapsed.has(group.key)
+                ? `▸ ${group.label} (${size} folded)`
+                : `${group.label} (${size})`,
+            ),
+            width,
+          ),
+        );
       }
-      section = nextSection;
+      key = group.key;
       if (rows.length >= rowBudget) break;
+      if (collapsed.has(group.key)) continue;
       rows.push(
         frameRow(
           this.renderSessionLine(session, session.sessionId === this.selectedSessionId, width - 4),
@@ -607,19 +704,225 @@ export class TuiSessionManager implements Component, Focusable {
     );
   }
 
-  private visibleSessions(): TuiSession[] {
+  private renderDeleteConfirmation(width: number, height?: number): string[] {
+    const target = this.findActionTarget();
+    const choices = [
+      ['archive', 'Archive instead · history stays available under Archived'],
+      ['delete', 'Delete permanently · removes the Session and its history files'],
+    ] as const;
+    return renderPanelFrame(
+      {
+        title: 'Delete this session?',
+        body: [
+          sanitizeTerminalText(target?.title?.trim() || target?.sessionId || 'Unknown session'),
+          chalk.hex(colors.muted)('Deleting cannot be undone. Archiving keeps the Session.'),
+          '',
+          ...choices.map(([choice, label]) =>
+            choice === this.deleteChoice
+              ? chalk.hex(colors.accent)(`› ${label}`)
+              : `  ${chalk.hex(colors.muted)(label)}`,
+          ),
+        ],
+        footer: '↑↓ choose · Enter confirm · Esc cancel',
+      },
+      width,
+      height,
+      this.deleteChoice === 'delete' ? 'error' : 'warning',
+    );
+  }
+
+  private setContentMatches(matches: readonly TuiSessionHistoryMatch[]): void {
+    this.contentSearchSequence += 1;
+    this.contentSearching = false;
+    this.contentMatches = new Map(matches.map((match) => [match.sessionId, match.snippet]));
+  }
+
+  private toggleProjectGrouping(): void {
+    this.groupByProject = !this.groupByProject;
+    this.collapsedGroups = new Set();
+    this.status = {
+      tone: 'info',
+      text: this.groupByProject
+        ? 'Grouped by project. Ctrl+O folds the other projects.'
+        : 'Grouped by recency.',
+    };
+    this.requestRender();
+  }
+
+  /**
+   * Fold every project except the one holding the selected Session, or unfold
+   * them all again. That project always stays open: folding is a rendering
+   * choice, and a folded group must never hide the row the user is standing on
+   * or make a Session unreachable.
+   */
+  private toggleSelectedGroupCollapse(): void {
+    const selected = this.selectedSession();
+    if (!selected) return;
+    const listed = this.visibleSessions();
+    const keepOpen = this.sessionGroup(selected).key;
+    const others = new Set(
+      listed.map((session) => this.sessionGroup(session).key).filter((key) => key !== keepOpen),
+    );
+    if (others.size === 0) {
+      this.status = { tone: 'info', text: 'Only one group is listed, so there is nothing to fold.' };
+      this.requestRender();
+      return;
+    }
+    const folded = [...others].every((key) => this.collapsedGroups.has(key));
+    this.collapsedGroups = folded ? new Set() : others;
+    this.status = {
+      tone: 'info',
+      text: folded
+        ? 'Showing every group again.'
+        : `${this.sessionGroup(selected).label} holds the selected Session, so it stays open; the other groups are folded.`,
+    };
+    this.requestRender();
+  }
+
+  /** The header a Session renders under, and the key that folds it. */
+  private sessionGroup(session: TuiSession): { readonly key: string; readonly label: string } {
+    if (!this.groupByProject) {
+      const section = this.sessionSection(session);
+      return { key: `recent:${section}`, label: sessionSectionLabel(section) };
+    }
+    const workspaceDir = session.workspaceDir?.trim();
+    return workspaceDir
+      ? { key: `project:${workspaceDir}`, label: formatWorkspaceGroupLabel(workspaceDir) }
+      : { key: 'project:', label: 'No workspace' };
+  }
+
+  /**
+   * Project grouping keeps a project's Sessions under one header: projects are
+   * ordered by their newest Session, and the recency order inside each project is
+   * preserved (the sort is stable). Without grouping the list is untouched.
+   */
+  private orderedForGrouping(sessions: readonly TuiSession[]): readonly TuiSession[] {
+    if (!this.groupByProject) return sessions;
+    const newestByGroup = new Map<string, number>();
+    for (const session of sessions) {
+      const key = this.sessionGroup(session).key;
+      const updatedAt = toTimestamp(session.updatedAt);
+      newestByGroup.set(key, Math.max(newestByGroup.get(key) ?? 0, updatedAt));
+    }
+    return [...sessions].sort((left, right) => {
+      const leftKey = this.sessionGroup(left).key;
+      const rightKey = this.sessionGroup(right).key;
+      if (leftKey === rightKey) return 0;
+      return (newestByGroup.get(rightKey) ?? 0) - (newestByGroup.get(leftKey) ?? 0);
+    });
+  }
+
+  /** Collapsed groups, minus the one holding the selected Session. */
+  private collapsedGroupKeys(sessions: readonly TuiSession[]): ReadonlySet<string> {
+    if (this.collapsedGroups.size === 0) return this.collapsedGroups;
+    const selected = sessions.find((session) => session.sessionId === this.selectedSessionId);
+    if (!selected) return this.collapsedGroups;
+    const keepOpen = this.sessionGroup(selected).key;
+    if (!this.collapsedGroups.has(keepOpen)) return this.collapsedGroups;
+    const open = new Set(this.collapsedGroups);
+    open.delete(keepOpen);
+    return open;
+  }
+
+  private visibleSessions(): readonly TuiSession[] {
+    return this.orderedForGrouping(this.matchedSessions());
+  }
+
+  private matchedSessions(): TuiSession[] {
+    const matched = this.fieldMatchedSessions();
+    if (matched.length > 0) return matched;
+    if (this.contentMatches.size === 0) return matched;
+    return this.viewScopedSessions().filter((session) =>
+      this.contentMatches.has(session.sessionId),
+    );
+  }
+
+  /** Sessions in the current view, before the query is applied. */
+  private viewScopedSessions(): TuiSession[] {
+    return this.scopedSessions().filter(
+      (session) => Boolean(session.archived) === (this.view === 'archived'),
+    );
+  }
+
+  private fieldMatchedSessions(): TuiSession[] {
     const queryTokens = this.searchInput
       .getValue()
       .trim()
       .toLocaleLowerCase()
       .split(/\s+/u)
       .filter(Boolean);
-    return this.scopedSessions().filter((session) => {
-      if (Boolean(session.archived) !== (this.view === 'archived')) return false;
+    return this.viewScopedSessions().filter((session) => {
       if (queryTokens.length === 0) return true;
       const fields = sessionSearchFields(session);
       return queryTokens.every((token) => matchesSessionQueryToken(fields, token));
     });
+  }
+
+  /**
+   * Titles, paths, Agents and models match locally. A query that matches none
+   * of them asks the host for a saved-prompt search, because prompt text is not
+   * part of the session catalog the TUI holds.
+   */
+  private scheduleContentSearch(): void {
+    if (this.contentSearchTimer) clearTimeout(this.contentSearchTimer);
+    this.contentSearchTimer = undefined;
+    if (!this.options.onSearchHistory || !this.searchInput.getValue().trim()) {
+      this.clearContentMatches();
+      return;
+    }
+    this.contentSearchTimer = setTimeout(() => {
+      this.contentSearchTimer = undefined;
+      this.runContentSearch();
+    }, SESSION_SEARCH_DEBOUNCE_MS);
+  }
+
+  private runContentSearch(): void {
+    const onSearchHistory = this.options.onSearchHistory;
+    const query = this.searchInput.getValue().trim();
+    if (!onSearchHistory || !query) return;
+    if (this.hasMore || this.loadingMore || this.pageLoad) {
+      // A hit may live in a page that is still loading; retry once it settles.
+      this.scheduleContentSearch();
+      return;
+    }
+    if (this.fieldMatchedSessions().length > 0) {
+      this.clearContentMatches();
+      return;
+    }
+    const candidates = this.viewScopedSessions().slice(0, SESSION_CONTENT_SEARCH_LIMIT);
+    if (candidates.length === 0) return;
+    const sequence = ++this.contentSearchSequence;
+    this.contentSearching = true;
+    this.requestRender();
+    void onSearchHistory(query, candidates.map((session) => session.sessionId)).then(
+      (matches) => {
+        if (this.disposed || sequence !== this.contentSearchSequence) return;
+        this.contentSearching = false;
+        this.contentMatches = new Map(matches.map((match) => [match.sessionId, match.snippet]));
+        this.clampSelection();
+        this.status = {
+          tone: 'info',
+          text:
+            matches.length === 0
+              ? 'No title or saved prompt matched.'
+              : `${String(matches.length)} Session${matches.length === 1 ? '' : 's'} matched a saved prompt.`,
+        };
+        this.requestRender();
+      },
+      () => {
+        if (this.disposed || sequence !== this.contentSearchSequence) return;
+        this.contentSearching = false;
+        this.contentMatches = new Map();
+        this.status = { tone: 'error', text: "Couldn't search saved prompts." };
+        this.requestRender();
+      },
+    );
+  }
+
+  private clearContentMatches(): void {
+    if (this.contentMatches.size === 0) return;
+    this.contentMatches = new Map();
+    this.requestRender();
   }
 
   private scopedSessions(): TuiSession[] {
@@ -892,6 +1195,40 @@ export class TuiSessionManager implements Component, Focusable {
     });
   }
 
+  private openDeleteConfirmation(): void {
+    const target = this.selectedSession();
+    if (!target) return;
+    this.mode = 'confirm-delete';
+    this.actionTargetId = target.sessionId;
+    // Archive is the default: a delete has no undo.
+    this.deleteChoice = 'archive';
+    this.status = undefined;
+    this.syncInputFocus();
+    this.requestRender();
+  }
+
+  private confirmDelete(): void {
+    const target = this.findActionTarget();
+    if (!target) {
+      this.exitActionMode();
+      return;
+    }
+    if (this.deleteChoice === 'archive') {
+      this.confirmArchive();
+      return;
+    }
+    void this.runAction(async () => {
+      await this.options.onDelete(target.sessionId);
+      if (this.disposed) return;
+      this.sessions = this.sessions.filter((session) => session.sessionId !== target.sessionId);
+      if (this.activeSessionId === target.sessionId) this.activeSessionId = undefined;
+      if (this.selectedSessionId === target.sessionId) this.selectedSessionId = undefined;
+      this.exitActionMode(false);
+      this.clampSelection();
+      this.setStatus('Session deleted with its history files. This cannot be undone.', 'info');
+    });
+  }
+
   private async runAction(action: () => Promise<void>): Promise<void> {
     this.busy = true;
     this.status = { tone: 'info', text: 'Working…' };
@@ -1143,6 +1480,17 @@ function truncatePath(value: string, width: number): string {
     suffix = candidate;
   }
   return `…${suffix}`;
+}
+
+/**
+ * The group header for a project: the last path segment, so a list of nested
+ * workspaces stays readable inside the panel width.
+ */
+function formatWorkspaceGroupLabel(workspaceDir: string): string {
+  const segments = sanitizeTerminalText(workspaceDir)
+    .split('/')
+    .filter((segment) => segment.length > 0);
+  return segments.slice(-2).join('/') || workspaceDir;
 }
 
 function composeLine(left: string, right: string, width: number): string {

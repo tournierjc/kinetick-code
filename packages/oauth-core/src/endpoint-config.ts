@@ -1,6 +1,6 @@
 import type { AuthBuildEnv, AuthRegion } from './contracts.js';
 
-export type MCodeOAuthEndpointEnvironment = Partial<
+export type KCodeOAuthEndpointEnvironment = Partial<
   Record<
     | 'MCODE_OAUTH_DEVICE_AUTHORIZATION_ENDPOINT'
     | 'MCODE_OAUTH_TOKEN_ENDPOINT'
@@ -9,14 +9,14 @@ export type MCodeOAuthEndpointEnvironment = Partial<
   >
 >;
 
-export interface MCodeOAuthEndpointConfig {
+export interface KCodeOAuthEndpointConfig {
   deviceAuthorizationEndpoint: string;
   deviceAuthorizationHeaders?: Record<string, string>;
   tokenEndpoint: string;
   revocationEndpoint: string;
 }
 
-export interface MCodeOAuthEndpointContext {
+export interface KCodeOAuthEndpointContext {
   buildEnv: AuthBuildEnv;
   region: AuthRegion;
 }
@@ -36,10 +36,10 @@ const ACCOUNT_ORIGINS: Record<AuthRegion, Record<AuthBuildEnv, string>> = {
   },
 };
 
-export function resolveMCodeOAuthEndpointConfig(
-  environment: MCodeOAuthEndpointEnvironment,
-  context: MCodeOAuthEndpointContext,
-): MCodeOAuthEndpointConfig {
+export function resolveKCodeOAuthEndpointConfig(
+  environment: KCodeOAuthEndpointEnvironment,
+  context: KCodeOAuthEndpointContext,
+): KCodeOAuthEndpointConfig {
   const configuredValues = [
     environment.MCODE_OAUTH_DEVICE_AUTHORIZATION_ENDPOINT,
     environment.MCODE_OAUTH_TOKEN_ENDPOINT,
@@ -62,7 +62,7 @@ export function resolveMCodeOAuthEndpointConfig(
   const revocationEndpoint = readHttpsEndpoint(environment.MCODE_OAUTH_REVOCATION_ENDPOINT);
   if (!deviceAuthorizationEndpoint || !tokenEndpoint || !revocationEndpoint) {
     throw new TypeError(
-      'Shared MCode OAuth requires all three public OAuth endpoints to be configured.',
+      'Shared KCode OAuth requires all three public OAuth endpoints to be configured.',
     );
   }
   return {
@@ -75,7 +75,7 @@ export function resolveMCodeOAuthEndpointConfig(
 
 function deviceAuthorizationRequestConfig(
   buildEnv: AuthBuildEnv,
-): Pick<MCodeOAuthEndpointConfig, 'deviceAuthorizationHeaders'> {
+): Pick<KCodeOAuthEndpointConfig, 'deviceAuthorizationHeaders'> {
   return buildEnv === 'staging' ? { deviceAuthorizationHeaders: { 'X-User-Pre': '1' } } : {};
 }
 

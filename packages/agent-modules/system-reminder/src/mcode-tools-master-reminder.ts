@@ -2,7 +2,7 @@ const MCODE_TOOLS_MODEL_PREFIX = 'MiniMax-M2.7';
 
 const MCODE_TOOLS_MASTER_REMINDER = [
   '<mcode-tools-master-reminder>',
-  'For all video, image, and audio understanding and generation tasks, use the mcode-tools-master skill.',
+  'For all video, image, and audio understanding and generation tasks, use the kcode-tools-master skill.',
   '</mcode-tools-master-reminder>',
 ].join('\n');
 

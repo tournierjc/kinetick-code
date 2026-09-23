@@ -12,7 +12,7 @@ import {
 } from '../engine/public.js';
 import { captureTuiIncidentBestEffort, type TuiIncidentSink } from '../../observability/index.js';
 
-export interface McodeInteractiveRendererOptions {
+export interface KcodeInteractiveRendererOptions {
   readonly terminal: Terminal;
   readonly initialMode?: TuiMode;
   readonly showHardwareCursor?: boolean;
@@ -50,7 +50,7 @@ export function createActiveTuiReference(getTui: () => TUI): TUI {
   });
 }
 
-export class McodeInteractiveRenderer {
+export class KcodeInteractiveRenderer {
   readonly ui: TUI;
   readonly firstFrame: Promise<void>;
 
@@ -64,7 +64,7 @@ export class McodeInteractiveRenderer {
   private disposed = false;
   private initialRegularViewportCleared = false;
 
-  constructor(private readonly options: McodeInteractiveRendererOptions) {
+  constructor(private readonly options: KcodeInteractiveRendererOptions) {
     this.fullscreenLayoutRoot = options.fullscreenLayoutRoot;
     this.renderer = this.createRenderer(options.initialMode ?? 'regular');
     this.ui = createActiveTuiReference(() => this.renderer);

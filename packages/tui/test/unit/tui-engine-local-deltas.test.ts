@@ -80,7 +80,7 @@ function createMutableChatParts(surface: 'welcome' | 'conversation') {
   return parts;
 }
 
-describe('MCode Pi Engine local deltas', () => {
+describe('KCode Pi Engine local deltas', () => {
   it('does not replay a submitted input frame after a synchronous render', async () => {
     const terminal = new RecordingVirtualTerminal(60, 12);
     const tui = new TuiMainScreen(terminal);

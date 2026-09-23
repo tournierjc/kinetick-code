@@ -6,7 +6,7 @@ import type {
   ConversationSteerInput,
   ConversationSteerResult,
 } from "@mavis/local-runtime-v2/cli-service";
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from "../product-context.js";
+import { KCODE_DEFAULT_AGENT_NAME } from "../product-context.js";
 import { TuiEventAccess } from "./adapters/event-access.js";
 import { TuiRuntimeAccessContext } from "./adapters/access-context.js";
 import { TuiWorkspaceAccess } from "./adapters/workspace-access.js";
@@ -75,7 +75,6 @@ import type { TuiPermissionMode } from "../application/permission-mode.js";
 import { resolveTuiEffortChoice } from "../application/model-effort.js";
 import type { TuiObservability } from "../observability/index.js";
 import type { TuiTokenPlanAccountStatus } from "../account/matrix-account-client.js";
-import type { TuiDailyCheckinOutcome } from "../checkin/application.js";
 
 export * from "./port.js";
 
@@ -101,9 +100,6 @@ export interface TuiRuntimeAdapterOptions {
     ): Promise<TuiFeedbackReceipt>;
     cancel(draftId: string): boolean | Promise<boolean>;
   };
-  dailyCheckin?: {
-    run(): Promise<TuiDailyCheckinOutcome>;
-  };
 }
 
 export class TuiRuntimeAdapter implements TuiRuntime {
@@ -126,17 +122,15 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   private readonly synchronizeAuth: TuiRuntimeAdapterOptions["synchronizeAuth"];
   private readonly accountIdentityGetter: TuiRuntimeAdapterOptions["accountIdentityGetter"];
   private readonly feedback: TuiRuntimeAdapterOptions["feedback"];
-  private readonly dailyCheckin: TuiRuntimeAdapterOptions["dailyCheckin"];
 
   constructor(cliService: CliService, options: TuiRuntimeAdapterOptions = {}) {
     this.cliService = cliService;
     const defaultAgentName =
-      options.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME;
+      options.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME;
     this.tokenPlanAccountStatusGetter = options.tokenPlanAccountStatusGetter;
     this.synchronizeAuth = options.synchronizeAuth;
     this.accountIdentityGetter = options.accountIdentityGetter;
     this.feedback = options.feedback;
-    this.dailyCheckin = options.dailyCheckin;
     this.conversationAccess = new TuiConversationAccess(cliService);
     this.pluginAccess = new TuiPluginAccess(cliService);
     this.context = new TuiRuntimeAccessContext({
@@ -156,6 +150,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
       this.context,
       defaultAgentName,
       options.workspaceDir,
+      this.sessionAccess,
     );
     this.interactionAccess = new TuiInteractionAccess(
       options.createQueueRequestId ?? createTuiQueueRequestId,
@@ -255,6 +250,9 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   }
   archiveSession(sessionId: string, archived: boolean): Promise<void> {
     return this.sessionAccess.archiveSession(sessionId, archived);
+  }
+  pinSession(input: { sessionId: string; pinned: boolean; insertIndex?: number }): Promise<void> {
+    return this.sessionAccess.pinSession(input);
   }
   deleteSession(sessionId: string): Promise<void> {
     return this.sessionAccess.deleteSession(sessionId);
@@ -407,7 +405,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     sessionId?: string;
   }): Promise<TuiFeedbackPreview> {
     if (!this.feedback)
-      throw new Error("MiniMax Code feedback is unavailable.");
+      throw new Error("Kinetick Code feedback is unavailable.");
     return this.feedback.prepare(input);
   }
   submitFeedback(
@@ -415,18 +413,12 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     options?: TuiFeedbackSubmitOptions,
   ): Promise<TuiFeedbackReceipt> {
     if (!this.feedback)
-      return Promise.reject(new Error("MiniMax Code feedback is unavailable."));
+      return Promise.reject(new Error("Kinetick Code feedback is unavailable."));
     return this.feedback.submit(draftId, options);
   }
   cancelFeedback(draftId: string): Promise<boolean> {
     if (!this.feedback) return Promise.resolve(false);
     return Promise.resolve(this.feedback.cancel(draftId));
-  }
-  runDailyCheckin(): Promise<TuiDailyCheckinOutcome> {
-    if (!this.dailyCheckin) {
-      return Promise.reject(new Error("Daily check-in is unavailable."));
-    }
-    return this.dailyCheckin.run();
   }
   getPermissionMode(): Promise<TuiPermissionMode | undefined> {
     return this.productAccess.getPermissionMode();
@@ -446,8 +438,8 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   ): Promise<boolean> {
     return this.productAccess.selectSessionModel(model, sessionId);
   }
-  listUserModelProviders() {
-    return this.productAccess.listUserModelProviders();
+  listModelProviders() {
+    return this.productAccess.listModelProviders();
   }
   listProviderPresets() {
     return this.productAccess.listProviderPresets();
@@ -463,6 +455,15 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   cancelCodexOAuthLogin(loginId: string) {
     return this.productAccess.cancelCodexOAuthLogin(loginId);
   }
+  getCopilotOAuthStatus() {
+    return this.productAccess.getCopilotOAuthStatus();
+  }
+  startCopilotOAuthLogin() {
+    return this.productAccess.startCopilotOAuthLogin();
+  }
+  cancelCopilotOAuthLogin(loginId: string) {
+    return this.productAccess.cancelCopilotOAuthLogin(loginId);
+  }
   getMiniMaxApiKeyStatus() {
     return this.productAccess.getMiniMaxApiKeyStatus();
   }
@@ -470,7 +471,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     return this.productAccess.getMiniMaxModelSource();
   }
   setMiniMaxModelSource(
-    source: import("../provider/contract.js").McodeMiniMaxModelSource,
+    source: import("../provider/contract.js").KcodeMiniMaxModelSource,
   ) {
     return this.productAccess.setMiniMaxModelSource(source);
   }
@@ -478,22 +479,22 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     return this.productAccess.upsertMiniMaxApiKey(input);
   }
   createUserModelProvider(
-    input: import("../provider/contract.js").McodeCreateProviderInput,
+    input: import("../provider/contract.js").KcodeCreateProviderInput,
   ) {
     return this.productAccess.createUserModelProvider(input);
   }
   discoverUserModelsCandidate(
-    input: import("../provider/contract.js").McodeDiscoverProviderModelsInput,
+    input: import("../provider/contract.js").KcodeDiscoverProviderModelsInput,
   ) {
     return this.productAccess.discoverUserModelsCandidate(input);
   }
   saveUserModelProviderCandidate(
-    input: import("../provider/contract.js").McodeSaveProviderCandidateInput,
+    input: import("../provider/contract.js").KcodeSaveProviderCandidateInput,
   ) {
     return this.productAccess.saveUserModelProviderCandidate(input);
   }
   updateUserModelProvider(
-    input: import("../provider/contract.js").McodeUpdateProviderInput,
+    input: import("../provider/contract.js").KcodeUpdateProviderInput,
   ) {
     return this.productAccess.updateUserModelProvider(input);
   }
@@ -511,6 +512,12 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   }
   getSessionUsageSummary(sessionId: string) {
     return this.productAccess.getSessionUsageSummary(sessionId);
+  }
+  getSessionUsageWithRows(sessionId: string): Promise<TuiSessionUsage> {
+    return this.productAccess.getSessionUsageWithRows(sessionId);
+  }
+  getSessionTree(agentName?: string): Promise<readonly TuiSession[]> {
+    return this.productAccess.getSessionTree(agentName);
   }
   watchSessionUsageCommits(signal: AbortSignal): AsyncGenerator<string> {
     return this.eventAccess.watchSessionUsageCommits(signal);

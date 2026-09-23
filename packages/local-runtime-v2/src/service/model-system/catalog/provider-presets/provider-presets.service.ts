@@ -3,6 +3,7 @@ import { getRuntimeRegion } from '@mavis/config';
 import type { ByokProviderPresetView, UserModelInputView } from '../../contracts.js';
 import { normalizeProviderBaseUrl } from '../../connectivity/provider-request.js';
 import type { ModelProviderApi } from '../../identity.js';
+import { PROVIDER_FAMILIES } from '../provider-families.js';
 import {
   fetchModelsDevCatalog,
   fetchPinnedProviderIdsConfig,
@@ -24,8 +25,8 @@ const DISABLED_PROVIDER_IDS = new Set([
   'minimax-cn-coding-plan',
 ]);
 const REGION_PINNED_PROVIDER_IDS = {
-  cn: ['zhipuai-coding-plan', 'zhipuai', 'deepseek', 'moonshotai-cn', 'openai', 'anthropic'],
-  en: ['zai-coding-plan', 'zai', 'deepseek', 'moonshotai', 'openai', 'anthropic'],
+  cn: ['zhipuai-coding-plan', 'zhipuai', 'deepseek', 'moonshotai-cn', 'openai', 'anthropic', 'openrouter'],
+  en: ['zai-coding-plan', 'zai', 'deepseek', 'moonshotai', 'openai', 'anthropic', 'openrouter'],
 } as const;
 // These IDs belong to models.dev, not the bundled inference registry. Keep their
 // URLs and IDs intact, and make the billing plan explicit at selection time.
@@ -76,17 +77,39 @@ export class ProviderPresetCatalog {
   async listProviderPresets(): Promise<ByokProviderPresetView[]> {
     const latest = await latestCatalogSnapshot(this.options);
     if (!latest) throw new Error('No valid models.dev catalog snapshot is available');
+    const remotePinnedProviderIds = await resolvePinnedProviderIds({
+      fetchImpl: this.options.commonConfigFetch,
+      originGetter: this.options.commonConfigOriginGetter,
+      timeoutMs: this.options.commonConfigTimeoutMs,
+      previewSecret: this.options.previewSecret,
+      lane: this.options.lane,
+    });
     const pinnedProviderIds =
-      (await resolvePinnedProviderIds({
-        fetchImpl: this.options.commonConfigFetch,
-        originGetter: this.options.commonConfigOriginGetter,
-        timeoutMs: this.options.commonConfigTimeoutMs,
-        previewSecret: this.options.previewSecret,
-        lane: this.options.lane,
-      })) ?? REGION_PINNED_PROVIDER_IDS[(this.options.regionGetter ?? getRuntimeRegion)()];
-    return orderProviderPresets(latest.presets, pinnedProviderIds);
+      remotePinnedProviderIds ??
+      REGION_PINNED_PROVIDER_IDS[(this.options.regionGetter ?? getRuntimeRegion)()];
+    // The fork's promise, narrower than `pinned`: a `forkAnchored` family is
+    // one MiniMax's shelf will never sell (the aggregator competes with the
+    // product's managed plans), so a valid remote list that omits it appends it
+    // at the tail of its pins. Every other family follows the shelf — MiniMax
+    // may retire its pin, and an unpinned catalog provider stays unpinned.
+    const shelfIds = new Set(latest.presets.map((preset) => preset.providerId));
+    const remoteList = remotePinnedProviderIds ?? [];
+    const forkAnchors =
+      remotePinnedProviderIds && remotePinnedProviderIds.length > 0
+        ? PROVIDER_FAMILIES.filter(
+            (family) =>
+              family.forkAnchored &&
+              shelfIds.has(family.providerId) &&
+              !remoteList.includes(family.providerId),
+          ).map((family) => family.providerId)
+        : [];
+    return orderProviderPresets(
+      latest.presets,
+      forkAnchors.length > 0 ? [...pinnedProviderIds, ...forkAnchors] : pinnedProviderIds,
+    );
   }
 }
+
 
 async function resolvePinnedProviderIds(
   options: Parameters<typeof fetchPinnedProviderIdsConfig>[0],
@@ -165,7 +188,14 @@ function resolveTransport(
         ? MESSAGES_API_BASE_URL
         : stringValue(provider.api);
   } else {
-    return undefined;
+    // A package the fork does not name above may still be an endpoint family it
+    // knows: OpenRouter ships its own AI-SDK provider (`@openrouter/ai-sdk-provider`)
+    // and speaks the completions API, so the family supplies both the protocol and
+    // the shape its requests need.
+    const family = PROVIDER_FAMILIES.find((entry) => entry.npm.includes(npm ?? ''));
+    if (!family) return undefined;
+    apiFormat = family.apiFormat;
+    baseUrl = stringValue(provider.api);
   }
   if (!baseUrl || !isHttpUrl(baseUrl)) return undefined;
   return { baseUrl: normalizeProviderBaseUrl(apiFormat, baseUrl), apiFormat };

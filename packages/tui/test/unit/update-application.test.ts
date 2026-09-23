@@ -1,388 +1,233 @@
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  McodeUpdateApplication,
-  type McodeUpdateApplicationDependencies,
+  KcodeUpdateApplication,
+  kcodeUpdateChannelLabel,
+  type KcodeUpdateApplicationDependencies,
+  type KcodeUpdateApplicationOptions,
+  type KcodeUpdatePlan,
+  type ReleaseUpdateService,
 } from '../../src/update/application.js';
 import {
-  bindMcodeNpmCommandToRuntime,
-  buildMcodePackageManagerCommand,
-  classifyMcodeInstallPath,
+  classifyKcodeInstallPath,
   classifyNpmGlobalInstall,
-  detectMcodeInstallSource,
-  isInternalMcodePackageName,
-  resolveMcodeNpmDistribution,
-  resolveMcodeNpmDistTag,
-  resolveMcodeNpmPrefixInstall,
-  resolveMcodePackageName,
-  resolveInstalledMcodePackageVersion,
-  resolveLatestMcodeRegistryVersion,
+  detectKcodeInstallSource,
+  isInternalKcodePackageName,
+  isManagedKcodeInstallRoot,
+  resolveInstalledKcodePackageVersion,
+  resolveKcodeInstallRoot,
+  resolveKcodeNpmPrefixInstall,
+  resolveKcodePackageName,
 } from '../../src/update/install-source.js';
 import {
-  resolveMcodePrefixLauncherPairs,
-  resolveMcodePrefixModulesRoot,
-  writeMcodePrefixUpdatePending,
+  inspectPendingKcodePrefixUpdate,
+  resolveKcodePrefixLauncherPairs,
+  resolveKcodePrefixModulesRoot,
+  writeKcodePrefixUpdatePending,
+  type KcodePrefixUpdateActivation,
 } from '../../src/update/prefix-update.js';
+import {
+  KCODE_RELEASES_URL,
+  type KcodeReleaseApplyResult,
+  type KcodeReleaseCheckResult,
+} from '../../src/update/release.js';
 
-describe('installer-owned npm runtime binding', () => {
-  const target = 'nodejs/26.3.1/lib/node_modules/npm/bin/npm-cli.js';
-  const shim = (cli = target) =>
-    [
-      '#!/bin/sh',
-      'basedir=$(dirname "$(echo "$0" | sed -e \'s,\\\\,/,g\')")',
-      'if [ -x "$basedir/node" ]; then',
-      `  exec "$basedir/node" "$basedir/${cli}" "$@"`,
-      'else',
-      `  exec node "$basedir/${cli}" "$@"`,
-      'fi',
-    ].join('\n');
+const RELEASE_ARTIFACT_URL =
+  'https://github.com/tournierjc/kinetick-code/releases/download/v1.2.4/' +
+  'kinetick-code-1.2.4.tar.gz';
+const PENDING_UPDATE_FILE = '.mcode-update-pending.json';
 
-  async function withLayout(
-    run: (root: string, write: (file: string, text?: string) => string) => void | Promise<void>,
-  ) {
-    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-npm-shim-')));
-    const write = (file: string, text = '') => {
-      const fullPath = path.join(root, file);
-      mkdirSync(path.dirname(fullPath), { recursive: true });
-      writeFileSync(fullPath, text);
-      return fullPath;
-    };
-    try {
-      await run(root, write);
-    } finally {
-      rmSync(root, { recursive: true, force: true });
-    }
-  }
-
-  function bind(executable: string) {
-    return bindMcodeNpmCommandToRuntime(
-      { executable, args: ['view', '@minimax-ai/code@latest', '--json'], display: 'owned npm' },
-      process.execPath,
-    );
-  }
-
-  it('resolves the reported pnpm shell shim and runs its CLI with the selected Node', async () => {
-    await withLayout(async (root, write) => {
-      const marker = path.join(root, 'shim-was-executed');
-      const npm = write(
-        'pnpm home/npm',
-        shim().replace('#!/bin/sh', `#!/bin/sh\ntouch "${marker}"`),
-      );
-      const cli = write(`pnpm home/${target}`, 'console.log(JSON.stringify("1.2.4"));');
-      // A different installed pnpm Node version must not influence the selection.
-      write(
-        'pnpm home/nodejs/24.2.0/lib/node_modules/npm/bin/npm-cli.js',
-        'throw new Error("wrong npm");',
-      );
-      expect(bind(npm)).toEqual({
-        executable: process.execPath,
-        args: [cli, 'view', '@minimax-ai/code@latest', '--json'],
-        display: 'owned npm',
-      });
-      await expect(
-        resolveLatestMcodeRegistryVersion('latest', {
-          npmExecutable: npm,
-          runtimeExecutable: process.execPath,
-          distribution: resolveMcodeNpmDistribution('@minimax-ai/code'),
-        }),
-      ).resolves.toBe('1.2.4');
-      expect(existsSync(marker)).toBe(false);
-    });
-  });
-
-  it.skipIf(process.platform === 'win32')(
-    'preserves regular npm symlinks and resolves symlinked pnpm shims',
-    async () => {
-      await withLayout((root, write) => {
-        const cli = write(`pnpm home/${target}`);
-        const npm = write('pnpm home/npm', shim());
-        symlinkSync(npm, path.join(root, 'npm'));
-        expect(bind(path.join(root, 'npm')).args[0]).toBe(cli);
-        const regularCli = write('node/lib/node_modules/npm/bin/npm-cli.js');
-        mkdirSync(path.join(root, 'node/bin'), { recursive: true });
-        symlinkSync('../lib/node_modules/npm/bin/npm-cli.js', path.join(root, 'node/bin/npm'));
-        expect(bind(path.join(root, 'node/bin/npm')).args[0]).toBe(regularCli);
-      });
-    },
-  );
-
+describe('KCode install source classification', () => {
   it.each([
-    ['node/npm.cmd', 'node/node_modules/npm/bin/npm-cli.js'],
-    ['node/bin/npm', 'node/lib/node_modules/npm/bin/npm-cli.js'],
-  ])('preserves conventional npm layout for %s', async (executable, cliPath) => {
-    await withLayout((_root, write) => {
-      const npm = write(executable, '@ECHO OFF\r\n');
-      const cli = write(cliPath);
-      expect(bind(npm).args[0]).toBe(cli);
-    });
-  });
-
-  it.each([
-    ['missing target', shim()],
-    ['directory target', shim()],
-    ['traversal', shim(`../${target}`)],
-    ['dynamic version', shim('nodejs/$(node -v)/lib/node_modules/npm/bin/npm-cli.js')],
+    ['/opt/homebrew/lib/node_modules/kinetick-code', 'npm-global'],
+    // The current internal identity, and the one a workspace install used before the rename.
+    ['/opt/data/lib/node_modules/@mavis/code', 'npm-global'],
+    ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@mavis\\code', 'npm-global'],
+    ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\kinetick-code', 'npm-global'],
+    ['/usr/local/lib/node_modules/kinetick-code', 'npm-global'],
+    ['/Users/demo/.local/share/pnpm/global/5/node_modules/kinetick-code', 'pnpm-global'],
     [
-      'ambiguous branches',
-      shim().replace('exec node "$basedir/nodejs/26.3.1/', 'exec node "$basedir/nodejs/24.2.0/'),
+      '/Users/demo/Library/pnpm/global/v11/10c0afe5/node_modules/kinetick-code',
+      'pnpm-global',
     ],
-    ['comment-only target', `#!/bin/sh\n# exec node "$basedir/${target}" "$@"`],
-    ['unknown wrapper', '#!/bin/sh\nexec npm "$@"'],
-  ])('rejects %s without searching other installed versions', async (kind, content) => {
-    await withLayout((root, write) => {
-      const npm = write('pnpm/npm', content);
-      write('pnpm/nodejs/24.2.0/lib/node_modules/npm/bin/npm-cli.js');
-      if (kind === 'directory target')
-        mkdirSync(path.join(root, 'pnpm', target), { recursive: true });
-      else if (kind !== 'missing target') write(`pnpm/${target}`);
-      write(target);
-      expect(() => bind(npm)).toThrow('Cannot locate npm-cli.js for the owned npm executable');
-    });
+    [
+      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\5\\node_modules\\kinetick-code',
+      'pnpm-global',
+    ],
+    [
+      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\v11\\10c0afe5\\node_modules\\kinetick-code',
+      'pnpm-global',
+    ],
+    ['/Users/demo/.config/yarn/global/node_modules/kinetick-code', 'yarn-global'],
+    [
+      'C:\\Users\\demo\\.config\\yarn\\global\\node_modules\\kinetick-code',
+      'yarn-global',
+    ],
+    ['/Users/demo/.bun/install/global/node_modules/kinetick-code', 'bun-global'],
+    [
+      'C:\\Users\\demo\\.bun\\install\\global\\node_modules\\kinetick-code',
+      'bun-global',
+    ],
+  ] as const)('classifies %s as %s', (packageRoot, expected) => {
+    expect(classifyKcodeInstallPath(packageRoot)).toBe(expected);
   });
 
-  it.skipIf(process.platform === 'win32').each(['file', 'version directory', 'dangling file'])(
-    'rejects a pnpm %s symlink escaping its version directory',
-    async (kind) => {
-      await withLayout((root, write) => {
-        const npm = write('pnpm/npm', shim());
-        const outside = write('outside/lib/node_modules/npm/bin/npm-cli.js');
-        const cli = path.join(root, 'pnpm', target);
-        if (kind === 'version directory') {
-          mkdirSync(path.join(root, 'pnpm/nodejs'), { recursive: true });
-          symlinkSync(path.join(root, 'outside'), path.join(root, 'pnpm/nodejs/26.3.1'));
-        } else {
-          mkdirSync(path.dirname(cli), { recursive: true });
-          symlinkSync(kind === 'dangling file' ? `${outside}.missing` : outside, cli);
-        }
-        expect(() => bind(npm)).toThrow('Cannot locate npm-cli.js for the owned npm executable');
-      });
+  it.each([
+    ['/usr/local/lib/node_modules/@minimax-ai/code', 'npm-global'],
+    ['/usr/local/lib/node_modules/@minimax/code', 'npm-global'],
+    ['/Users/demo/.config/yarn/global/node_modules/@minimax-ai/code', 'yarn-global'],
+    ['/Users/demo/.bun/install/global/node_modules/@minimax-ai/code', 'bun-global'],
+    [
+      '/Users/demo/Library/pnpm/global/v11/10c0afe5/node_modules/@minimax-ai/code',
+      'pnpm-global',
+    ],
+    [
+      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\v11\\10c0afe5\\node_modules\\@minimax-ai\\code',
+      'pnpm-global',
+    ],
+  ] as const)(
+    'still reports an installation an earlier release or the upstream CLI made: %s',
+    (packageRoot, expected) => {
+      expect(classifyKcodeInstallPath(packageRoot)).toBe(expected);
     },
   );
 
-  it('rejects a missing owned executable even when a conventional CLI exists', async () => {
-    await withLayout((root, write) => {
-      write('node_modules/npm/bin/npm-cli.js');
-      expect(() => bind(path.join(root, 'npm'))).toThrow();
-    });
+  it('reports no package-manager owner for a directory owned by another package', () => {
+    expect(classifyKcodeInstallPath('/usr/local/lib/node_modules/some-other-cli')).toBeUndefined();
+    expect(
+      classifyKcodeInstallPath('/usr/local/lib/node_modules/@minimax-ai/mcode-tools'),
+    ).toBeUndefined();
+    expect(classifyKcodeInstallPath('/usr/local/lib/node_modules/@mavis/other')).toBeUndefined();
+  });
+
+  it.each([
+    ['/usr/local/lib/node_modules/kinetick-code', '/usr/local', 'linux'],
+    [
+      'C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\kinetick-code',
+      'C:\\Users\\demo\\AppData\\Roaming\\npm',
+      'win32',
+    ],
+  ] as const)('recognizes npm global ownership for %s', (packageRoot, prefix, platform) => {
+    expect(classifyNpmGlobalInstall(packageRoot, prefix, platform)).toBe('npm-global');
+  });
+
+  it('denies npm global ownership for a directory outside the reported prefix', () => {
+    expect(
+      classifyNpmGlobalInstall('/srv/apps/tools/lib/node_modules/kinetick-code', '/usr/local'),
+    ).toBe('unsupported');
   });
 });
 
-describe('McodeUpdateApplication', () => {
-  it('keeps signed managed-installer check and apply behind one product intent', async () => {
-    const check = vi.fn(async () => ({
-      status: 'available' as const,
-      channel: 'stable' as const,
-      currentVersion: '1.2.3',
-      latestVersion: '1.2.4',
-      manifest: {} as never,
-    }));
-    const apply = vi.fn(async () => ({
-      ...(await check()),
-      applied: true,
-      installRoot: '/managed',
-    }));
-    const application = createApplication({
-      detectInstallSource: async () => 'managed-installer',
-      createManagedService: () => ({ check, apply }),
-    });
+describe('KCode install source detection ordering', () => {
+  const publicPackageRoot = '/usr/local/lib/node_modules/kinetick-code';
+  const prefixInstall = {
+    executable: '/opt/minimax/runtime/node/bin/npm',
+    packageName: 'kinetick-code' as const,
+    prefix: '/opt/minimax',
+    registry: 'https://registry.npmjs.org/',
+  };
 
-    const plan = await application.inspect();
+  it('prefers the managed installer receipt over every other owner', async () => {
+    const packageRoot = vi.fn(() => publicPackageRoot);
+    const detectPrefixInstall = vi.fn(() => prefixInstall);
 
-    expect(plan).toMatchObject({
-      kind: 'available',
-      source: 'managed-installer',
-      currentVersion: '1.2.3',
-      latestVersion: '1.2.4',
-      channel: 'stable',
-    });
-    const signal = new AbortController().signal;
-    const onPhase = vi.fn();
-    await expect(application.apply(plan, { signal, onPhase })).resolves.toMatchObject({
-      applied: true,
-      message: 'MCode 1.2.4 is installed. Restart running MCode sessions to use it.',
-    });
-    expect(apply).toHaveBeenCalledWith({
-      channel: 'stable',
-      version: '1.2.4',
-      signal,
-      onPhase,
-    });
+    await expect(
+      detectKcodeInstallSource({
+        installRoot: '/managed',
+        platform: 'linux',
+        packageRoot,
+        npmGlobalPrefix: async () => '/usr/local',
+        managedInstall: () => true,
+        prefixInstall: detectPrefixInstall,
+      }),
+    ).resolves.toBe('managed-installer');
+    expect(detectPrefixInstall).not.toHaveBeenCalled();
+    expect(packageRoot).not.toHaveBeenCalled();
   });
 
-  it('delegates global package installations to their owning package manager', async () => {
-    const runPackageManager = vi.fn(async () => undefined);
-    const createManagedService = vi.fn();
-    const resolveLatestPackageVersion = vi.fn(async () => '1.2.4');
-    const application = createApplication(
-      {
-        detectInstallSource: async () => 'pnpm-global',
-        createManagedService,
-        runPackageManager,
-        resolveLatestPackageVersion,
-      },
-      { packageTag: 'test' },
-    );
+  it('prefers an npm-prefix receipt over the package-manager layouts', async () => {
+    const packageRoot = vi.fn(() => publicPackageRoot);
 
-    const plan = await application.inspect();
-
-    expect(plan).toEqual({
-      kind: 'package-manager',
-      source: 'pnpm-global',
-      currentVersion: '1.2.3',
-      latestVersion: '1.2.4',
-      packageTag: 'test',
-      command: {
-        executable: process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
-        args: [
-          'add',
-          '--global',
-          '@minimax-ai/code@1.2.4',
-          '--registry',
-          'https://registry.npmjs.org/',
-        ],
-        display:
-          'pnpm add --global @minimax-ai/code@1.2.4 --registry https://registry.npmjs.org/',
-      },
-    });
-    const onOutput = vi.fn();
-    const onPhase = vi.fn();
-    const signal = new AbortController().signal;
-    await expect(application.apply(plan, { onOutput, onPhase, signal })).resolves.toMatchObject({
-      applied: true,
-      message: 'MCode 1.2.4 was installed through pnpm. Restart MCode to use the installed version.',
-    });
-    expect(createManagedService).not.toHaveBeenCalled();
-    expect(resolveLatestPackageVersion).toHaveBeenCalledWith('test');
-    expect(runPackageManager).toHaveBeenCalledWith(plan.command, { onOutput, onPhase, signal });
-    expect(onPhase).toHaveBeenNthCalledWith(1, { phase: 'installing', cancellable: false });
-    expect(onPhase).toHaveBeenNthCalledWith(2, { phase: 'completed', cancellable: false });
+    await expect(
+      detectKcodeInstallSource({
+        installRoot: '/opt/minimax',
+        platform: 'linux',
+        packageRoot,
+        npmGlobalPrefix: async () => '/usr/local',
+        managedInstall: () => false,
+        prefixInstall: () => prefixInstall,
+      }),
+    ).resolves.toBe('npm-prefix');
+    expect(packageRoot).not.toHaveBeenCalled();
   });
 
-  it('does not reinstall a package-manager installation already at the registry version', async () => {
-    const runPackageManager = vi.fn(async () => undefined);
-    const application = createApplication({
-      detectInstallSource: async () => 'npm-global',
-      resolveLatestPackageVersion: async () => '1.2.3',
-      runPackageManager,
-    });
+  it('classifies a global package-manager layout without querying the npm prefix', async () => {
+    const npmGlobalPrefix = vi.fn(async () => '/usr/local');
 
-    const plan = await application.inspect();
-
-    expect(plan).toEqual({
-      kind: 'current',
-      source: 'npm-global',
-      currentVersion: '1.2.3',
-      latestVersion: '1.2.3',
-      packageTag: 'latest',
-    });
-    await expect(application.apply(plan)).rejects.toThrow(/cannot be applied automatically/i);
-    expect(runPackageManager).not.toHaveBeenCalled();
+    await expect(
+      detectKcodeInstallSource({
+        installRoot: '/source',
+        platform: 'linux',
+        packageRoot: () => publicPackageRoot,
+        npmGlobalPrefix,
+        managedInstall: () => false,
+        prefixInstall: () => undefined,
+      }),
+    ).resolves.toBe('npm-global');
+    expect(npmGlobalPrefix).not.toHaveBeenCalled();
   });
 
-  it('does not downgrade a package-manager installation newer than the registry version', async () => {
-    const application = createApplication({
-      detectInstallSource: async () => 'bun-global',
-      resolveLatestPackageVersion: async () => '1.2.2',
-    });
+  it('falls back to the npm global prefix when no layout marker matches', async () => {
+    const npmGlobalPrefix = vi.fn(async () => '/srv/apps/tools');
 
-    await expect(application.inspect()).resolves.toEqual({
-      kind: 'ahead',
-      source: 'bun-global',
-      currentVersion: '1.2.3',
-      latestVersion: '1.2.2',
-      packageTag: 'latest',
-    });
+    await expect(
+      detectKcodeInstallSource({
+        installRoot: '/source',
+        platform: 'linux',
+        packageRoot: () => '/srv/apps/tools/node_modules/kinetick-code',
+        npmGlobalPrefix,
+        managedInstall: () => false,
+        prefixInstall: () => undefined,
+      }),
+    ).resolves.toBe('npm-global');
+    expect(npmGlobalPrefix).toHaveBeenCalledOnce();
   });
 
-  it('follows the test dist-tag when a custom prerelease sorts ahead of the tagged build', async () => {
-    const resolveLatestPackageVersion = vi.fn(
-      async () => '0.0.1-beta.1786162945.e3fdada2',
-    );
-    const application = createApplication(
-      {
-        detectInstallSource: async () => 'npm-global',
-        resolveLatestPackageVersion,
-      },
-      {
-        currentVersion: '0.0.1-beta.matrixfix.7069818510',
-        packageTag: 'test',
-      },
-    );
-
-    await expect(application.inspect()).resolves.toEqual({
-      kind: 'package-manager',
-      source: 'npm-global',
-      currentVersion: '0.0.1-beta.matrixfix.7069818510',
-      latestVersion: '0.0.1-beta.1786162945.e3fdada2',
-      packageTag: 'test',
-      command: {
-        executable: process.platform === 'win32' ? 'npm.cmd' : 'npm',
-        args: [
-          'install',
-          '--global',
-          '@minimax-ai/code@0.0.1-beta.1786162945.e3fdada2',
-          '--ignore-scripts=false',
-          '--include=optional',
-          '--allow-scripts=@minimax-ai/code,better-sqlite3',
-          '--registry',
-          'https://registry.npmjs.org/',
-        ],
-        display:
-          'npm install --global @minimax-ai/code@0.0.1-beta.1786162945.e3fdada2 ' +
-          '--ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3 ' +
-          '--registry https://registry.npmjs.org/',
-      },
-    });
-    expect(resolveLatestPackageVersion).toHaveBeenCalledWith('test');
+  it('reports an unsupported installation when the npm prefix cannot be resolved', async () => {
+    await expect(
+      detectKcodeInstallSource({
+        installRoot: '/source',
+        platform: 'linux',
+        packageRoot: () => '/srv/apps/tools/node_modules/kinetick-code',
+        npmGlobalPrefix: async () => {
+          throw new Error('npm is not installed');
+        },
+        managedInstall: () => false,
+        prefixInstall: () => undefined,
+      }),
+    ).resolves.toBe('unsupported');
   });
 
-  it('follows the preview dist-tag instead of applying SemVer downgrade protection', async () => {
-    const application = createApplication(
-      {
-        detectInstallSource: async () => 'npm-global',
-        resolveLatestPackageVersion: async () => '0.2.1-previewtrain.41',
-      },
-      {
-        currentVersion: '0.2.1-previewtrain.hotfix.42',
-        packageTag: 'preview',
-      },
-    );
-
-    await expect(application.inspect()).resolves.toMatchObject({
-      kind: 'package-manager',
-      currentVersion: '0.2.1-previewtrain.hotfix.42',
-      latestVersion: '0.2.1-previewtrain.41',
-      packageTag: 'preview',
-    });
-  });
-
-  it('fails closed when the installation owner cannot be identified', async () => {
-    const runPackageManager = vi.fn(async () => undefined);
-    const createManagedService = vi.fn();
-    const resolveLatestPackageVersion = vi.fn(async () => '9.9.9');
-    const application = createApplication({
-      detectInstallSource: async () => 'unsupported',
-      createManagedService,
-      runPackageManager,
-      resolveLatestPackageVersion,
-    });
-
-    const plan = await application.inspect();
-
-    expect(plan).toMatchObject({
-      kind: 'manual',
-      source: 'unsupported',
-      command:
-        'npm install --global @minimax-ai/code@latest ' +
-        '--ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3 ' +
-        '--registry https://registry.npmjs.org/',
-    });
-    await expect(application.apply(plan)).rejects.toThrow(/cannot be applied automatically/i);
-    expect(createManagedService).not.toHaveBeenCalled();
-    expect(resolveLatestPackageVersion).not.toHaveBeenCalled();
-    expect(runPackageManager).not.toHaveBeenCalled();
+  it('reports an unsupported installation when the entry file has no package root', async () => {
+    await expect(
+      detectKcodeInstallSource({
+        installRoot: '/source',
+        platform: 'linux',
+        packageRoot: () => undefined,
+        npmGlobalPrefix: async () => '/usr/local',
+        managedInstall: () => false,
+        prefixInstall: () => undefined,
+      }),
+    ).resolves.toBe('unsupported');
   });
 
   it.each([
@@ -390,708 +235,94 @@ describe('McodeUpdateApplication', () => {
     '/Users/demo/project/.config/yarn/global/source/@minimax-ai/code',
     '/Users/demo/project/.yarn/global/source/@minimax-ai/code',
     '/Users/demo/project/.bun/install/global/source/@minimax-ai/code',
-  ])(
-    'treats a local checkout containing a global-install marker as unsupported: %s',
+  ] as const)(
+    'reports a local checkout carrying the global-install marker as unsupported: %s',
     async (packageRoot) => {
-      const createManagedService = vi.fn();
-      const resolveLatestPackageVersion = vi.fn(async () => '9.9.9');
-      const application = createApplication({
-        detectInstallSource: () =>
-          detectMcodeInstallSource({
-            installRoot: '/source',
-            platform: 'darwin',
-            packageRoot: () => packageRoot,
-            npmGlobalPrefix: async () => '/usr/local',
-            managedInstall: () => false,
-          }),
-        createManagedService,
-        resolveLatestPackageVersion,
-      });
-
-      await expect(application.inspect()).resolves.toMatchObject({
-        kind: 'manual',
-        source: 'unsupported',
-      });
-      expect(createManagedService).not.toHaveBeenCalled();
-      expect(resolveLatestPackageVersion).not.toHaveBeenCalled();
+      await expect(
+        detectKcodeInstallSource({
+          installRoot: '/source',
+          platform: 'darwin',
+          packageRoot: () => packageRoot,
+          npmGlobalPrefix: async () => '/usr/local',
+          managedInstall: () => false,
+          prefixInstall: () => undefined,
+        }),
+      ).resolves.toBe('unsupported');
     },
   );
-
-  it('keeps a future public package on the official npm registry', async () => {
-    const application = createApplication(
-      { detectInstallSource: async () => 'unsupported' },
-      { packageName: '@minimax-ai/code' },
-    );
-
-    await expect(application.inspect()).resolves.toMatchObject({
-      kind: 'manual',
-      command:
-        'npm install --global @minimax-ai/code@latest ' +
-        '--ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3 ' +
-        '--registry https://registry.npmjs.org/',
-    });
-  });
-
-  it('keeps a China mirror prefix on the same registry during updates', async () => {
-    const resolveLatestPackageVersion = vi.fn(async () => '1.2.4');
-    const application = createApplication(
-      {
-        detectInstallSource: async () => 'npm-prefix',
-        resolveLatestPackageVersion,
-      },
-      {
-        packageName: '@minimax-ai/code',
-        prefixInstall: {
-          executable: '/opt/minimax/runtime/node/bin/npm',
-          packageName: '@minimax-ai/code',
-          prefix: '/opt/minimax',
-          registry: 'https://registry.npmmirror.com/',
-        },
-      },
-    );
-
-    await expect(application.inspect()).resolves.toMatchObject({
-      kind: 'package-manager',
-      source: 'npm-prefix',
-      command: {
-        args: [
-          'install',
-          '--global',
-          '--prefix',
-          '/opt/minimax',
-          '@minimax-ai/code@1.2.4',
-          '--ignore-scripts=false',
-          '--include=optional',
-          '--allow-scripts=@minimax-ai/code,better-sqlite3',
-          '--registry',
-          'https://registry.npmmirror.com/',
-        ],
-      },
-    });
-    expect(resolveLatestPackageVersion).toHaveBeenCalledWith('latest');
-  });
-
-  it('reads the installed public package identity from its real entry path', () => {
-    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-public-'));
-    const packageRoot = path.join(
-      temporaryRoot,
-      'lib',
-      'node_modules',
-      '@minimax-ai',
-      'code',
-    );
-    try {
-      mkdirSync(packageRoot, { recursive: true });
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code' }),
-      );
-      const entryFile = path.join(packageRoot, 'cli.js');
-      writeFileSync(entryFile, '');
-
-      expect(resolveMcodePackageName(entryFile)).toBe('@minimax-ai/code');
-      expect(resolveInstalledMcodePackageVersion(entryFile)).toBeUndefined();
-    } finally {
-      rmSync(temporaryRoot, { recursive: true, force: true });
-    }
-  });
-
-  it('recognizes only the internal package identity as environment-selectable', () => {
-    expect(isInternalMcodePackageName('@minimax/code')).toBe(true);
-    expect(isInternalMcodePackageName('@minimax-ai/code')).toBe(false);
-    expect(isInternalMcodePackageName(undefined)).toBe(false);
-  });
-
-  it('rejects a package-manager update when the installed exact version does not match', async () => {
-    const application = createApplication({
-      detectInstallSource: async () => 'npm-global',
-      resolveLatestPackageVersion: async () => '1.2.4',
-      runPackageManager: async () => undefined,
-      readInstalledPackageVersion: () => '1.2.3',
-    });
-
-    const plan = await application.inspect();
-
-    await expect(application.apply(plan)).rejects.toThrow(
-      'MCode update installed 1.2.3; expected 1.2.4.',
-    );
-  });
 });
 
-describe('MCode update install-source commands', () => {
+describe('KCode npm prefix ownership receipts', () => {
   it.each([
-    ['/opt/homebrew/lib/node_modules/@minimax-ai/code', 'npm-global'],
-    ['C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@minimax\\code', 'npm-global'],
-    ['/usr/local/lib/node_modules/@minimax-ai/code', 'npm-global'],
-    ['/Users/demo/.local/share/pnpm/global/5/node_modules/@minimax-ai/code', 'pnpm-global'],
-    [
-      '/Users/demo/Library/pnpm/global/v11/10c0afe5/node_modules/@minimax-ai/code',
-      'pnpm-global',
-    ],
-    [
-      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\5\\node_modules\\@minimax\\code',
-      'pnpm-global',
-    ],
-    [
-      'C:\\Users\\demo\\AppData\\Local\\pnpm\\global\\v11\\10c0afe5\\node_modules\\@minimax-ai\\code',
-      'pnpm-global',
-    ],
-    ['/Users/demo/.config/yarn/global/node_modules/@minimax-ai/code', 'yarn-global'],
-    [
-      'C:\\Users\\demo\\.config\\yarn\\global\\node_modules\\@minimax\\code',
-      'yarn-global',
-    ],
-    ['/Users/demo/.bun/install/global/node_modules/@minimax-ai/code', 'bun-global'],
-    [
-      'C:\\Users\\demo\\.bun\\install\\global\\node_modules\\@minimax\\code',
-      'bun-global',
-    ],
-  ] as const)('classifies %s as %s', (packageRoot, expected) => {
-    expect(classifyMcodeInstallPath(packageRoot)).toBe(expected);
-  });
-
-  it('uses Windows command shims for the Windows-aware process launcher', () => {
-    expect(buildMcodePackageManagerCommand('npm-global', '1.2.4', 'win32')).toEqual({
-      executable: 'npm.cmd',
-      args: [
-        'install',
-        '--global',
-        '@minimax-ai/code@1.2.4',
-        '--ignore-scripts=false',
-        '--include=optional',
-        '--allow-scripts=@minimax-ai/code,better-sqlite3',
-        '--registry',
-        'https://registry.npmjs.org/',
-      ],
-      display:
-        'npm install --global @minimax-ai/code@1.2.4 --ignore-scripts=false --include=optional ' +
-        '--allow-scripts=@minimax-ai/code,better-sqlite3 --registry https://registry.npmjs.org/',
-    });
-    expect(buildMcodePackageManagerCommand('bun-global', '1.2.4', 'win32')).toEqual({
-      executable: 'bun.exe',
-      args: [
-        'add',
-        '--global',
-        '@minimax-ai/code@1.2.4',
-        '--registry',
-        'https://registry.npmjs.org/',
-      ],
-      display:
-        'bun add --global @minimax-ai/code@1.2.4 --registry https://registry.npmjs.org/',
-    });
-  });
-
-  it('uses the installer-owned npm executable, prefix, package, and registry', () => {
-    const distribution = resolveMcodeNpmDistribution('@minimax-ai/code');
-    const command = buildMcodePackageManagerCommand(
-      'npm-prefix',
-      '1.2.4',
-      'linux',
-      distribution,
-      {
-        executable: '/opt/minimax/runtime/node/bin/npm',
-        packageName: '@minimax-ai/code',
-        prefix: '/opt/minimax',
-        registry: 'https://registry.npmjs.org/',
-      },
-    );
-
-    expect(command).toEqual({
-      executable: '/opt/minimax/runtime/node/bin/npm',
-      args: [
-        'install',
-        '--global',
-        '--prefix',
-        '/opt/minimax',
-        '@minimax-ai/code@1.2.4',
-        '--ignore-scripts=false',
-        '--include=optional',
-        '--allow-scripts=@minimax-ai/code,better-sqlite3',
-        '--registry',
-        'https://registry.npmjs.org/',
-      ],
-      display:
-        '/opt/minimax/runtime/node/bin/npm install --global --prefix /opt/minimax ' +
-        '@minimax-ai/code@1.2.4 --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3 --registry https://registry.npmjs.org/',
-    });
-  });
-
-  it('keeps the explicit public mirror for installer-owned updates', () => {
-    const distribution = resolveMcodeNpmDistribution(
-      '@minimax-ai/code',
-      'https://registry.npmmirror.com',
-    );
-    const command = buildMcodePackageManagerCommand(
-      'npm-prefix',
-      '1.2.4',
-      'linux',
-      distribution,
-      {
-        executable: '/opt/minimax/runtime/node/bin/npm',
-        packageName: '@minimax-ai/code',
-        prefix: '/opt/minimax',
-        registry: 'https://registry.npmmirror.com/',
-      },
-    );
-
-    expect(command.args).toEqual([
-      'install',
-      '--global',
-      '--prefix',
-      '/opt/minimax',
-      '@minimax-ai/code@1.2.4',
-      '--ignore-scripts=false',
-      '--include=optional',
-      '--allow-scripts=@minimax-ai/code,better-sqlite3',
-      '--registry',
-      'https://registry.npmmirror.com/',
-    ]);
-    expect(() =>
-      resolveMcodeNpmDistribution('@minimax-ai/code', 'https://registry.example.com/'),
-    ).toThrow('Unsupported MCode npm registry');
-  });
-
-  it('uses the active package manifest entry when argv points at the npm bin shim', async () => {
-    const runPackageManager = vi.fn(async () => undefined);
-    const activateVersionedPrefix = vi.fn(() => '/opt/minimax/releases/1.2.4');
-    const releasePrefixUpdateLock = vi.fn();
-    const application = createApplication(
-      {
-        detectInstallSource: async () => 'npm-prefix',
-        resolveLatestPackageVersion: async () => '1.2.4',
-        runPackageManager,
-        createVersionedPrefixStaging: () => '/opt/minimax/releases/.staging-1.2.4',
-        prepareVersionedPrefixStaging: vi.fn(),
-        readPrefixPackageMetadata: (prefix, packageName) => ({
-          packageRoot: `${prefix}/lib/node_modules/${packageName}`,
-          version: '1.2.4',
-          binEntry: 'dist/index.js',
-          mcodeToolsBinEntry: 'mcode-tools.js',
-        }),
-        validatePrefixPackage: vi.fn(async () => undefined),
-        activateVersionedPrefix,
-        acquirePrefixUpdateLock: () => releasePrefixUpdateLock,
-      },
-      {
-        entryFile: '/opt/minimax/bin/mcode',
-        packageName: '@minimax-ai/code',
-        prefixInstall: {
-          executable: '/opt/minimax/runtime/node/bin/npm',
-          packageName: '@minimax-ai/code',
-          prefix: '/opt/minimax',
-          registry: 'https://registry.npmjs.org/',
-        },
-      },
-    );
-
-    const plan = await application.inspect();
-    await expect(application.apply(plan)).resolves.toEqual({
-      applied: true,
-      restartRequired: false,
-      message:
-        'MCode 1.2.4 is installed. New MCode sessions will use it; running sessions can continue normally.',
-    });
-    expect(activateVersionedPrefix).toHaveBeenCalledWith({
-      stagingPrefix: '/opt/minimax/releases/.staging-1.2.4',
-      activePrefix: '/opt/minimax',
-      packageName: '@minimax-ai/code',
-      expectedVersion: '1.2.4',
-      runtimeExecutable: process.execPath,
-      npmExecutable: '/opt/minimax/runtime/node/bin/npm',
-      registry: 'https://registry.npmjs.org/',
-    });
-    expect(releasePrefixUpdateLock).toHaveBeenCalledOnce();
-  });
-
-  it('reports malformed pending metadata instead of treating it as a staged update', async () => {
-    const prefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-malformed-pending-'));
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai/code');
-    const entryFile = path.join(packageRoot, 'dist/index.js');
-    const pendingFile = path.join(prefix, '.mcode-update-pending.json');
-    try {
-      mkdirSync(path.dirname(entryFile), { recursive: true });
-      writeFileSync(entryFile, '');
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+    ['https://registry.npmjs.org/', 'kinetick-code'],
+    ['https://registry.npmmirror.com/', 'kinetick-code'],
+    ['https://registry.npmjs.org/', '@minimax-ai/code'],
+  ] as const)(
+    'reads the installer prefix receipt and keeps its registry: %s %s',
+    (registry, packageName) => {
+      const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-prefix-receipt-')));
+      const packageRoot = path.join(
+        root,
+        ...(process.platform === 'win32' ? [] : ['lib']),
+        'node_modules',
+        ...packageName.split('/'),
       );
-      writeFileSync(
-        path.join(prefix, 'install.json'),
-        JSON.stringify({ updateOwner: 'npm-prefix', prefix }),
+      const npmExecutable = path.join(
+        root,
+        'runtime',
+        'node',
+        ...(process.platform === 'win32' ? ['npm.cmd'] : ['bin', 'npm']),
       );
-      writeFileSync(pendingFile, '{}');
+      const entryFile = path.join(packageRoot, 'cli.js');
+      try {
+        mkdirSync(packageRoot, { recursive: true });
+        mkdirSync(path.dirname(npmExecutable), { recursive: true });
+        writeFileSync(npmExecutable, '');
+        writeFileSync(entryFile, '');
+        writeFileSync(
+          path.join(packageRoot, 'package.json'),
+          JSON.stringify({ name: packageName, version: '1.2.3' }),
+        );
+        writeFileSync(
+          path.join(root, 'install.json'),
+          `\uFEFF${JSON.stringify({
+            schemaVersion: 1,
+            product: 'minimax-code',
+            updateOwner: 'npm-prefix',
+            packageManager: 'npm',
+            packageName,
+            registry,
+            distTag: 'latest',
+            prefix: root,
+            npmExecutable,
+          })}`,
+        );
 
-      const application = new McodeUpdateApplication(
-        {
-          currentVersion: '1.2.3',
-          entryFile,
-          environment: {},
-          installRoot: prefix,
-          prefixInstall: {
-            executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
-            packageName: '@minimax-ai/code',
-            prefix,
-            registry: 'https://registry.npmjs.org/',
-          },
-        },
-        {
-          detectInstallSource: async () => 'npm-prefix',
-          resolveLatestPackageVersion: async () => '1.2.4',
-        },
-      );
-
-      await expect(application.inspect()).rejects.toThrow(
-        `MCode pending update metadata is invalid at ${pendingFile}.`,
-      );
-    } finally {
-      rmSync(prefix, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects a pending journal owned by a different active prefix', async () => {
-    const prefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-foreign-pending-'));
-    const foreignPrefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-foreign-owner-'));
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai/code');
-    const entryFile = path.join(packageRoot, 'dist/index.js');
-    const pendingFile = path.join(prefix, '.mcode-update-pending.json');
-    const foreignStaging = path.join(path.dirname(foreignPrefix), '.foreign-staging');
-    try {
-      mkdirSync(path.dirname(entryFile), { recursive: true });
-      writeFileSync(entryFile, '');
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
-      );
-      writeFileSync(
-        path.join(prefix, 'install.json'),
-        JSON.stringify({ updateOwner: 'npm-prefix', prefix }),
-      );
-      writeFileSync(
-        pendingFile,
-        JSON.stringify({
-          schemaVersion: 1,
-          stagingPrefix: foreignStaging,
-          activePrefix: foreignPrefix,
-          activeModulesRoot: resolveMcodePrefixModulesRoot(foreignPrefix, process.platform),
-          stagedModulesRoot: resolveMcodePrefixModulesRoot(foreignStaging, process.platform),
-          backupModulesRoot: `${resolveMcodePrefixModulesRoot(foreignPrefix, process.platform)}.mcode-update-backup`,
-          packageName: '@minimax-ai/code',
-          expectedVersion: '1.2.4',
-          launchers: resolveMcodePrefixLauncherPairs(foreignPrefix, foreignStaging, process.platform),
-        }),
-      );
-
-      const application = new McodeUpdateApplication(
-        {
-          currentVersion: '1.2.3',
-          entryFile,
-          environment: {},
-          installRoot: prefix,
-          prefixInstall: {
-            executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
-            packageName: '@minimax-ai/code',
-            prefix,
-            registry: 'https://registry.npmjs.org/',
-          },
-        },
-        {
-          detectInstallSource: async () => 'npm-prefix',
-          resolveLatestPackageVersion: async () => '1.2.4',
-        },
-      );
-
-      await expect(application.inspect()).rejects.toThrow(
-        `MCode pending update file is outside its active prefix: ${pendingFile}`,
-      );
-    } finally {
-      rmSync(prefix, { recursive: true, force: true });
-      rmSync(foreignPrefix, { recursive: true, force: true });
-      rmSync(foreignStaging, { recursive: true, force: true });
-    }
-  });
-
-  it('resumes a valid staged update without checking for a newer registry version', async () => {
-    const prefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-valid-pending-'));
-    const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.staging`);
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai/code');
-    const stagedPackageRoot = path.join(resolveMcodePrefixModulesRoot(stagingPrefix), '@minimax-ai/code');
-    const entryFile = path.join(packageRoot, 'dist/index.js');
-    try {
-      mkdirSync(path.dirname(entryFile), { recursive: true });
-      mkdirSync(path.join(stagedPackageRoot, 'dist'), { recursive: true });
-      mkdirSync(path.join(prefix, 'bin'), { recursive: true });
-      mkdirSync(path.join(stagingPrefix, 'bin'), { recursive: true });
-      writeFileSync(entryFile, '');
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3', bin: { mcode: 'dist/index.js' } }),
-      );
-      writeFileSync(
-        path.join(stagedPackageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.4', bin: { mcode: 'dist/index.js' } }),
-      );
-      writeFileSync(path.join(prefix, process.platform === 'win32' ? 'mcode' : 'bin/mcode'), '1.2.3');
-      writeFileSync(path.join(stagingPrefix, process.platform === 'win32' ? 'mcode' : 'bin/mcode'), '1.2.4');
-      for (const pair of resolveMcodePrefixLauncherPairs(prefix, stagingPrefix)) {
-        mkdirSync(path.dirname(pair.activePath), { recursive: true });
-        mkdirSync(path.dirname(pair.stagedPath), { recursive: true });
-        writeFileSync(pair.activePath, '1.2.3');
-        writeFileSync(pair.stagedPath, '1.2.4');
-      }
-      writeFileSync(
-        path.join(prefix, 'install.json'),
-        JSON.stringify({ updateOwner: 'npm-prefix', prefix }),
-      );
-      const activeModulesRoot = resolveMcodePrefixModulesRoot(prefix, process.platform);
-      writeMcodePrefixUpdatePending({
-        stagingPrefix,
-        activePrefix: prefix,
-        activeModulesRoot,
-        stagedModulesRoot: resolveMcodePrefixModulesRoot(stagingPrefix, process.platform),
-        backupModulesRoot: `${activeModulesRoot}.mcode-update-backup`,
-        packageName: '@minimax-ai/code',
-        expectedVersion: '1.2.4',
-        launchers: resolveMcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
-      });
-
-      const resolveLatestPackageVersion = vi.fn(async () => '1.2.5');
-      const application = new McodeUpdateApplication(
-        {
-          currentVersion: '1.2.3',
-          entryFile,
-          environment: {},
-          installRoot: prefix,
-          platform: process.platform,
-          prefixInstall: {
-            executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
-            packageName: '@minimax-ai/code',
-            prefix,
-            registry: 'https://registry.npmjs.org/',
-          },
-        },
-        {
-          detectInstallSource: async () => 'npm-prefix',
-          resolveLatestPackageVersion,
-        },
-      );
-
-      const plan = await application.inspect();
-
-      expect(resolveLatestPackageVersion).not.toHaveBeenCalled();
-      await expect(application.apply(plan)).resolves.toEqual({
-        applied: false,
-        restartRequired: true,
-        message: 'MCode 1.2.4 is already staged. It will activate after this process exits.',
-      });
-    } finally {
-      rmSync(prefix, { recursive: true, force: true });
-      rmSync(stagingPrefix, { recursive: true, force: true });
-    }
-  });
-
-  it('rejects a pending update whose staged package and launchers are missing', async () => {
-    const prefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-missing-staging-'));
-    const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.missing`);
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai/code');
-    const entryFile = path.join(packageRoot, 'dist/index.js');
-    try {
-      mkdirSync(path.dirname(entryFile), { recursive: true });
-      mkdirSync(path.join(prefix, 'bin'), { recursive: true });
-      writeFileSync(entryFile, '');
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3', bin: { mcode: 'dist/index.js' } }),
-      );
-      writeFileSync(path.join(prefix, process.platform === 'win32' ? 'mcode' : 'bin/mcode'), '1.2.3');
-      writeFileSync(
-        path.join(prefix, 'install.json'),
-        JSON.stringify({ updateOwner: 'npm-prefix', prefix }),
-      );
-      const activeModulesRoot = resolveMcodePrefixModulesRoot(prefix, process.platform);
-      const pendingFile = writeMcodePrefixUpdatePending({
-        stagingPrefix,
-        activePrefix: prefix,
-        activeModulesRoot,
-        stagedModulesRoot: resolveMcodePrefixModulesRoot(stagingPrefix, process.platform),
-        backupModulesRoot: `${activeModulesRoot}.mcode-update-backup`,
-        packageName: '@minimax-ai/code',
-        expectedVersion: '1.2.4',
-        launchers: resolveMcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
-      });
-
-      const application = new McodeUpdateApplication(
-        {
-          currentVersion: '1.2.3',
-          entryFile,
-          environment: {},
-          installRoot: prefix,
-          platform: process.platform,
-          prefixInstall: {
-            executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
-            packageName: '@minimax-ai/code',
-            prefix,
-            registry: 'https://registry.npmjs.org/',
-          },
-        },
-        {
-          detectInstallSource: async () => 'npm-prefix',
-          resolveLatestPackageVersion: async () => '1.2.4',
-        },
-      );
-
-      await expect(application.inspect()).rejects.toThrow(
-        `MCode pending update artifacts are incomplete at ${pendingFile}.`,
-      );
-    } finally {
-      rmSync(prefix, { recursive: true, force: true });
-      rmSync(stagingPrefix, { recursive: true, force: true });
-    }
-  });
-
-  it('finishes cleanup when the staged version is already active', async () => {
-    const prefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-pending-cleanup-'));
-    const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.activated`);
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai/code');
-    const entryFile = path.join(packageRoot, 'dist/index.js');
-    try {
-      mkdirSync(path.dirname(entryFile), { recursive: true });
-      mkdirSync(path.join(prefix, 'bin'), { recursive: true });
-      writeFileSync(entryFile, '');
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.4', bin: { mcode: 'dist/index.js' } }),
-      );
-      writeFileSync(path.join(prefix, process.platform === 'win32' ? 'mcode' : 'bin/mcode'), '1.2.4');
-      for (const pair of resolveMcodePrefixLauncherPairs(prefix, stagingPrefix)) {
-        mkdirSync(path.dirname(pair.activePath), { recursive: true });
-        writeFileSync(pair.activePath, '1.2.4');
-      }
-      writeFileSync(
-        path.join(prefix, 'install.json'),
-        JSON.stringify({ updateOwner: 'npm-prefix', prefix }),
-      );
-      const activeModulesRoot = resolveMcodePrefixModulesRoot(prefix, process.platform);
-      writeMcodePrefixUpdatePending({
-        stagingPrefix,
-        activePrefix: prefix,
-        activeModulesRoot,
-        stagedModulesRoot: resolveMcodePrefixModulesRoot(stagingPrefix, process.platform),
-        backupModulesRoot: `${activeModulesRoot}.mcode-update-backup`,
-        packageName: '@minimax-ai/code',
-        expectedVersion: '1.2.4',
-        launchers: resolveMcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
-      });
-
-      const resolveLatestPackageVersion = vi.fn(async () => '1.2.4');
-      const application = new McodeUpdateApplication(
-        {
-          currentVersion: '1.2.4',
-          entryFile,
-          environment: {},
-          installRoot: prefix,
-          platform: process.platform,
-          prefixInstall: {
-            executable: path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm'),
-            packageName: '@minimax-ai/code',
-            prefix,
-            registry: 'https://registry.npmjs.org/',
-          },
-        },
-        {
-          detectInstallSource: async () => 'npm-prefix',
-          resolveLatestPackageVersion,
-        },
-      );
-
-      const plan = await application.inspect();
-
-      expect(plan).toMatchObject({
-        kind: 'package-manager',
-        source: 'npm-prefix',
-        currentVersion: '1.2.4',
-        latestVersion: '1.2.4',
-      });
-      expect(resolveLatestPackageVersion).not.toHaveBeenCalled();
-      await expect(application.apply(plan)).resolves.toEqual({
-        applied: false,
-        restartRequired: true,
-        message: 'MCode 1.2.4 is already active. Restarting will finish update cleanup.',
-      });
-    } finally {
-      rmSync(prefix, { recursive: true, force: true });
-      rmSync(stagingPrefix, { recursive: true, force: true });
-    }
-  });
-
-  it.each(['https://registry.npmjs.org/', 'https://registry.npmmirror.com/'])(
-    'recovers installer prefix ownership from the versioned receipt using %s',
-    async (registry) => {
-    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-prefix-'));
-    const packageRoot = path.join(
-      temporaryRoot,
-      ...(process.platform === 'win32' ? [] : ['lib']),
-      'node_modules',
-      '@minimax-ai',
-      'code',
-    );
-    const npmExecutable = path.join(temporaryRoot, 'runtime', 'node', ...(process.platform === 'win32' ? ['npm.cmd'] : ['bin', 'npm']));
-    const entryFile = path.join(packageRoot, 'cli.js');
-    try {
-      mkdirSync(packageRoot, { recursive: true });
-      mkdirSync(path.dirname(npmExecutable), { recursive: true });
-      writeFileSync(npmExecutable, '');
-      writeFileSync(entryFile, '');
-      writeFileSync(
-        path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
-      );
-      writeFileSync(
-        path.join(temporaryRoot, 'install.json'),
-        `\uFEFF${JSON.stringify({
-          schemaVersion: 1,
-          product: 'minimax-code',
-          updateOwner: 'npm-prefix',
-          packageManager: 'npm',
-          packageName: '@minimax-ai/code',
+        expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
+          executable: npmExecutable,
+          packageName,
+          prefix: realpathSync(root),
           registry,
-          distTag: 'latest',
-          prefix: temporaryRoot,
-          npmExecutable,
-        })}`,
-      );
-
-      const prefixInstall = resolveMcodeNpmPrefixInstall(entryFile, process.platform);
-      expect(prefixInstall).toEqual({
-        executable: npmExecutable,
-        packageName: '@minimax-ai/code',
-        prefix: realpathSync(temporaryRoot),
-        registry,
-      });
-      expect(resolveInstalledMcodePackageVersion(entryFile)).toBe('1.2.3');
-      await expect(
-        detectMcodeInstallSource({
-          installRoot: temporaryRoot,
-          platform: process.platform,
-          packageRoot: () => packageRoot,
-          prefixInstall: () => prefixInstall,
-          managedInstall: () => false,
-        }),
-      ).resolves.toBe('npm-prefix');
-    } finally {
-      rmSync(temporaryRoot, { recursive: true, force: true });
-    }
+        });
+        expect(resolveInstalledKcodePackageVersion(entryFile)).toBe('1.2.3');
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     },
   );
 
   it('resolves versioned installer ownership from a release package entry', () => {
-    const prefix = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-versioned-prefix-'));
+    const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-prefix-versioned-')));
     const packageRoot = path.join(
       prefix,
       'releases/1.2.3',
       ...(process.platform === 'win32' ? [] : ['lib']),
-      'node_modules/@minimax-ai/code',
+      'node_modules/kinetick-code',
     );
-    const npmExecutable = path.join(prefix, process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm');
+    const npmExecutable = path.join(
+      prefix,
+      process.platform === 'win32' ? 'runtime/node/npm.cmd' : 'runtime/node/bin/npm',
+    );
     const entryFile = path.join(packageRoot, 'dist/index.js');
     try {
       mkdirSync(path.dirname(entryFile), { recursive: true });
@@ -1100,7 +331,7 @@ describe('MCode update install-source commands', () => {
       writeFileSync(npmExecutable, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
       writeFileSync(
         path.join(prefix, 'install.json'),
@@ -1109,7 +340,7 @@ describe('MCode update install-source commands', () => {
           product: 'minimax-code',
           updateOwner: 'npm-prefix',
           packageManager: 'npm',
-          packageName: '@minimax-ai/code',
+          packageName: 'kinetick-code',
           registry: 'https://registry.npmjs.org/',
           distTag: 'latest',
           prefix,
@@ -1120,9 +351,9 @@ describe('MCode update install-source commands', () => {
         }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toEqual({
         executable: npmExecutable,
-        packageName: '@minimax-ai/code',
+        packageName: 'kinetick-code',
         prefix: realpathSync(prefix),
         registry: 'https://registry.npmjs.org/',
       });
@@ -1132,11 +363,21 @@ describe('MCode update install-source commands', () => {
   });
 
   it('recovers a legacy installer prefix only from its package root and adjacent npm', () => {
-    const temporaryParent = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-legacy-'));
+    const temporaryParent = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-prefix-legacy-')));
     const prefix = path.join(temporaryParent, '.minimax-code');
-    const packageRoot = path.join(resolveMcodePrefixModulesRoot(prefix), '@minimax-ai', 'code');
-    const nodeExecutable = path.join(prefix, 'runtime', 'node', ...(process.platform === 'win32' ? ['node.exe'] : ['bin', 'node']));
-    const npmExecutable = path.join(prefix, 'runtime', 'node', ...(process.platform === 'win32' ? ['npm.cmd'] : ['bin', 'npm']));
+    const packageRoot = path.join(resolveKcodePrefixModulesRoot(prefix), '@minimax-ai', 'code');
+    const nodeExecutable = path.join(
+      prefix,
+      'runtime',
+      'node',
+      ...(process.platform === 'win32' ? ['node.exe'] : ['bin', 'node']),
+    );
+    const npmExecutable = path.join(
+      prefix,
+      'runtime',
+      'node',
+      ...(process.platform === 'win32' ? ['npm.cmd'] : ['bin', 'npm']),
+    );
     const entryFile = path.join(packageRoot, 'cli.js');
     try {
       mkdirSync(packageRoot, { recursive: true });
@@ -1146,12 +387,12 @@ describe('MCode update install-source commands', () => {
       writeFileSync(entryFile, '');
       writeFileSync(
         path.join(packageRoot, 'package.json'),
-        JSON.stringify({ name: '@minimax-ai/code', version: '1.2.3' }),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
       );
 
-      expect(resolveMcodeNpmPrefixInstall(entryFile, process.platform, nodeExecutable)).toEqual({
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform, nodeExecutable)).toEqual({
         executable: npmExecutable,
-        packageName: '@minimax-ai/code',
+        packageName: 'kinetick-code',
         prefix: realpathSync(prefix),
         registry: 'https://registry.npmjs.org/',
       });
@@ -1161,193 +402,776 @@ describe('MCode update install-source commands', () => {
   });
 
   it.each([
-    ['npm-global', 'npm install --global'],
-    ['pnpm-global', 'pnpm add --global'],
-    ['yarn-global', 'yarn global add'],
-    ['bun-global', 'bun add --global'],
-  ] as const)('pins %s updates to the internal registry', (source, prefix) => {
-    const command = buildMcodePackageManagerCommand(source, '1.2.4', 'linux');
-    const scriptOptions =
-      source === 'npm-global'
-        ? ' --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3'
-        : '';
-
-    expect(command.args.slice(-2)).toEqual([
-      '--registry',
-      'https://registry.npmjs.org/',
-    ]);
-    expect(command.display).toBe(
-      `${prefix} @minimax-ai/code@1.2.4${scriptOptions} --registry https://registry.npmjs.org/`,
+    ['an unknown product', { product: 'upstream-product' }],
+    ['a foreign update owner', { updateOwner: 'mcode-installer' }],
+    ['a package manager other than npm', { packageManager: 'pnpm' }],
+    ['a package name outside the product scopes', { packageName: '@minimax-ai/other' }],
+    ['a dist tag other than latest', { distTag: 'next' }],
+    ['a schema version without its layout fields', { schemaVersion: 2 }],
+    ['no registry', { registry: undefined }],
+    ['no npm executable reference', { npmExecutable: undefined }],
+  ] as const)('ignores an installer receipt carrying %s', (kind, patch) => {
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-receipt-invalid-')));
+    const packageRoot = path.join(
+      root,
+      ...(process.platform === 'win32' ? [] : ['lib']),
+      'node_modules',
+      'kinetick-code',
     );
+    const npmExecutable = path.join(
+      root,
+      'runtime',
+      'node',
+      ...(process.platform === 'win32' ? ['npm.cmd'] : ['bin', 'npm']),
+    );
+    const entryFile = path.join(packageRoot, 'cli.js');
+    try {
+      mkdirSync(packageRoot, { recursive: true });
+      mkdirSync(path.dirname(npmExecutable), { recursive: true });
+      writeFileSync(npmExecutable, '');
+      writeFileSync(entryFile, '');
+      writeFileSync(
+        path.join(packageRoot, 'package.json'),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
+      );
+      writeFileSync(
+        path.join(root, 'install.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          product: 'minimax-code',
+          updateOwner: 'npm-prefix',
+          packageManager: 'npm',
+          packageName: 'kinetick-code',
+          registry: 'https://registry.npmjs.org/',
+          distTag: 'latest',
+          prefix: root,
+          npmExecutable,
+          ...patch,
+        }),
+      );
+
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
-  it('resolves the target version from the internal registry with npm shipped by Node', async () => {
-    const run = vi.fn(async () => '"1.2.4"');
+  it('ignores an installer receipt whose npm executable is gone', () => {
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-receipt-npm-gone-')));
+    const packageRoot = path.join(
+      root,
+      ...(process.platform === 'win32' ? [] : ['lib']),
+      'node_modules',
+      'kinetick-code',
+    );
+    const entryFile = path.join(packageRoot, 'cli.js');
+    try {
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(entryFile, '');
+      writeFileSync(
+        path.join(packageRoot, 'package.json'),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
+      );
+      writeFileSync(
+        path.join(root, 'install.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          product: 'minimax-code',
+          updateOwner: 'npm-prefix',
+          packageManager: 'npm',
+          packageName: 'kinetick-code',
+          registry: 'https://registry.npmjs.org/',
+          distTag: 'latest',
+          prefix: root,
+          npmExecutable: path.join(root, 'runtime', 'node', 'bin', 'npm-missing'),
+        }),
+      );
 
-    await expect(
-      resolveLatestMcodeRegistryVersion('test', { platform: 'linux', run }),
-    ).resolves.toBe('1.2.4');
-    expect(run).toHaveBeenCalledWith('npm', [
-      'view',
-      '@minimax-ai/code@test',
-      'version',
-      '--json',
-      '--registry',
-      'https://registry.npmjs.org/',
-      '--fetch-timeout',
-      '30000',
-    ]);
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
-  it('uses installer-owned npm for a prefix installation registry lookup', async () => {
-    const distribution = resolveMcodeNpmDistribution('@minimax-ai/code');
-    const run = vi.fn(async () => '"1.2.4"');
+  it('ignores an installer receipt written for a different prefix', () => {
+    const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-receipt-foreign-')));
+    const otherPrefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-receipt-other-')));
+    const packageRoot = path.join(
+      root,
+      ...(process.platform === 'win32' ? [] : ['lib']),
+      'node_modules',
+      'kinetick-code',
+    );
+    const npmExecutable = path.join(
+      root,
+      'runtime',
+      'node',
+      ...(process.platform === 'win32' ? ['npm.cmd'] : ['bin', 'npm']),
+    );
+    const entryFile = path.join(packageRoot, 'cli.js');
+    try {
+      mkdirSync(packageRoot, { recursive: true });
+      mkdirSync(path.dirname(npmExecutable), { recursive: true });
+      writeFileSync(npmExecutable, '');
+      writeFileSync(entryFile, '');
+      writeFileSync(
+        path.join(packageRoot, 'package.json'),
+        JSON.stringify({ name: 'kinetick-code', version: '1.2.3' }),
+      );
+      writeFileSync(
+        path.join(root, 'install.json'),
+        JSON.stringify({
+          schemaVersion: 1,
+          product: 'minimax-code',
+          updateOwner: 'npm-prefix',
+          packageManager: 'npm',
+          packageName: 'kinetick-code',
+          registry: 'https://registry.npmjs.org/',
+          distTag: 'latest',
+          prefix: otherPrefix,
+          npmExecutable,
+        }),
+      );
 
-    await expect(
-      resolveLatestMcodeRegistryVersion('latest', {
-        platform: 'linux',
-        run,
-        distribution,
-        npmExecutable: '/opt/minimax/runtime/node/bin/npm',
-      }),
-    ).resolves.toBe('1.2.4');
-    expect(run).toHaveBeenCalledWith('/opt/minimax/runtime/node/bin/npm', [
-      'view',
-      '@minimax-ai/code@latest',
-      'version',
-      '--json',
-      '--registry',
-      'https://registry.npmjs.org/',
-      '--fetch-timeout',
-      '30000',
-    ]);
+      expect(resolveKcodeNpmPrefixInstall(entryFile, process.platform)).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+      rmSync(otherPrefix, { recursive: true, force: true });
+    }
   });
 
-  it('accepts npm registry metadata returned as a single-item JSON array', async () => {
-    const distribution = resolveMcodeNpmDistribution('@minimax-ai/code');
+  it('reads the installed public package identity from its real entry path', () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-public-'));
+    const packageRoot = path.join(
+      temporaryRoot,
+      'lib',
+      'node_modules',
+      'kinetick-code',
+    );
+    try {
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(
+        path.join(packageRoot, 'package.json'),
+        JSON.stringify({ name: 'kinetick-code' }),
+      );
+      const entryFile = path.join(packageRoot, 'cli.js');
+      writeFileSync(entryFile, '');
 
-    await expect(
-      resolveLatestMcodeRegistryVersion('latest', {
-        platform: 'linux',
-        run: async () => '["1.2.4"]',
-        distribution,
-      }),
-    ).resolves.toBe('1.2.4');
+      expect(resolveKcodePackageName(entryFile)).toBe('kinetick-code');
+      expect(resolveInstalledKcodePackageVersion(entryFile)).toBeUndefined();
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
-  it('keeps public package lookup and installation on the official npm registry', async () => {
-    const distribution = resolveMcodeNpmDistribution('@minimax-ai/code');
-    const run = vi.fn(async () => '"1.2.4"');
+  it('still reads the identity an earlier release installed under', () => {
+    const temporaryRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-update-legacy-'));
+    const packageRoot = path.join(temporaryRoot, 'lib', 'node_modules', '@minimax-ai', 'code');
+    try {
+      mkdirSync(packageRoot, { recursive: true });
+      writeFileSync(
+        path.join(packageRoot, 'package.json'),
+        JSON.stringify({ name: '@minimax-ai/code', version: '9.9.9' }),
+      );
+      const entryFile = path.join(packageRoot, 'cli.js');
+      writeFileSync(entryFile, '');
 
-    expect(distribution).toEqual({
-      packageName: '@minimax-ai/code',
-      registry: 'https://registry.npmjs.org/',
-    });
-    await expect(
-      resolveLatestMcodeRegistryVersion('latest', {
-        platform: 'linux',
-        run,
-        distribution,
-      }),
-    ).resolves.toBe('1.2.4');
-    expect(run).toHaveBeenCalledWith('npm', [
-      'view',
-      '@minimax-ai/code@latest',
-      'version',
-      '--json',
-      '--registry',
-      'https://registry.npmjs.org/',
-      '--fetch-timeout',
-      '30000',
-    ]);
-    expect(
-      buildMcodePackageManagerCommand('npm-global', '1.2.4', 'linux', distribution),
-    ).toMatchObject({
-      args: [
-        'install',
-        '--global',
-        '@minimax-ai/code@1.2.4',
-        '--ignore-scripts=false',
-        '--include=optional',
-        '--allow-scripts=@minimax-ai/code,better-sqlite3',
-        '--registry',
-        'https://registry.npmjs.org/',
-      ],
-    });
+      expect(resolveKcodePackageName(entryFile)).toBe('@minimax-ai/code');
+      expect(resolveInstalledKcodePackageVersion(entryFile)).toBe('9.9.9');
+      expect(classifyKcodeInstallPath(packageRoot)).toBe('npm-global');
+      expect(isInternalKcodePackageName('@minimax-ai/code')).toBe(false);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
   });
 
-  it('does not fall back to the internal registry when the public package is absent', async () => {
-    const distribution = resolveMcodeNpmDistribution('@minimax-ai/code');
-    const run = vi.fn(async () => {
-      throw new Error('E404 Not Found');
-    });
-
-    await expect(
-      resolveLatestMcodeRegistryVersion('latest', {
-        platform: 'linux',
-        run,
-        distribution,
-      }),
-    ).rejects.toThrow('E404 Not Found');
-    expect(run).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    ['[]', /invalid latest version/u],
-    ['"1.2.4-beta.1"', /stable semantic version/u],
-  ])('rejects invalid public latest metadata: %s', async (metadata, error) => {
-    const distribution = resolveMcodeNpmDistribution('@minimax-ai/code');
-
-    await expect(
-      resolveLatestMcodeRegistryVersion('latest', {
-        platform: 'linux',
-        run: async () => metadata,
-        distribution,
-      }),
-    ).rejects.toThrow(error);
-  });
-
-  it.each([
-    ['prod', 'latest'],
-    ['staging', 'preview'],
-    ['test', 'test'],
-    [undefined, 'latest'],
-  ] as const)('maps the %s build to the %s update tag', (environment, tag) => {
-    expect(resolveMcodeNpmDistTag(environment)).toBe(tag);
-  });
-
-  it('keeps an explicitly embedded preview update channel independent of the backend', () => {
-    expect(resolveMcodeNpmDistTag('prod', 'preview')).toBe('preview');
-  });
-
-  it.each([
-    ['/usr/local/lib/node_modules/@minimax-ai/code', '/usr/local', 'linux'],
-    [
-      'C:\\Users\\demo\\AppData\\Roaming\\npm\\node_modules\\@minimax\\code',
-      'C:\\Users\\demo\\AppData\\Roaming\\npm',
-      'win32',
-    ],
-  ] as const)('recognizes npm global ownership for %s', (packageRoot, prefix, platform) => {
-    expect(classifyNpmGlobalInstall(packageRoot, prefix, platform)).toBe('npm-global');
+  it('recognizes the internal package identities as environment-selectable', () => {
+    expect(isInternalKcodePackageName('@mavis/code')).toBe(true);
+    expect(isInternalKcodePackageName('@minimax/code')).toBe(true);
+    expect(isInternalKcodePackageName('kinetick-code')).toBe(false);
+    expect(isInternalKcodePackageName(undefined)).toBe(false);
   });
 });
 
-function createApplication(
-  dependencies: Partial<McodeUpdateApplicationDependencies>,
-  options: {
-    currentVersion?: string;
-    packageTag?: 'latest' | 'test' | 'preview';
-    packageName?: '@minimax-ai/code' | '@minimax-ai/code';
-    prefixInstall?: {
-      executable: string;
-      packageName: '@minimax-ai/code' | '@minimax-ai/code';
-      prefix: string;
-      registry: string;
+describe('KCode install root resolution', () => {
+  it('prefers MCODE_INSTALL_ROOT and resolves it against the working directory', () => {
+    expect(resolveKcodeInstallRoot({ MCODE_INSTALL_ROOT: '/opt/kcode/data' })).toBe(
+      '/opt/kcode/data',
+    );
+    expect(resolveKcodeInstallRoot({ MCODE_INSTALL_ROOT: 'relative/data' })).toBe(
+      path.resolve('relative/data'),
+    );
+  });
+
+  it('defaults to the minimax-code directory under the XDG data home', () => {
+    expect(resolveKcodeInstallRoot({ XDG_DATA_HOME: '/xdg/data' })).toBe(
+      path.join('/xdg/data', 'minimax-code'),
+    );
+    expect(resolveKcodeInstallRoot({})).toBe(
+      path.join(os.homedir(), '.local', 'share', 'minimax-code'),
+    );
+  });
+
+  it.skipIf(process.platform === 'win32').each([
+    [{ LOCALAPPDATA: String.raw`C:\Users\demo\AppData\Local` }, String.raw`C:\Users\demo\AppData\Local\MinimaxCode`],
+    [undefined, undefined],
+  ] as const)('uses the Windows LOCALAPPDATA data root', (environment, expected) => {
+    // `resolveKcodeInstallRoot` reads `process.platform`, so the Windows branch is
+    // entered by redefining the platform for the duration of this test.
+    const descriptor = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    try {
+      if (expected) {
+        expect(resolveKcodeInstallRoot(environment)).toBe(
+          path.join(String.raw`C:\Users\demo\AppData\Local`, 'MinimaxCode'),
+        );
+      } else {
+        expect(() => resolveKcodeInstallRoot({})).toThrow(
+          'LOCALAPPDATA is required to resolve the KCode install root.',
+        );
+      }
+    } finally {
+      if (descriptor) Object.defineProperty(process, 'platform', descriptor);
+    }
+  });
+
+  it.each([
+    ['the current installer receipt', { product: 'minimax-code', updateOwner: 'mcode-installer' }, true],
+    ['a receipt without a product', { updateOwner: 'mcode-installer' }, false],
+    ['a receipt owned by another installer', { product: 'minimax-code' }, false],
+    ['a receipt for another product', { product: 'other', updateOwner: 'mcode-installer' }, false],
+  ] as const)('reports installer ownership from %s', (kind, receipt, expected) => {
+    const installRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-managed-root-'));
+    try {
+      writeFileSync(path.join(installRoot, 'install.json'), JSON.stringify(receipt));
+
+      expect(isManagedKcodeInstallRoot(installRoot)).toBe(expected);
+    } finally {
+      rmSync(installRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('treats a missing or unreadable installer receipt as unowned', () => {
+    const installRoot = mkdtempSync(path.join(os.tmpdir(), 'mcode-managed-missing-'));
+    try {
+      expect(isManagedKcodeInstallRoot(installRoot)).toBe(false);
+      writeFileSync(path.join(installRoot, 'install.json'), '{');
+      expect(isManagedKcodeInstallRoot(installRoot)).toBe(false);
+    } finally {
+      rmSync(installRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('KCode prefix update journal', () => {
+  function writePackage(modulesRoot: string, version: string): void {
+    const packageRoot = path.join(modulesRoot, 'kinetick-code');
+    mkdirSync(path.join(packageRoot, 'dist'), { recursive: true });
+    writeFileSync(
+      path.join(packageRoot, 'package.json'),
+      JSON.stringify({ name: 'kinetick-code', version, bin: { kcode: 'dist/index.js' } }),
+    );
+  }
+
+  function writeLaunchers(
+    pairs: readonly { activePath: string; stagedPath: string }[],
+    side: 'active' | 'staged',
+  ): void {
+    for (const pair of pairs) {
+      const target = side === 'active' ? pair.activePath : pair.stagedPath;
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, side === 'active' ? '1.2.4' : '1.2.4');
+    }
+  }
+
+  function activation(
+    prefix: string,
+    stagingPrefix: string,
+    expectedVersion: string,
+  ): KcodePrefixUpdateActivation {
+    const activeModulesRoot = resolveKcodePrefixModulesRoot(prefix, process.platform);
+    return {
+      stagingPrefix,
+      activePrefix: prefix,
+      activeModulesRoot,
+      stagedModulesRoot: resolveKcodePrefixModulesRoot(stagingPrefix, process.platform),
+      backupModulesRoot: `${activeModulesRoot}.mcode-update-backup`,
+      packageName: 'kinetick-code',
+      expectedVersion,
+      launchers: resolveKcodePrefixLauncherPairs(prefix, stagingPrefix, process.platform),
     };
-  } = {},
-): McodeUpdateApplication {
-  return new McodeUpdateApplication(
-    { currentVersion: '1.2.3', installRoot: '/managed', ...options },
-    { readInstalledPackageVersion: () => '1.2.4', ...dependencies },
+  }
+
+  function writeOwnershipReceipt(prefix: string): void {
+    writeFileSync(
+      path.join(prefix, 'install.json'),
+      JSON.stringify({ updateOwner: 'npm-prefix', prefix }),
+    );
+  }
+
+  it('reports a staged update whose staged package and launchers are complete', () => {
+    const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-staged-')));
+    const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.staging`);
+    const entryFile = path.join(
+      resolveKcodePrefixModulesRoot(prefix),
+      'kinetick-code',
+      'dist/index.js',
+    );
+    try {
+      mkdirSync(path.dirname(entryFile), { recursive: true });
+      writeFileSync(entryFile, '');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.3');
+      writePackage(resolveKcodePrefixModulesRoot(stagingPrefix), '1.2.4');
+      writeOwnershipReceipt(prefix);
+      const pending = activation(prefix, stagingPrefix, '1.2.4');
+      writeLaunchers(pending.launchers, 'staged');
+      const pendingFile = writeKcodePrefixUpdatePending(pending);
+
+      expect(JSON.parse(readFileSync(pendingFile, 'utf8'))).toMatchObject({
+        schemaVersion: 1,
+        activePrefix: prefix,
+        expectedVersion: '1.2.4',
+      });
+      expect(inspectPendingKcodePrefixUpdate(entryFile)).toMatchObject({
+        pendingFile,
+        state: 'staged',
+        activation: { expectedVersion: '1.2.4', stagingPrefix },
+      });
+    } finally {
+      rmSync(prefix, { recursive: true, force: true });
+      rmSync(stagingPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it('reports an activated update once the staged version is the active one', () => {
+    const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-active-')));
+    const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.activated`);
+    const entryFile = path.join(
+      resolveKcodePrefixModulesRoot(prefix),
+      'kinetick-code',
+      'dist/index.js',
+    );
+    try {
+      mkdirSync(path.dirname(entryFile), { recursive: true });
+      writeFileSync(entryFile, '');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.4');
+      writeOwnershipReceipt(prefix);
+      const pending = activation(prefix, stagingPrefix, '1.2.4');
+      writeLaunchers(pending.launchers, 'active');
+      const pendingFile = writeKcodePrefixUpdatePending(pending);
+
+      expect(inspectPendingKcodePrefixUpdate(entryFile)).toMatchObject({
+        pendingFile,
+        state: 'activated',
+      });
+    } finally {
+      rmSync(prefix, { recursive: true, force: true });
+      rmSync(stagingPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a pending update whose staged package and launchers are missing', () => {
+    const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-missing-')));
+    const stagingPrefix = path.join(path.dirname(prefix), `.${path.basename(prefix)}.missing`);
+    const entryFile = path.join(
+      resolveKcodePrefixModulesRoot(prefix),
+      'kinetick-code',
+      'dist/index.js',
+    );
+    try {
+      mkdirSync(path.dirname(entryFile), { recursive: true });
+      writeFileSync(entryFile, '');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.3');
+      writeOwnershipReceipt(prefix);
+      const pendingFile = writeKcodePrefixUpdatePending(activation(prefix, stagingPrefix, '1.2.4'));
+
+      expect(() => inspectPendingKcodePrefixUpdate(entryFile)).toThrow(
+        `KCode pending update artifacts are incomplete at ${pendingFile}.`,
+      );
+    } finally {
+      rmSync(prefix, { recursive: true, force: true });
+      rmSync(stagingPrefix, { recursive: true, force: true });
+    }
+  });
+
+  it('reports malformed pending metadata instead of treating it as a staged update', () => {
+    const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-invalid-')));
+    const entryFile = path.join(
+      resolveKcodePrefixModulesRoot(prefix),
+      'kinetick-code',
+      'dist/index.js',
+    );
+    const pendingFile = path.join(prefix, PENDING_UPDATE_FILE);
+    try {
+      mkdirSync(path.dirname(entryFile), { recursive: true });
+      writeFileSync(entryFile, '');
+      writePackage(resolveKcodePrefixModulesRoot(prefix), '1.2.3');
+      writeOwnershipReceipt(prefix);
+      writeFileSync(pendingFile, '{}');
+
+      expect(() => inspectPendingKcodePrefixUpdate(entryFile)).toThrow(
+        `KCode pending update metadata is invalid at ${pendingFile}.`,
+      );
+    } finally {
+      rmSync(prefix, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a pending journal owned by a different active prefix', () => {
+    const prefix = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-foreign-')));
+    const foreignPrefix = realpathSync(
+      mkdtempSync(path.join(os.tmpdir(), 'mcode-journal-foreign-owner-')),
+    );
+    const foreignStaging = path.join(path.dirname(foreignPrefix), '.foreign-staging');
+    const entryFile = path.join(
+      resolveKcodePrefixModulesRoot(prefix),
+      'kinetick-code',
+      'dist/index.js',
+    );
+    const pendingFile = path.join(prefix, PENDING_UPDATE_FILE);
+    try {
+      mkdirSync(path.dirname(entryFile), { recursive: true });
+      writeFileSync(entryFile, '');
+      writeOwnershipReceipt(prefix);
+      writeFileSync(
+        pendingFile,
+        JSON.stringify({
+          schemaVersion: 1,
+          ...activation(foreignPrefix, foreignStaging, '1.2.4'),
+        }),
+      );
+
+      expect(() => inspectPendingKcodePrefixUpdate(entryFile)).toThrow(
+        `KCode pending update file is outside its active prefix: ${pendingFile}`,
+      );
+    } finally {
+      rmSync(prefix, { recursive: true, force: true });
+      rmSync(foreignPrefix, { recursive: true, force: true });
+      rmSync(foreignStaging, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves the modules root and launcher pairs for each platform layout', () => {
+    expect(resolveKcodePrefixModulesRoot('/opt/minimax', 'linux')).toBe(
+      '/opt/minimax/lib/node_modules',
+    );
+    expect(resolveKcodePrefixLauncherPairs('/opt/minimax', '/opt/staging', 'linux')).toEqual([
+      {
+        activePath: '/opt/minimax/bin/mcode',
+        stagedPath: '/opt/staging/bin/mcode',
+        backupPath: '/opt/minimax/bin/mcode.mcode-update-backup',
+      },
+    ]);
+    expect(
+      resolveKcodePrefixModulesRoot(String.raw`C:\MinimaxCode`, 'win32'),
+    ).toBe(String.raw`C:\MinimaxCode\node_modules`);
+    expect(
+      resolveKcodePrefixLauncherPairs(String.raw`C:\MinimaxCode`, String.raw`C:\Staging`, 'win32'),
+    ).toEqual([
+      {
+        activePath: String.raw`C:\MinimaxCode\mcode.cmd`,
+        stagedPath: String.raw`C:\Staging\mcode.cmd`,
+        backupPath: String.raw`C:\MinimaxCode\mcode.cmd.mcode-update-backup`,
+      },
+      {
+        activePath: String.raw`C:\MinimaxCode\mcode.ps1`,
+        stagedPath: String.raw`C:\Staging\mcode.ps1`,
+        backupPath: String.raw`C:\MinimaxCode\mcode.ps1.mcode-update-backup`,
+      },
+    ]);
+  });
+});
+
+describe('McodeUpdateApplication', () => {
+  it.each(['npm-global', 'pnpm-global', 'yarn-global', 'bun-global'] as const)(
+    'plans a release update for a %s installation',
+    async (installSource) => {
+      const createReleaseService = vi.fn(() => createReleaseServiceStub());
+      const application = createApplication({
+        detectInstallSource: async () => installSource,
+        createReleaseService,
+      });
+
+      await expect(application.inspect()).resolves.toEqual({
+        kind: 'available',
+        source: 'release',
+        currentVersion: '1.2.3',
+        latestVersion: '1.2.4',
+        channel: 'preview',
+        installSource,
+        artifactUrl: RELEASE_ARTIFACT_URL,
+      });
+      expect(createReleaseService).toHaveBeenCalledWith(installSource);
+      expect(createReleaseService).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['current', 'ahead'] as const)(
+    'reports the release plan as %s when no newer release is published',
+    async (status) => {
+      const application = createApplication({
+        detectInstallSource: async () => 'yarn-global',
+        createReleaseService: () =>
+          createReleaseServiceStub({
+            check: async () => releaseCheckResult({ status, latestVersion: '1.2.2' }),
+          }),
+      });
+
+      await expect(application.inspect()).resolves.toMatchObject({
+        kind: status,
+        source: 'release',
+        channel: 'preview',
+        installSource: 'yarn-global',
+        latestVersion: '1.2.2',
+      });
+    },
+  );
+
+  it('points an unsupported installation at the release install command', async () => {
+    const resolveInstallCommand = vi.fn(
+      async () => `npm install --global ${RELEASE_ARTIFACT_URL}`,
+    );
+    const createReleaseService = vi.fn(() =>
+      createReleaseServiceStub({ resolveInstallCommand }),
+    );
+    const application = createApplication({
+      detectInstallSource: async () => 'unsupported',
+      createReleaseService,
+    });
+
+    await expect(application.inspect()).resolves.toEqual({
+      kind: 'manual',
+      source: 'unsupported',
+      currentVersion: '1.2.3',
+      command: `npm install --global ${RELEASE_ARTIFACT_URL}`,
+    });
+    expect(createReleaseService).toHaveBeenCalledWith('npm-global');
+    expect(resolveInstallCommand).toHaveBeenCalledWith();
+  });
+
+  it('falls back to the releases page when the install command cannot be resolved', async () => {
+    const application = createApplication({
+      detectInstallSource: async () => 'unsupported',
+      createReleaseService: () =>
+        createReleaseServiceStub({
+          resolveInstallCommand: async () => {
+            throw new Error('offline');
+          },
+        }),
+    });
+
+    const plan = await application.inspect();
+
+    expect(plan).toMatchObject({ kind: 'manual', source: 'unsupported' });
+    const command = (plan as { command: string }).command;
+    expect(command).toContain(KCODE_RELEASES_URL);
+    expect(command).toContain('npm install --global');
+  });
+
+  it.each([
+    ['managed-installer', 'The upstream installer owns this installation'],
+    ['npm-prefix', 'an npm prefix carrying the upstream installer layout'],
+  ] as const)(
+    'refuses to replace an upstream %s layout in place',
+    async (installSource, layout) => {
+      const createReleaseService = vi.fn(() => createReleaseServiceStub());
+      const application = createApplication({
+        detectInstallSource: async () => installSource,
+        createReleaseService,
+      });
+
+      const error = await application.inspect().catch((cause: unknown) => cause);
+
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toContain(layout);
+      expect((error as Error).message).toContain(KCODE_RELEASES_URL);
+      expect(createReleaseService).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports an unsupported application for a local checkout carrying an install marker', async () => {
+    const check = vi.fn(async () => releaseCheckResult());
+    const application = createApplication({
+      detectInstallSource: () =>
+        detectKcodeInstallSource({
+          installRoot: '/source',
+          platform: 'darwin',
+          packageRoot: () => '/Users/demo/project/.bun/install/global/source/@minimax-ai/code',
+          npmGlobalPrefix: async () => '/usr/local',
+          managedInstall: () => false,
+          prefixInstall: () => undefined,
+        }),
+      createReleaseService: () => createReleaseServiceStub({ check }),
+    });
+
+    await expect(application.inspect()).resolves.toMatchObject({
+      kind: 'manual',
+      source: 'unsupported',
+    });
+    expect(check).not.toHaveBeenCalled();
+  });
+
+  it.each([true, false] as const)(
+    'delegates an available update to the release service with restartRequired %s',
+    async (restartRequired) => {
+      const apply = vi.fn(async () => ({
+        ...releaseCheckResult(),
+        applied: true,
+        restartRequired,
+      }));
+      const createReleaseService = vi.fn(() => createReleaseServiceStub({ apply }));
+      const application = createApplication({
+        detectInstallSource: async () => 'pnpm-global',
+        createReleaseService,
+      });
+
+      const plan = await application.inspect();
+      const signal = new AbortController().signal;
+      const onOutput = vi.fn();
+      const onPhase = vi.fn();
+
+      await expect(application.apply(plan, { signal, onOutput, onPhase })).resolves.toEqual({
+        applied: true,
+        restartRequired,
+        message:
+          `KCode 1.2.4 is installed from ${KCODE_RELEASES_URL}. ` +
+          'Restart running KCode sessions to use it.',
+      });
+      expect(createReleaseService).toHaveBeenLastCalledWith('pnpm-global');
+      expect(apply).toHaveBeenCalledWith({
+        channel: 'preview',
+        version: '1.2.4',
+        signal,
+        onOutput,
+        onPhase,
+      });
+    },
+  );
+
+  it('reports an already-active release when the service applies nothing', async () => {
+    const apply = vi.fn(async () => ({
+      ...releaseCheckResult(),
+      applied: false,
+      restartRequired: false,
+      currentVersion: '1.2.4',
+    }));
+    const application = createApplication({
+      detectInstallSource: async () => 'npm-global',
+      createReleaseService: () => createReleaseServiceStub({ apply }),
+    });
+
+    const plan = await application.inspect();
+
+    await expect(application.apply(plan)).resolves.toEqual({
+      applied: false,
+      message: 'KCode 1.2.4 is already active.',
+    });
+  });
+
+  it.each(['manual', 'current', 'ahead'] as const)(
+    'refuses to apply a %s plan automatically',
+    async (kind) => {
+      const createReleaseService = vi.fn(() => createReleaseServiceStub());
+      const application = createApplication({ createReleaseService });
+      const plan = (
+        kind === 'manual'
+          ? {
+              kind,
+              source: 'unsupported',
+              currentVersion: '1.2.3',
+              command: `npm install --global ${RELEASE_ARTIFACT_URL}`,
+            }
+          : {
+              kind,
+              source: 'release',
+              currentVersion: '1.2.3',
+              latestVersion: '1.2.4',
+              channel: 'preview',
+              installSource: 'npm-global',
+              artifactUrl: RELEASE_ARTIFACT_URL,
+            }
+      ) as KcodeUpdatePlan;
+
+      await expect(application.apply(plan)).rejects.toThrow(
+        `KCode update plan ${kind} cannot be applied automatically.`,
+      );
+      expect(createReleaseService).not.toHaveBeenCalled();
+    },
+  );
+
+  it('labels a release plan with its channel and a manual plan with the release channel', async () => {
+    const application = createApplication({
+      detectInstallSource: async () => 'npm-global',
+      createReleaseService: () =>
+        createReleaseServiceStub({ check: async () => releaseCheckResult({ channel: 'stable' }) }),
+    });
+    const manualApplication = createApplication({
+      detectInstallSource: async () => 'unsupported',
+    });
+
+    expect(kcodeUpdateChannelLabel(await application.inspect())).toBe('the stable channel');
+    expect(kcodeUpdateChannelLabel(await manualApplication.inspect())).toBe('the release channel');
+  });
+});
+
+function releaseCheckResult(
+  overrides: Partial<KcodeReleaseCheckResult> = {},
+): KcodeReleaseCheckResult {
+  return {
+    status: 'available',
+    channel: 'preview',
+    currentVersion: '1.2.3',
+    latestVersion: '1.2.4',
+    release: {
+      tag: 'v1.2.4',
+      version: '1.2.4',
+      prerelease: true,
+      publishedAt: '2026-09-23T00:00:00Z',
+      artifact: {
+        name: 'kinetick-code-1.2.4.tar.gz',
+        url: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/1',
+        downloadUrl: RELEASE_ARTIFACT_URL,
+        size: 13_144_451,
+        checksumUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/2',
+      },
+    },
+    ...overrides,
+  };
+}
+
+function createReleaseServiceStub(
+  overrides: Partial<ReleaseUpdateService> = {},
+): ReleaseUpdateService {
+  return {
+    check: async () => releaseCheckResult(),
+    apply: async (): Promise<KcodeReleaseApplyResult> => ({
+      ...releaseCheckResult(),
+      applied: true,
+      restartRequired: true,
+    }),
+    resolveInstallCommand: async () => `npm install --global ${RELEASE_ARTIFACT_URL}`,
+    ...overrides,
+  };
+}
+
+function createApplication(
+  dependencies: Partial<KcodeUpdateApplicationDependencies> = {},
+  options: Partial<KcodeUpdateApplicationOptions> = {},
+): KcodeUpdateApplication {
+  // The release channel is the only update source this build owns, so every case
+  // injects the service that resolves it instead of reaching the network.
+  return new KcodeUpdateApplication(
+    {
+      currentVersion: '1.2.3',
+      installRoot: '/managed',
+      environment: {},
+      ...options,
+    },
+    {
+      detectInstallSource: async () => 'npm-global',
+      createReleaseService: () => createReleaseServiceStub(),
+      readInstalledPackageVersion: () => undefined,
+      ...dependencies,
+    },
   );
 }

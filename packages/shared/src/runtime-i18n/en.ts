@@ -8,8 +8,6 @@ export const EN_RUNTIME_TRANSLATIONS = {
   'plan.implementation.display': 'Implement this plan',
   'questionnaire.noAnswer': 'No answer',
   'questionnaire.others': 'Others',
-  'update.versionedInstalled':
-    'MCode {version} is installed. New MCode sessions will use it; running sessions can continue normally.',
 } as const;
 
 export type RuntimeTranslationKey = keyof typeof EN_RUNTIME_TRANSLATIONS;

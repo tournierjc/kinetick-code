@@ -13,7 +13,7 @@ import {
   getTuiThemeSnapshot,
   tuiColors,
 } from '../../src/tui/theme/runtime.js';
-import { MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
+import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
 
 const previewDisplayModes = {
   revision: 0,
@@ -388,7 +388,7 @@ describe('TranscriptView', () => {
     const originalCapabilities = getCapabilities();
     const originalTheme = getTuiThemeSnapshot();
     const palette =
-      originalTheme.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+      originalTheme.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
     setCapabilities({ ...originalCapabilities, hyperlinks: true });
     applyTuiRenderTheme(palette, 3);
     try {
@@ -447,8 +447,8 @@ describe('TranscriptView', () => {
   it('renders assistant dots in the same tone as the body text', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+    applyTuiRenderTheme(KCODE_DARK_THEME, 3);
     try {
       const view = new TranscriptView(() => [
         createTranscriptCell({
@@ -462,8 +462,8 @@ describe('TranscriptView', () => {
       const line = view.render(28)[0] ?? '';
       const color = createTuiChalk({ colorLevel: 3 });
 
-      expect(line).toContain(color.hex(MINIMAX_CODE_DARK_THEME.colors.text)('●'));
-      expect(line).not.toContain(color.hex(MINIMAX_CODE_DARK_THEME.colors.signal)('●'));
+      expect(line).toContain(color.hex(KCODE_DARK_THEME.colors.text)('●'));
+      expect(line).not.toContain(color.hex(KCODE_DARK_THEME.colors.signal)('●'));
     } finally {
       applyTuiRenderTheme(originalPalette, original.colorLevel);
     }
@@ -581,9 +581,9 @@ describe('TranscriptView', () => {
         id: 'inspection-status',
         kind: 'inspection',
         status: 'succeeded',
-        content: 'MCode status\nAccount: Connected with MiniMax',
+        content: 'KCode status\nAccount: Connected with MiniMax',
         inspection: {
-          title: 'MCode status',
+          title: 'KCode status',
           badge: { label: 'READY', tone: 'success' },
           sections: [
             {
@@ -607,7 +607,7 @@ describe('TranscriptView', () => {
     const rendered = stripVTControlCharacters(view.render(60).join('\n'));
 
     expect(rendered).toContain('╭─');
-    expect(rendered).toMatch(/│ MCode status\s+● READY │/u);
+    expect(rendered).toMatch(/│ KCode status\s+● READY │/u);
     expect(rendered).toContain('READY');
     expect(rendered).toContain('├─ Account ');
     expect(rendered).toMatch(/│ Account\s+│ Connected with MiniMax\s+│/u);
@@ -1058,8 +1058,8 @@ describe('TranscriptView', () => {
   it('renders user messages as a vertically padded full-width prompt band', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    applyTuiRenderTheme(MINIMAX_CODE_LIGHT_THEME, 3);
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+    applyTuiRenderTheme(KCODE_LIGHT_THEME, 3);
     try {
       const view = new TranscriptView(() => [
         createTranscriptCell({
@@ -1299,8 +1299,8 @@ describe('TranscriptView', () => {
   it('syntax-highlights executable commands on the collapsed shell row', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+    applyTuiRenderTheme(KCODE_DARK_THEME, 3);
 
     try {
       const command = 'ls packages/tui/src/ && echo "---" && ls packages/tui/src/tui/ 2>/dev/null';
@@ -1791,7 +1791,7 @@ describe('TranscriptView', () => {
         status: 'resolved',
         title: 'Answers sent',
         content: 'Release channel  Stable\nCollaboration  Mixed mode',
-        detail: 'MCode is continuing…',
+        detail: 'KCode is continuing…',
         createdAtMs: 6,
       }),
     ]);
@@ -1809,7 +1809,7 @@ describe('TranscriptView', () => {
     expect(rendered).toContain('✓ Answers sent');
     expect(rendered).toContain('Release channel  Stable');
     expect(rendered).toContain('Collaboration  Mixed mode');
-    expect(rendered).toContain('MCode is continuing');
+    expect(rendered).toContain('KCode is continuing');
     expect(rendered).not.toContain('/allow');
     expect(rendered).not.toContain('/q1');
   });

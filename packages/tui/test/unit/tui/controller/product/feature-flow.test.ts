@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TuiModel } from "../../../../../src/runtime/port.js";
 import type { TuiMessage } from "../../../../../src/runtime/stream-events.js";
-import type { McodeProviderTemplate } from "../../../../../src/provider/contract.js";
+import type { KcodeProviderTemplate } from "../../../../../src/provider/contract.js";
 import { TuiFeatureFlow } from "../../../../../src/tui/controller/product/feature-flow.js";
 import { stripAnsi } from "../../../../../src/tui/rendering/text.js";
 import { TranscriptStore } from "../../../../../src/tui/transcript/store.js";
@@ -19,7 +19,7 @@ function createHarness(
     readonly writeClipboardText?: (text: string) => Promise<void>;
     readonly openExternalTarget?: (target: string) => Promise<void>;
     readonly loadProviderTemplates?: () => Promise<
-      readonly McodeProviderTemplate[]
+      readonly KcodeProviderTemplate[]
     >;
     readonly hasLiveRun?: () => boolean;
   } = {},
@@ -39,6 +39,8 @@ function createHarness(
   const refreshCurrentSessionHistory = vi.fn();
   const editor = { setText: vi.fn() };
   const onOpenSession = vi.fn(async () => undefined);
+  const deleteSession = vi.fn(async () => undefined);
+  const onCurrentSessionClosed = vi.fn();
   const runtime = {
     listModels: vi.fn(),
     getAccountStatus: vi.fn(async () => ({
@@ -91,7 +93,19 @@ function createHarness(
       providerId: "openai-codex" as const,
       authUrl: "https://auth.openai.example/authorize",
     })),
-    listUserModelProviders: vi.fn(async () => []),
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: "hidden" as const,
+      providerId: "github-copilot" as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: "disconnected" as const,
+      providerId: "github-copilot" as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: "pending" as const,
+      providerId: "github-copilot" as const,
+    })),
+    listModelProviders: vi.fn(async () => []),
     getMiniMaxApiKeyStatus: vi.fn(async () => ({ hasApiKey: false })),
     getMiniMaxModelSource: vi.fn(async () => "token_plan" as const),
     deleteUserModelProvider: vi.fn(async () => undefined),
@@ -113,6 +127,7 @@ function createHarness(
       }),
       refreshCurrentSessionHistory,
       refreshStatusMetricsNow: vi.fn(),
+      deleteSession,
     } as never,
     surface: {
       show: (panel: unknown) => shown.push(panel),
@@ -155,7 +170,7 @@ function createHarness(
     ...(options.hasLiveRun ? { hasLiveRun: options.hasLiveRun } : {}),
     onNewSession: vi.fn(),
     onOpenSession,
-    onArchivedCurrentSession: vi.fn(),
+    onCurrentSessionClosed,
     refreshAutocomplete: vi.fn(),
     ...(options.loadProviderTemplates
       ? { loadProviderTemplates: options.loadProviderTemplates }
@@ -173,6 +188,8 @@ function createHarness(
     transcript,
     refreshCurrentSessionHistory,
     onOpenSession,
+    deleteSession,
+    onCurrentSessionClosed,
     shown,
     switchSession: (sessionId: string) => {
       activeSessionId = sessionId;
@@ -186,6 +203,41 @@ function createHarness(
 }
 
 describe("TuiFeatureFlow", () => {
+  it("connects a provider from the panel and hands the list back", async () => {
+    const harness = createHarness({
+      loadProviderTemplates: async () => [
+        {
+          providerId: "openrouter",
+          name: "OpenRouter",
+          apiFormat: "openai-completions",
+          baseUrl: "https://openrouter.ai/api/v1",
+          models: [{ modelId: "openai/gpt-5-mini", displayName: "GPT-5 Mini" }],
+        },
+      ] as never,
+    });
+
+    await harness.flow.showProviderManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    expect(stripAnsi(manager.render(110).join("\n"))).toContain("a add provider");
+    manager.handleInput("a");
+
+    await vi.waitFor(() => expect(harness.shown).toHaveLength(2));
+    const catalogue = harness.shown[1] as {
+      render(width: number): string[];
+      handleInput(data: string): void;
+    };
+    await vi.waitFor(() =>
+      expect(stripAnsi(catalogue.render(90).join("\n"))).toContain("OpenRouter"),
+    );
+
+    // Backing out of the catalogue returns to the panel that opened it.
+    catalogue.handleInput("\u001b");
+    await vi.waitFor(() => expect(harness.shown).toHaveLength(3));
+  });
+
   it("opens the Codex OAuth URL from the independent /provider row", async () => {
     const openExternalTarget = vi.fn(async () => undefined);
     const harness = createHarness({ openExternalTarget });
@@ -221,7 +273,103 @@ describe("TuiFeatureFlow", () => {
     login.dispose();
   });
 
-  it("does not open a Session manager when a Turn starts during its async load", async () => {
+  it("deletes a Session from /sessions and resets the shell when it was visible", async () => {
+    const harness = createHarness();
+    harness.runtime.listSessionPage.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "session-a",
+          title: "Runtime review",
+          workspaceDir: "/workspace",
+        },
+      ],
+      hasMore: false,
+      nextCursor: undefined,
+    });
+
+    await harness.flow.showSessionManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    manager.handleInput("\x18");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(harness.deleteSession).toHaveBeenCalledWith("session-a"));
+    await vi.waitFor(() =>
+      expect(harness.onCurrentSessionClosed).toHaveBeenCalledWith("session-a"),
+    );
+  });
+
+  it("opens a Session from the list while a Turn is running", async () => {
+    let live = false;
+    const harness = createHarness({ hasLiveRun: () => live });
+    harness.runtime.listSessionPage.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "session-a",
+          title: "Runtime review",
+          workspaceDir: "/workspace",
+        },
+        {
+          sessionId: "session-b",
+          title: "Other work",
+          workspaceDir: "/workspace",
+        },
+      ],
+      hasMore: false,
+      nextCursor: undefined,
+    });
+
+    await harness.flow.showSessionManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    live = true;
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+
+    // Selecting is a switch: the running Session keeps running in the background.
+    await vi.waitFor(() => expect(harness.onOpenSession).toHaveBeenCalledWith("session-b"));
+    expect(harness.setHint).not.toHaveBeenCalledWith(
+      "Stop the running turn before using /sessions.",
+    );
+  });
+
+  it("refuses to delete a Session while a Turn is running", async () => {
+    let live = false;
+    const harness = createHarness({ hasLiveRun: () => live });
+    harness.runtime.listSessionPage.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "session-a",
+          title: "Runtime review",
+          workspaceDir: "/workspace",
+        },
+      ],
+      hasMore: false,
+      nextCursor: undefined,
+    });
+
+    await harness.flow.showSessionManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    live = true;
+    manager.handleInput("\x18");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(harness.setHint).toHaveBeenCalledWith("Stop the running turn before using /sessions."),
+    );
+    expect(harness.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it("opens a Session manager when a Turn starts during its async load", async () => {
     let live = false;
     let resolvePage:
       | ((page: {
@@ -244,10 +392,9 @@ describe("TuiFeatureFlow", () => {
     resolvePage?.({ sessions: [], hasMore: false, nextCursor: undefined });
     await opening;
 
-    expect(harness.shown).toEqual([]);
-    expect(harness.setHint).toHaveBeenLastCalledWith(
-      "Stop the running turn before using /sessions.",
-    );
+    // The list only switches, and switching is allowed during a live Turn, so a
+    // Turn starting mid-load no longer cancels the command.
+    expect(harness.shown).toHaveLength(1);
   });
 
   it("exports the complete Runtime history in chronological order and reports the file link", async () => {
@@ -643,6 +790,42 @@ describe("TuiFeatureFlow", () => {
     expect(rendered).not.toContain("MiniMax-M3");
   });
 
+  it("keeps the independent Copilot OAuth entry visible from /model", async () => {
+    const openExternalTarget = vi.fn(async () => undefined);
+    const harness = createHarness({ openExternalTarget });
+    harness.runtime.listModels.mockResolvedValue([
+      {
+        providerId: "custom_provider:mafia-openai",
+        providerName: "Mafia OpenAI Models",
+        modelId: "codex-auto-review",
+        displayName: "Codex Auto Review",
+      },
+    ]);
+    // Only Copilot is offered, so the provider group is [+ Add, Connect Copilot].
+    harness.runtime.getCodexOAuthStatus.mockResolvedValue({
+      state: "hidden",
+      providerId: "openai-codex",
+    });
+    harness.runtime.getCopilotOAuthStatus.mockResolvedValue({
+      state: "disconnected",
+      providerId: "github-copilot",
+    });
+
+    await harness.flow.showModelPicker("code");
+
+    const picker = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    expect(stripAnsi(picker.render(90).join("\n"))).toContain("Connect GitHub Copilot");
+    picker.handleInput("\u001b[B");
+    picker.handleInput("\u001b[B");
+    picker.handleInput("\r");
+
+    await vi.waitFor(() => expect(harness.shown).toHaveLength(2));
+    expect(harness.runtime.startCopilotOAuthLogin).toHaveBeenCalledOnce();
+  });
+
   it("keeps the independent Codex OAuth entry visible from /model", async () => {
     const openExternalTarget = vi.fn(async () => undefined);
     const harness = createHarness({ openExternalTarget });
@@ -794,7 +977,7 @@ describe("TuiFeatureFlow", () => {
   });
 
   it("adds a known API Key provider from /model and selects its model for the Session", async () => {
-    const template: McodeProviderTemplate = {
+    const template: KcodeProviderTemplate = {
       providerId: "deepseek",
       name: "DeepSeek",
       baseUrl: "https://api.deepseek.com/v1",
@@ -1087,7 +1270,7 @@ describe("TuiFeatureFlow", () => {
     expect(harness.shown).toHaveLength(1);
     const panel = harness.shown[0] as { render(width: number): string[] };
     const output = stripAnsi(panel.render(100).join("\n"));
-    expect(output).toContain("MCode status");
+    expect(output).toContain("KCode status");
     expect(output).toContain("/workspace");
     expect(output).toContain("Unavailable · Unavailable");
     expect(output).toContain("MiniMax account unavailable");

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { McodeProviderView } from "../../src/provider/contract.js";
+import type { KcodeProviderView } from "../../src/provider/contract.js";
 import { TuiProviderEditor } from "../../src/tui/features/provider/editor.js";
 import { stripAnsi } from "../../src/tui/rendering/text.js";
 
-const provider: McodeProviderView = {
+const provider: KcodeProviderView = {
   providerId: "custom_provider:work",
   name: "Work",
   kind: "custom",
