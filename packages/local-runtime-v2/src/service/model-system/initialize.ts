@@ -88,6 +88,12 @@ export function initializeModelSystem(options: InitializeModelSystemOptions): Mo
     fetchImpl: options.fetchImpl,
     updateByokConfig: options.config.updateByok,
   });
+  // A stored Copilot catalog is refreshed at every startup: rollout-driven model
+  // additions on the account's `/models` endpoint must reach the picker without
+  // the user reopening model settings (the models.dev preset snapshot refreshes
+  // the same way, in `ProviderPresetCatalog`'s constructor). The promise never
+  // rejects, so the floating call cannot raise an unhandled rejection.
+  void copilotOAuth.refreshCatalogInBackground();
   const providers = new LocalModelProviderService({
     configGetter: options.config.read,
     updateByokConfig: options.config.updateByok,
