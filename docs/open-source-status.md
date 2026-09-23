@@ -46,7 +46,7 @@ These spellings are deliberately unchanged, and the product rename does not alte
   drafts, logs, and configuration. The same reasoning keeps the `# Added by MiniMax Code` path marker, the
   `# Managed by MiniMax Code` shim marker, and the `.mcode-update-*` files the updater leaves in an install
   prefix, all of which are already written into user files.
-- The bundled runtime prompts and agent assets (including the `minimax-code-product` skill) are upstream
+- The bundled runtime prompts and agent assets (including the `kinetick-code-product` skill) are upstream
   product material that states its own ownership; changing them is a runtime-content change, not a
   documentation rename. The vendored `third_party/**` packages keep their own notices and identifications
   for the same reason, and the recorded demo assets and the local CHANGELOG entries describing earlier

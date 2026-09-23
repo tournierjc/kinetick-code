@@ -162,7 +162,6 @@ export class TuiCommandFlow {
   readonly catalog: TuiCommandCatalog;
   private preparationTail: Promise<void> = Promise.resolve();
   private loginRegionPicker: TuiLoginRegionPicker | undefined;
-  private pendingLoginContinuation: 'checkin' | undefined;
   private permissionModePicker: TuiPermissionModePicker | undefined;
   private settingsPicker: TuiSettingsPicker | undefined;
   private hotkeysPicker: TuiHotkeysPicker | undefined;
@@ -1229,10 +1228,7 @@ export class TuiCommandFlow {
         }
         await this.options.permissionModeFlow.set(mode);
       },
-      login: () => {
-        this.pendingLoginContinuation = undefined;
-        this.showLoginRegionPicker();
-      },
+      login: () => this.showLoginRegionPicker(),
       logout: () => this.runAuthCommand('logout'),
       doctor: async () => this.options.featureFlow.showConfigurationInspection(false),
       context: async () => this.options.activeRunFlow.showContext(),
@@ -1251,7 +1247,6 @@ export class TuiCommandFlow {
         }
       },
       feedback: async ({ args }) => this.options.feedbackFlow.show(args),
-      checkin: async () => this.runDailyCheckinCommand(),
       settings: () => this.showSettingsPicker(),
       statusline: () => this.options.showStatusLine?.(),
       hotkeys: () => this.showHotkeysPicker(),
@@ -1482,13 +1477,11 @@ export class TuiCommandFlow {
    * auth command as `/login`.
    */
   startMiniMaxLogin(): void {
-    this.pendingLoginContinuation = undefined;
     this.showLoginRegionPicker();
   }
 
   private showLoginRegionPicker(): void {
     if (!this.options.auth) {
-      this.pendingLoginContinuation = undefined;
       this.options.append('MiniMax authentication is unavailable in this host.', 'warning');
       return;
     }
@@ -1503,28 +1496,10 @@ export class TuiCommandFlow {
       () => {
         this.options.surface.close(picker);
         if (this.loginRegionPicker === picker) this.loginRegionPicker = undefined;
-        this.pendingLoginContinuation = undefined;
       },
     );
     this.loginRegionPicker = picker;
     this.options.surface.show(picker);
-  }
-
-  private async runDailyCheckinCommand(): Promise<void> {
-    try {
-      if (await this.options.featureFlow.hasManagedAccountLogin()) {
-        await this.options.featureFlow.runDailyCheckin();
-        return;
-      }
-    } catch {
-      this.options.append(
-        "Couldn't verify MiniMax sign-in. Check the connection, then retry /checkin.",
-        'warning',
-      );
-      return;
-    }
-    this.pendingLoginContinuation = 'checkin';
-    this.showLoginRegionPicker();
   }
 
   private showPermissionModePicker(): void {
@@ -1668,11 +1643,7 @@ export class TuiCommandFlow {
       this.options.append(result.message);
       if (operation === 'login') {
         if (result.restartRequired) {
-          const initialPrompt =
-            this.pendingLoginContinuation === 'checkin' ? '/checkin' : undefined;
-          this.pendingLoginContinuation = undefined;
-          if (initialPrompt) this.options.requestRestart?.(region, initialPrompt);
-          else this.options.requestRestart?.(region);
+          this.options.requestRestart?.(region);
           await this.options.leaveUi();
           return;
         }
@@ -1685,10 +1656,6 @@ export class TuiCommandFlow {
           if (!(error instanceof TuiLoginRequiredError)) throw error;
           this.options.controller.refreshAccountStatusNow();
         }
-        if (this.pendingLoginContinuation === 'checkin') {
-          this.pendingLoginContinuation = undefined;
-          await this.options.featureFlow.runDailyCheckin();
-        }
       } else {
         if (result.logoutUrl) void this.openLogoutPage(result.logoutUrl);
         if (result.state === 'signed-out' || result.state === 'already-signed-out') {
@@ -1697,7 +1664,6 @@ export class TuiCommandFlow {
         this.options.controller.refreshAccountStatusNow();
       }
     } catch (error) {
-      if (operation === 'login') this.pendingLoginContinuation = undefined;
       this.options.append(
         formatTuiActionFailure(error, {
           summary: operation === 'login' ? "Sign-in wasn't completed." : "Couldn't sign out.",

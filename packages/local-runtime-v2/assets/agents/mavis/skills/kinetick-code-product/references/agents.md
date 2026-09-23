@@ -1,4 +1,4 @@
-# MiniMax Code Agents reference
+# Kinetick Code Agents reference
 
 Use this reference for Agent, Session, Memory, Goal, Plan, Worker, subagent, Agent Team, custom Agents, persona, permissions, automation, and the difference between the primary Agent and child Agents.
 
@@ -11,7 +11,7 @@ Use this reference for Agent, Session, Memory, Goal, Plan, Worker, subagent, Age
 
 ## Official source discovery
 
-Use only the current region's MiniMax Code index:
+Use only the current region's Kinetick Code index:
 
 - `region: cn` → `https://agent.minimaxi.com/docs/llms.txt`
 - `region: en` → `https://agent.minimax.io/docs/llms.txt`

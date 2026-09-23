@@ -992,13 +992,13 @@ describe("BuiltinAgentCatalog session surfaces", () => {
       catalog.render({ ...common, appMode: "coding", promptMode: "coding" }),
       catalog.render({ ...common, appMode: "work", promptMode: "work" }),
       readFile(
-        join(root, "mavis", "skills", "minimax-code-product", "SKILL.md"),
+        join(root, "mavis", "skills", "kinetick-code-product", "SKILL.md"),
         "utf8",
       ),
     ]);
 
     for (const rendered of [coding, work]) {
-      expect(rendered.corePrompt).not.toContain("minimax-code-product");
+      expect(rendered.corePrompt).not.toContain("kinetick-code-product");
       expect(rendered.corePrompt).not.toContain(
         "Do not guess dynamic product facts from model memory.",
       );

@@ -1,5 +1,5 @@
 ---
-name: mcode-tools-master
+name: kcode-tools-master
 description: >-
   You must load this skill before running any `mcode-tools` Bash command. The `mcode-tools` CLI is
   available on PATH and can be invoked directly from Bash. It is the primary entry point for
@@ -16,10 +16,10 @@ descriptions:
     脚本、管道、本地文件、循环或批处理组合使用的主要入口，也是图片/照片、视频、音频、音乐和文档等多模态生成与理解的主要入口；已连接插件或
     MCP 工具的普通单次调用直接使用模型工具列表。'
 displayNames:
-  zh-Hans: 'mcode-tools Connector'
+  zh-Hans: 'kcode-tools Connector'
 ---
 
-# mcode-tools Master
+# kcode-tools Master
 
 Use the `mcode-tools connector` subcommands through the `bash` tool. The launcher is already on the
 current runtime process PATH when this skill is available.

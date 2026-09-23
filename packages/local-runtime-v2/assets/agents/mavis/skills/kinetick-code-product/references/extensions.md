@@ -1,4 +1,4 @@
-# MiniMax Code extensions reference
+# Kinetick Code extensions reference
 
 Use this reference for Skills, Plugins, MCP, Apps, Connectors, Marketplace, extension installation/development, discovery/loading/triggering/execution, or why an extension is missing or has no tools.
 
@@ -10,7 +10,7 @@ Use this reference for Skills, Plugins, MCP, Apps, Connectors, Marketplace, exte
 
 ## Official source discovery
 
-Use only the current region's MiniMax Code index:
+Use only the current region's Kinetick Code index:
 
 - `region: cn` → `https://agent.minimaxi.com/docs/llms.txt`
 - `region: en` → `https://agent.minimax.io/docs/llms.txt`

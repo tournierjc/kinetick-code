@@ -1,13 +1,13 @@
 ---
-name: minimax-code-product
+name: kinetick-code-product
 description: >-
-  Use this skill to route questions about the MiniMax Code or Mavis product itself:
+  Use this skill to route questions about the Kinetick Code or Mavis product itself:
   product identity and ownership; Desktop/Electron, Web/H5, CLI/TUI surfaces;
   installation, uninstall, upgrade, release, download, version, and platform
   support; product workflows; Agents, Sessions, Memory, Teams, Skills, Plugins,
   and MCP; accounts, Token Plan, subscriptions, credits, API keys, BYOK, models,
-  pricing, quotas; and MiniMax Code image, audio, music, or video capabilities.
-  Treat references such as "MiniMax Code", "Mavis", "mcode", "mcode tui", or
+  pricing, quotas; and Kinetick Code image, audio, music, or video capabilities.
+  Treat references such as "Kinetick Code", "Mavis", "kcode", "kcode tui", or
   product features and settings as product-routing signals even when the user
   asks for a concrete local operation. Use this skill before a general coding,
   shell, or web skill when the requested operation concerns the product's own
@@ -15,7 +15,7 @@ description: >-
   unrelated coding task merely because the task is performed in this workspace.
 descriptions:
   zh-Hans: >-
-    这是所有 MiniMax Code 或 Mavis 产品问题的首层总路由 Skill。凡是询问产品身份、归属、
+    这是所有 Kinetick Code 或 Mavis 产品问题的首层总路由 Skill。凡是询问产品身份、归属、
     Desktop/Web/CLI/TUI、版本、发布、下载、安装、平台支持、升级、官方文档、工作流、
     Agent、Session、Memory、Team、Skill、Plugin、MCP、账户、Token Plan、订阅、积分、 Credit、API
     Key、BYOK、模型、价格、额度，或图片/音频/音乐/视频能力时，都应先加载本
@@ -23,21 +23,21 @@ descriptions:
     就跳过产品路由。
 ---
 
-# MiniMax Code product identity and routing
+# Kinetick Code product identity and routing
 
 ## Stable facts
 
-- MiniMax Code is MiniMax's agentic coding workspace; Mavis is its primary Agent.
-- The public surfaces are Desktop/Electron, Web/H5, and MiniMax Code CLI/TUI.
-- The public terminal command is `mcode`.
+- Kinetick Code is the Kinetick agentic coding workspace, forked from MiniMax Code; Mavis is its primary Agent.
+- The public surfaces are Desktop/Electron, Web/H5, and Kinetick Code CLI/TUI.
+- The public terminal command is `kcode`.
 
 ## Official source discovery
 
 For every product question, first identify the runtime `region` from `Environment` or `<agent-context>`:
 
-- `region: cn` means the current app/account is China. Prefer China-region MiniMax Code and Open
+- `region: cn` means the current app/account is China. Prefer China-region Kinetick Code and Open
   Platform official documentation.
-- `region: en` means the current app/account is Global. Prefer Global-region MiniMax Code and Open
+- `region: en` means the current app/account is Global. Prefer Global-region Kinetick Code and Open
   Platform official documentation.
 - The runtime region determines the default fact source; it is not a blanket ban on other official
   domains. If an official page links to another official domain, or the current-region documentation
@@ -54,7 +54,7 @@ For every product question, first identify the runtime `region` from `Environmen
 
 These are the four authoritative discovery roots:
 
-| Runtime region | MiniMax Code product/workflow/Agent/extension docs | Open Platform account/model/API/billing docs  |
+| Runtime region | Kinetick Code product/workflow/Agent/extension docs | Open Platform account/model/API/billing docs  |
 | -------------- | -------------------------------------------------- | --------------------------------------------- |
 | `cn`           | `https://agent.minimax.cn/docs/llms.txt`           | `https://platform.minimaxi.com/docs/llms.txt` |
 | `en`           | `https://agent.minimax.io/docs/llms.txt`           | `https://platform.minimax.io/docs/llms.txt`   |
@@ -62,9 +62,9 @@ These are the four authoritative discovery roots:
 Select the column by the question domain:
 
 - Product identity, Desktop/Web/CLI/TUI, workflows, Agents, Skills, Plugins, and MCP →
-  current-region MiniMax Code index.
+  current-region Kinetick Code index.
 - Token Plan, credits, pricing, API keys, model catalog, model API, and media API → current-region
-  Open Platform index; use the current-region MiniMax Code index too when the question concerns Code
+  Open Platform index; use the current-region Kinetick Code index too when the question concerns Code
   product-surface behavior or in-app entitlement.
 - Current Desktop version and download links → current-region changelog:
   - `region: cn` → `https://agent.minimax.cn/docs/changelog.md`
