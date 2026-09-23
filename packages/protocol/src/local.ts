@@ -718,6 +718,11 @@ export interface SessionInfoView {
   title?: string;
   parentSessionId?: string;
   archived?: boolean;
+  /**
+   * Whether the Session sits in the product's ordered pin list. Pins are not stored
+   * on the Session, so this is projected per read rather than read from a column.
+   */
+  pinned?: boolean;
   status?: SessionStatusInfoView;
   createdAt?: number;
   updatedAt?: number;

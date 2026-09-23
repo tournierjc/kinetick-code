@@ -84,6 +84,8 @@ export type SessionInfoView = PresentFields<
   conversationCapabilities?: { fork: boolean; rewind: boolean };
   model?: ModelInfoView;
   runLocation?: RunLocationView;
+  /** Projected from the pin list at read time; never a Session column. */
+  pinned?: boolean;
 };
 export type SessionTreeChildView = Pick<
   SessionInfoView,

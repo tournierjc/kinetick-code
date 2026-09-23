@@ -1198,6 +1198,22 @@ export class TuiCommandFlow {
         await this.options.controller.archiveCurrentSession();
         await this.options.sessionFlow.archiveCurrentProjection(sessionId);
       },
+      pin: async ({ args }) => {
+        const sessionId = this.options.controller.snapshot().session?.sessionId;
+        if (!sessionId) throw new Error('No active session.');
+        const wanted = args.trim().toLocaleLowerCase();
+        if (wanted && wanted !== 'on' && wanted !== 'off') {
+          this.options.append('Usage: /pin [on | off].', 'warning');
+          return 'retained';
+        }
+        const current = this.options.controller
+          .snapshot()
+          .sessions?.find((item) => item.sessionId === sessionId);
+        const target = wanted ? wanted === 'on' : current?.pinned !== true;
+        const session = await this.options.controller.pinSession(sessionId, target);
+        this.options.setHint(session.pinned === true ? 'Session pinned.' : 'Session unpinned.');
+        this.options.onChanged();
+      },
       compact: async ({ args }) =>
         this.runLoginProtectedAction(() =>
           this.options.featureFlow.compactSession(args, this.hasLiveRun()),

@@ -14,7 +14,13 @@ export type TuiChatRuntimeLike = Pick<TuiSessionPort, 'createSession'> &
   Partial<
     Pick<
       TuiSessionPort,
-      'listSessions' | 'getSession' | 'getMessages' | 'renameSession' | 'archiveSession' | 'deleteSession'
+      | 'listSessions'
+      | 'getSession'
+      | 'getMessages'
+      | 'renameSession'
+      | 'archiveSession'
+      | 'pinSession'
+      | 'deleteSession'
     >
   > &
   Partial<Pick<TuiConfigurationPort, 'getAccountStatus'>> &
@@ -122,10 +128,17 @@ export function resolveTuiSessionFromState(
   return requireRuntimeMethod(runtime, 'getSession')(sessionId);
 }
 
+/**
+ * Pinned Sessions first, then recency. The pin list is the user's explicit order, so
+ * it must survive an activity update in the Session on screen; within each group the
+ * most recently active Session leads.
+ */
 export function sortSessions(sessions: readonly TuiSession[]): TuiSession[] {
-  return [...sessions].sort(
-    (left, right) => toSortableTime(right.updatedAt) - toSortableTime(left.updatedAt),
-  );
+  return [...sessions].sort((left, right) => {
+    const pinned = Number(right.pinned === true) - Number(left.pinned === true);
+    if (pinned !== 0) return pinned;
+    return toSortableTime(right.updatedAt) - toSortableTime(left.updatedAt);
+  });
 }
 
 export function requiresQueueFallback(code: string | undefined): boolean {

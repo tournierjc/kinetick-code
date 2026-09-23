@@ -521,6 +521,29 @@ export class TuiChatController {
   }
 
   /**
+   * Pin or unpin a Session.
+   *
+   * The runtime owns the ordered pin list, so the answer of record is its next read of
+   * the catalogue; the local state carries the same flag meanwhile so the bar and the
+   * manager do not flicker. Pinning changes no visibility: the Session keeps its tab.
+   */
+  async pinSession(sessionId: string, pinned: boolean): Promise<TuiSession> {
+    this.invalidateSessionCatalogRefresh();
+    const existing = await this.resolveSession(sessionId);
+    const pinSession = requireRuntimeMethod(this.runtime, 'pinSession');
+    await pinSession({ sessionId, pinned });
+    const session = { ...existing, pinned };
+    const isCurrent = this.state.session?.sessionId === sessionId;
+    this.updateState({
+      status: 'idle',
+      ...(isCurrent ? { session } : {}),
+      sessions: upsertSession(this.state.sessions, session),
+      error: undefined,
+    });
+    return session;
+  }
+
+  /**
    * Delete a Session the way the runtime does: rows and canonical history files
    * are removed, and children are re-parented. There is no trash to restore
    * from, so callers confirm first.

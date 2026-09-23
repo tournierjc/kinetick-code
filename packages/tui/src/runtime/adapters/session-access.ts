@@ -229,6 +229,18 @@ export class TuiSessionAccess {
     await this.cliService.archiveSession({ id: sessionId, archived });
   }
 
+  async pinSession(input: {
+    sessionId: string;
+    pinned: boolean;
+    insertIndex?: number;
+  }): Promise<void> {
+    await this.cliService.pinSession({
+      id: input.sessionId,
+      pinned: input.pinned,
+      ...(typeof input.insertIndex === "number" ? { insertIndex: input.insertIndex } : {}),
+    });
+  }
+
   async deleteSession(sessionId: string): Promise<void> {
     await this.onSessionDeleted?.(sessionId);
     await this.cliService.deleteSession({ id: sessionId });
