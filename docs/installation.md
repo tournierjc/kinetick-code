@@ -137,7 +137,7 @@ On Windows, also use `node` with the appropriate local absolute path. Do not ove
 
 ## Accounts and data
 
-Run `/login` in the TUI or `pnpm kcode login`, choosing the region for your account. Token Plan requires an account and available credits. See the root README for BYOK configuration and testing.
+Run `/login minimax` in the TUI or `pnpm kcode login`, choosing the region for your account; `/provider` connects every other provider. Token Plan requires an account and available credits. See the root README for BYOK configuration and testing.
 
 Source builds and the published npm CLI use the same default user data directory:
 
