@@ -104,6 +104,20 @@ Coverage: new `packages/tui/test/unit/package-identity.test.ts` adds 17 cases �
 
 Not run: installing the archive under the new name on a real host (it was packaged and inspected, not installed), the Windows install path, and upgrading an existing `@minimax-ai/code` installation to the new identity.
 
+### Release naming, 2026-09-23
+
+Asked for while the package identity change was in review: releases must not carry `-fork` in their name.
+
+Scheme: `pnpm release:cli --version X.Y.Z` now releases a plain version — tag `vX.Y.Z`, archive `kinetick-code-X.Y.Z.tar.gz`. `scripts/release-cli.mjs` no longer carries the `-fork.N` exemption that let a same-core prerelease pass while ordering below the bare core: a release must be newer than the committed version in canonical SemVer order, and a `-fork.` suffix is refused outright so the retired spelling cannot come back. A genuinely newer prerelease (`0.6.0-rc.1`) is still allowed; it publishes as a GitHub prerelease, which the `stable` channel skips and `preview` takes — the behaviour the update fixtures now cover with `-rc.N` versions instead of `-fork.N`.
+
+Read back on the committed tree through a scratch clone whose `main` is this revision: `--version 0.5.3` prints the release plan (current `0.5.2-fork.1`, tag `v0.5.3`, branch `release/v0.5.3`), `--version 0.6.0-rc.1` plans the prerelease, `--version 0.5.3-fork.1` fails with "The `-fork.N` release suffix is retired", and `--version 0.5.2` is accepted because plain `0.5.2` orders *above* the prerelease `0.5.2-fork.1` — so the next release may keep the current core number or move on to a higher one.
+
+Published releases are untouched: `v0.5.2-fork.1` keeps its tag and asset name (tags are immutable), and the updater still installs it. `docs/releasing.md` states the new numbering rule — the sequence belongs to this repository and is no longer tied to the upstream core — `docs/installation.md` and `README.md` show plain versions, and the channel descriptions no longer claim that fork releases are prereleases.
+
+`pnpm verify` passed 14 gates at revision `4e95835` (capabilities 174 files / 4,610 passed / 15 skipped / 0 failed; source inventory 4,237 files; generated paths 127 package exports; release tooling 40 passed / 1 skipped), including the new gate cases: equal, lower and retired-suffix versions rejected; plain, prerelease and major versions accepted.
+
+Not run: an actual release (it pushes a tag, opens the version PR and needs the maintainer's go-ahead), and no release is cut by this change — the next release is the first plain version.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.
