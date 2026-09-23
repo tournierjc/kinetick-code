@@ -3282,6 +3282,7 @@
     "packages/tui/test/unit/tui-terminal-text-paste.test.ts",
     "packages/tui/test/unit/tui-thinking-preview.test.ts",
     "packages/tui/test/unit/tui-transcript-presentation.test.ts",
+    "packages/tui/test/unit/tui-transcript-session-store.test.ts",
     "packages/tui/test/unit/tui-transcript-view.test.ts",
     "packages/tui/test/unit/tui-workspace-status-line.test.ts",
     "packages/tui/test/unit/tui/controller/interaction/input-flow.test.ts",
