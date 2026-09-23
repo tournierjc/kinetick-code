@@ -1,4 +1,4 @@
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from '../../../product-context.js';
+import { KCODE_DEFAULT_AGENT_NAME } from '../../../product-context.js';
 import type {
   TuiInteractionPort,
   TuiPendingPermission,
@@ -96,7 +96,7 @@ export class TuiInteractionFlow {
   private submittingSessionId?: string;
 
   constructor(private readonly options: TuiInteractionFlowOptions) {
-    this.defaultAgentName = options.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME;
+    this.defaultAgentName = options.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME;
     this.agentStatusEnabled = Boolean(
       options.agentStatusLineItems &&
       parseTuiStatusLineItems(options.agentStatusLineItems).includes('build-mode'),

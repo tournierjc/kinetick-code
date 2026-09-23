@@ -9,7 +9,7 @@ import {
   type OAuthClient,
 } from '@mavis/oauth-core';
 
-export interface CreateMcodeSharedAuthSessionOptions {
+export interface CreateKcodeSharedAuthSessionOptions {
   dataDir: string;
   region: MavisRegion;
   buildEnv: MavisBuildEnv;
@@ -20,8 +20,8 @@ export interface CreateMcodeSharedAuthSessionOptions {
   >;
 }
 
-export function createMcodeSharedAuthSession(
-  options: CreateMcodeSharedAuthSessionOptions,
+export function createKcodeSharedAuthSession(
+  options: CreateKcodeSharedAuthSessionOptions,
 ): KCodeOAuthCore {
   const namespace = createAuthNamespace({
     dataDir: options.dataDir,
@@ -39,7 +39,7 @@ export function createMcodeSharedAuthSession(
 }
 
 function createHttpOAuthClient(
-  endpoints: CreateMcodeSharedAuthSessionOptions['oauthEndpoints'],
+  endpoints: CreateKcodeSharedAuthSessionOptions['oauthEndpoints'],
 ): HttpOAuthClient {
   if (!endpoints) {
     throw new TypeError(

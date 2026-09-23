@@ -66,7 +66,7 @@ export function releaseManifest(importers, version) {
     description: 'Kinetick Code CLI built from the tagged public source.',
     bin: { kcode: 'cli.js' },
     engines: json(path.join(root, 'package.json')).engines,
-    repository: { type: 'git', url: 'https://github.com/MiniMax-AI/minimax-code.git' },
+    repository: { type: 'git', url: 'https://github.com/tournierjc/kinetick-code.git' },
     dependencies, optionalDependencies,
   };
 }
@@ -88,12 +88,12 @@ export async function packageCliRelease({ tag, out }) {
     writeFileSync(path.join(stage, 'release.json'), JSON.stringify({ version, tag, revision, buildNode: process.version }, null, 2) + '\n');
     writeFileSync(path.join(stage, 'README.md'), `# Kinetick Code ${version}
 
-Built from https://github.com/MiniMax-AI/minimax-code/tree/${revision}.
+Built from https://github.com/tournierjc/kinetick-code/tree/${revision}.
 Install this tar.gz with npm. Node.js must satisfy the package engines requirement.
 Keep optional dependencies enabled and allow better-sqlite3 installation scripts.
 Update by installing a newer GitHub release archive; the built-in updater follows npm.
 The archive uses the same package name, kcode command and user data as the official npm CLI.
-See https://github.com/MiniMax-AI/minimax-code/blob/${revision}/docs/installation.md.
+See https://github.com/tournierjc/kinetick-code/blob/${revision}/docs/installation.md.
 `);
     mkdirSync(out, { recursive: true });
     const archive = path.join(out, `kinetick-code-${version}.tar.gz`);

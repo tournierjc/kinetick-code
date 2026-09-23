@@ -6,8 +6,8 @@ import { SelectList } from '../../widgets/select-list.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
 import type { TuiModel } from '../../../runtime/port.js';
 import type {
-  McodeCodexOAuthState,
-  McodeCopilotOAuthState,
+  KcodeCodexOAuthState,
+  KcodeCopilotOAuthState,
 } from '../../../provider/contract.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 import {
@@ -72,11 +72,11 @@ export class TuiModelPicker implements Component, Focusable {
       onUnavailable?: (model: TuiModel) => void;
       unavailableHint?: string;
       codexOAuth?: {
-        readonly state: Exclude<McodeCodexOAuthState, 'hidden'>;
+        readonly state: Exclude<KcodeCodexOAuthState, 'hidden'>;
         readonly onConnect: () => void;
       };
       copilotOAuth?: {
-        readonly state: Exclude<McodeCopilotOAuthState, 'hidden'>;
+        readonly state: Exclude<KcodeCopilotOAuthState, 'hidden'>;
         readonly onConnect: () => void;
       };
       onAddProvider?: () => void;
@@ -534,7 +534,7 @@ export class TuiModelPicker implements Component, Focusable {
   }
 }
 
-function copilotOAuthAction(state: Exclude<McodeCopilotOAuthState, 'hidden'>): {
+function copilotOAuthAction(state: Exclude<KcodeCopilotOAuthState, 'hidden'>): {
   readonly label: string;
   readonly description: string;
 } {
@@ -556,7 +556,7 @@ function copilotOAuthAction(state: Exclude<McodeCopilotOAuthState, 'hidden'>): {
   return { label: '+ Connect GitHub Copilot…', description: 'Sign in with your Copilot subscription' };
 }
 
-function codexOAuthAction(state: Exclude<McodeCodexOAuthState, 'hidden'>): {
+function codexOAuthAction(state: Exclude<KcodeCodexOAuthState, 'hidden'>): {
   readonly label: string;
   readonly description: string;
 } {

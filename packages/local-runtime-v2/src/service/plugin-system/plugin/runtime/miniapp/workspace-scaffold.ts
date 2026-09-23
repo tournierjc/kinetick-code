@@ -71,7 +71,7 @@ function workspaceScaffoldFiles(pluginId: string): readonly WorkspaceScaffoldFil
     {
       relativePath: 'package.json',
       content: json({
-        mcode: {
+        kcode: {
           schemaVersion: 2,
           miniApp: './miniapp/miniapp.json',
         },

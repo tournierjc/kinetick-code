@@ -1,6 +1,6 @@
 import type { TuiThemePalette } from './contracts.js';
 
-export const MINIMAX_CODE_DARK_THEME: TuiThemePalette = Object.freeze({
+export const KCODE_DARK_THEME: TuiThemePalette = Object.freeze({
   id: 'minimax',
   appearance: 'dark',
   colors: Object.freeze({
@@ -27,7 +27,7 @@ export const MINIMAX_CODE_DARK_THEME: TuiThemePalette = Object.freeze({
   }),
 });
 
-export const MINIMAX_CODE_LIGHT_THEME: TuiThemePalette = Object.freeze({
+export const KCODE_LIGHT_THEME: TuiThemePalette = Object.freeze({
   id: 'minimax',
   appearance: 'light',
   colors: Object.freeze({

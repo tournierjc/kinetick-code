@@ -1,5 +1,5 @@
 import {
-  MCODE_OAUTH_SCOPES,
+  KCODE_OAUTH_SCOPES,
   type AccessTokenLease,
   type UnauthorizedContext,
 } from './contracts.js';
@@ -30,7 +30,7 @@ export function createTokenProvider(core: KCodeOAuthCore): KCodeTokenProvider {
     getStatus: () => core.getStatus(),
     getAccessToken: (options: { minValidityMs: number }) =>
       core.getAccessToken({
-        requiredScopes: [...MCODE_OAUTH_SCOPES],
+        requiredScopes: [...KCODE_OAUTH_SCOPES],
         minValidityMs: options.minValidityMs,
       }),
     handleUnauthorized: (context: UnauthorizedContext) => core.handleUnauthorized(context),

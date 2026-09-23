@@ -10,11 +10,11 @@ import {
   tuiColors as colors,
 } from '../../theme/runtime.js';
 import type {
-  McodeProviderSnapshot,
-  McodeProviderTestResult,
-  McodeProviderView,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
+  KcodeProviderSnapshot,
+  KcodeProviderTestResult,
+  KcodeProviderView,
+  KcodeSaveProviderCandidateInput,
+  KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { TuiProviderEditor } from './editor.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -29,13 +29,13 @@ type ProviderManagerMode =
   | { readonly kind: 'minimax-key'; readonly replacing: boolean };
 
 export interface TuiProviderManagerOptions {
-  snapshot: McodeProviderSnapshot;
-  onRefresh(): Promise<McodeProviderSnapshot>;
-  onRefreshModels?(provider: McodeProviderView): Promise<number>;
-  onTest(providerId: string, modelId?: string): Promise<McodeProviderTestResult>;
+  snapshot: KcodeProviderSnapshot;
+  onRefresh(): Promise<KcodeProviderSnapshot>;
+  onRefreshModels?(provider: KcodeProviderView): Promise<number>;
+  onTest(providerId: string, modelId?: string): Promise<KcodeProviderTestResult>;
   onConnectCodex?(): void;
   onConnectCopilot?(): void;
-  onSaveCustom?(input: McodeSaveProviderCandidateInput): Promise<McodeSaveProviderCandidateResult>;
+  onSaveCustom?(input: KcodeSaveProviderCandidateInput): Promise<KcodeSaveProviderCandidateResult>;
   onSetMiniMaxApiKey(apiKey: string): Promise<void>;
   onSetMiniMaxSource(source: 'token_plan' | 'minimax_api_key'): Promise<void>;
   /** Starts the same sign-in flow as `/login`; absent when the host has no auth. */
@@ -46,7 +46,7 @@ export interface TuiProviderManagerOptions {
 
 export class TuiProviderManager implements Component, Focusable {
   private editor?: TuiProviderEditor;
-  private snapshotValue: McodeProviderSnapshot;
+  private snapshotValue: KcodeProviderSnapshot;
   private selectedIndex = 0;
   private mode: ProviderManagerMode = { kind: 'list' };
   private readonly secretInput = new Input({ mask: '•' });
@@ -228,11 +228,11 @@ export class TuiProviderManager implements Component, Focusable {
     ];
   }
 
-  private providers(): readonly McodeProviderView[] {
+  private providers(): readonly KcodeProviderView[] {
     return this.snapshotValue.providers;
   }
 
-  private selectedProvider(): McodeProviderView | undefined {
+  private selectedProvider(): KcodeProviderView | undefined {
     return this.providers()[this.selectedIndex];
   }
 
@@ -365,7 +365,7 @@ export class TuiProviderManager implements Component, Focusable {
     this.requestRender();
   }
 
-  private async connectCodex(provider: McodeProviderView): Promise<void> {
+  private async connectCodex(provider: KcodeProviderView): Promise<void> {
     const state = provider.status?.state;
     if (state === 'connected') {
       this.setStatus('OpenAI Codex is already connected.', 'info');
@@ -378,7 +378,7 @@ export class TuiProviderManager implements Component, Focusable {
     this.options.onConnectCodex();
   }
 
-  private async connectCopilot(provider: McodeProviderView): Promise<void> {
+  private async connectCopilot(provider: KcodeProviderView): Promise<void> {
     const state = provider.status?.state;
     if (state === 'connected') {
       this.setStatus('GitHub Copilot is already connected.', 'info');
@@ -526,13 +526,13 @@ export class TuiProviderManager implements Component, Focusable {
  * never claims the glyph — rendering both made two rows look simultaneously
  * selected.
  */
-function isSelectedSource(provider: McodeProviderView): boolean {
+function isSelectedSource(provider: KcodeProviderView): boolean {
   return (
     (provider.kind === 'minimax-oauth' || provider.kind === 'minimax-api-key') && provider.active
   );
 }
 
-function markerFor(provider: McodeProviderView): string {
+function markerFor(provider: KcodeProviderView): string {
   if (provider.kind === 'codex-oauth' || provider.kind === 'copilot-oauth') {
     return provider.status?.state === 'connected' ? '✓' : '○';
   }
@@ -540,14 +540,14 @@ function markerFor(provider: McodeProviderView): string {
   return provider.active ? '●' : '○';
 }
 
-function providerModelList(provider: McodeProviderView): string | undefined {
+function providerModelList(provider: KcodeProviderView): string | undefined {
   if (provider.models.length === 0) return undefined;
   return sanitizeTerminalText(
     provider.models.map((model) => model.displayName ?? model.modelId).join(', '),
   );
 }
 
-function providerDetail(provider: McodeProviderView): string {
+function providerDetail(provider: KcodeProviderView): string {
   if (provider.kind === 'codex-oauth') {
     if (provider.status?.state === 'connected') return 'Connected with OpenAI OAuth';
     if (provider.status?.state === 'pending') {
@@ -588,7 +588,7 @@ function providerDetail(provider: McodeProviderView): string {
   ].join(' · ');
 }
 
-function providerSummary(provider: McodeProviderView): string {
+function providerSummary(provider: KcodeProviderView): string {
   if (provider.kind === 'codex-oauth') {
     if (provider.status?.state === 'connected') return 'Connected';
     if (provider.status?.state === 'pending') return 'Waiting for sign-in';

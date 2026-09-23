@@ -6,7 +6,7 @@ import type {
 import type { CliService } from '@mavis/local-runtime-v2/cli-service';
 import { resolveTuiReviewPromptDir } from './review-assets.js';
 import type { ProductBuildIdentity } from '@mavis/shared/product-build-identity';
-import { resolveMcodeBuildIdentity } from '../auth/environment.js';
+import { resolveKcodeBuildIdentity } from '../auth/environment.js';
 
 export type EmbeddedRuntimeHostOptions = Omit<
   CreateLocalRuntimeHostOptions,
@@ -34,7 +34,7 @@ type EmbeddedRuntimeConfig = ReturnType<NonNullable<CreateLocalRuntimeHostOption
 
 export function projectEmbeddedRuntimeConfig(
   config: EmbeddedRuntimeConfig,
-  buildIdentity: Pick<ProductBuildIdentity, 'isInternalBuild'> = resolveMcodeBuildIdentity(),
+  buildIdentity: Pick<ProductBuildIdentity, 'isInternalBuild'> = resolveKcodeBuildIdentity(),
   mcodeToolsEnabled = false,
 ): EmbeddedRuntimeConfig {
   return {
@@ -78,7 +78,7 @@ export async function createEmbeddedRuntimeHost(
     configGetter: () =>
       projectEmbeddedRuntimeConfig(
         configGetter(),
-        resolveMcodeBuildIdentity(),
+        resolveKcodeBuildIdentity(),
         productCapabilities?.mcodeTools === true,
       ),
     runtimeOwnerKind: 'tui',

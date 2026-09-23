@@ -1,16 +1,16 @@
-import { McodeProviderApplication } from '../provider/application.js';
-import type { McodeProviderApiFormat, McodeProviderSnapshot } from '../provider/contract.js';
+import { KcodeProviderApplication } from '../provider/application.js';
+import type { KcodeProviderApiFormat, KcodeProviderSnapshot } from '../provider/contract.js';
 import { prepareTuiDataDir } from '../runtime/data-dir.js';
 import { createTuiRuntime, shutdownTuiRuntime } from '../runtime/lifecycle.js';
 import { formatTuiActionFailure } from '../user-facing-failure.js';
 
-export type McodeProviderCliRequest =
+export type KcodeProviderCliRequest =
   | { readonly action: 'list'; readonly json?: boolean }
   | {
       readonly action: 'add';
       readonly name: string;
       readonly baseUrl: string;
-      readonly apiFormat: McodeProviderApiFormat;
+      readonly apiFormat: KcodeProviderApiFormat;
       readonly models: readonly string[];
       readonly contextLimit?: number;
       readonly outputLimit?: number;
@@ -28,22 +28,22 @@ export type McodeProviderCliRequest =
   | { readonly action: 'set-minimax-key'; readonly apiKeyEnv?: string }
   | { readonly action: 'use'; readonly source: 'token_plan' | 'minimax_api_key' };
 
-interface McodeProviderCommandContext {
-  readonly application: McodeProviderApplication;
+interface KcodeProviderCommandContext {
+  readonly application: KcodeProviderApplication;
   shutdown(): Promise<void>;
 }
 
-export interface RunMcodeProviderCommandOptions {
+export interface RunKcodeProviderCommandOptions {
   readonly version: string;
-  readonly request: McodeProviderCliRequest;
+  readonly request: KcodeProviderCliRequest;
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly workspaceDir?: string;
   readonly lane?: string;
-  readonly createContext?: (lane?: string) => Promise<McodeProviderCommandContext>;
+  readonly createContext?: (lane?: string) => Promise<KcodeProviderCommandContext>;
 }
 
-export async function runMcodeProviderCommand(
-  options: RunMcodeProviderCommandOptions,
+export async function runKcodeProviderCommand(
+  options: RunKcodeProviderCommandOptions,
 ): Promise<string> {
   const context = options.createContext
     ? await options.createContext(options.lane)
@@ -158,7 +158,7 @@ async function createProviderCommandContext(
   version: string,
   workspaceDir = process.cwd(),
   lane?: string,
-): Promise<McodeProviderCommandContext> {
+): Promise<KcodeProviderCommandContext> {
   const runtime = await createTuiRuntime({
     dataDir: await prepareTuiDataDir(),
     workspaceDir,
@@ -167,14 +167,14 @@ async function createProviderCommandContext(
     ...(lane ? { lane } : {}),
   });
   return {
-    application: new McodeProviderApplication(runtime.adapter),
+    application: new KcodeProviderApplication(runtime.adapter),
     shutdown: async () => {
       await shutdownTuiRuntime(runtime);
     },
   };
 }
 
-function formatSnapshot(snapshot: McodeProviderSnapshot, json: boolean): string {
+function formatSnapshot(snapshot: KcodeProviderSnapshot, json: boolean): string {
   if (json) return JSON.stringify(snapshot, null, 2);
   const lines = snapshot.providers.map((provider) => {
     const state = provider.active ? 'active' : provider.enabled ? 'enabled' : 'disabled';

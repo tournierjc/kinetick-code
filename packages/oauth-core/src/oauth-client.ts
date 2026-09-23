@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { MCODE_OAUTH_AUDIENCE, MCODE_OAUTH_CLIENT_ID, MCODE_OAUTH_SCOPES } from './contracts.js';
+import { KCODE_OAUTH_AUDIENCE, KCODE_OAUTH_CLIENT_ID, KCODE_OAUTH_SCOPES } from './contracts.js';
 
 const DEVICE_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 
@@ -82,9 +82,9 @@ export class HttpOAuthClient implements OAuthClient {
     const body = await this.postForm(
       this.options.deviceAuthorizationEndpoint,
       {
-        client_id: MCODE_OAUTH_CLIENT_ID,
-        scope: MCODE_OAUTH_SCOPES.join(' '),
-        audience: MCODE_OAUTH_AUDIENCE,
+        client_id: KCODE_OAUTH_CLIENT_ID,
+        scope: KCODE_OAUTH_SCOPES.join(' '),
+        audience: KCODE_OAUTH_AUDIENCE,
         code_challenge: codeChallenge,
         code_challenge_method: 'S256',
       },
@@ -146,7 +146,7 @@ export class HttpOAuthClient implements OAuthClient {
         {
           grant_type: DEVICE_GRANT_TYPE,
           ...pollingCode,
-          client_id: MCODE_OAUTH_CLIENT_ID,
+          client_id: KCODE_OAUTH_CLIENT_ID,
           code_verifier: authorization.codeVerifier,
         },
         { signal: options.signal },
@@ -190,9 +190,9 @@ export class HttpOAuthClient implements OAuthClient {
     const body = await this.postForm(this.options.tokenEndpoint, {
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
-      client_id: MCODE_OAUTH_CLIENT_ID,
-      scope: MCODE_OAUTH_SCOPES.join(' '),
-      audience: MCODE_OAUTH_AUDIENCE,
+      client_id: KCODE_OAUTH_CLIENT_ID,
+      scope: KCODE_OAUTH_SCOPES.join(' '),
+      audience: KCODE_OAUTH_AUDIENCE,
     });
     return parseTokenGrant(body, refreshToken);
   }
@@ -203,7 +203,7 @@ export class HttpOAuthClient implements OAuthClient {
       {
         token: refreshToken,
         token_type_hint: 'refresh_token',
-        client_id: MCODE_OAUTH_CLIENT_ID,
+        client_id: KCODE_OAUTH_CLIENT_ID,
       },
       { allowEmptySuccess: true },
     );
@@ -302,7 +302,7 @@ function parseTokenGrant(
     !refreshToken ||
     tokenType?.toLowerCase() !== 'bearer' ||
     !expiresInSec ||
-    !scopes.includes(MCODE_OAUTH_SCOPES[0])
+    !scopes.includes(KCODE_OAUTH_SCOPES[0])
   ) {
     throw new OAuthProtocolError('invalid_token_response');
   }
@@ -311,7 +311,7 @@ function parseTokenGrant(
     refreshToken,
     tokenType: 'Bearer',
     scopes,
-    audience: MCODE_OAUTH_AUDIENCE,
+    audience: KCODE_OAUTH_AUDIENCE,
     expiresInSec,
     ...(readString(claims, 'sub') ? { subject: readString(claims, 'sub') } : {}),
     ...(readString(claims, 'account_id') ? { accountId: readString(claims, 'account_id') } : {}),

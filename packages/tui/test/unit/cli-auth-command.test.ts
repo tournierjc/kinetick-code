@@ -110,7 +110,7 @@ describe('Kinetick Code auth commands', () => {
     expect(stderr.join('')).not.toContain('device-secret');
   });
 
-  it('keeps mcode login usable without a desktop browser when explicitly disabled', async () => {
+  it('keeps kcode login usable without a desktop browser when explicitly disabled', async () => {
     const stderr: string[] = [];
     const openedTargets: string[] = [];
     const login = vi.fn(async (onProgress) => {

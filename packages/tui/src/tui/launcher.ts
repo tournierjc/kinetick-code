@@ -32,12 +32,12 @@ import {
   type TuiIncidentSink,
   type TuiObservability,
 } from '../observability/index.js';
-import { resolveMcodeAuthEnvironment } from '../auth/environment.js';
+import { resolveKcodeAuthEnvironment } from '../auth/environment.js';
 import { TuiMatrixAccountClient } from '../account/matrix-account-client.js';
-import { createDefaultMcodeAuthApplication } from '../auth/factory.js';
-import { createMcodeSharedAuthSession } from '../runtime/auth-session.js';
+import { createDefaultKcodeAuthApplication } from '../auth/factory.js';
+import { createKcodeSharedAuthSession } from '../runtime/auth-session.js';
 import {
-  MCODE_OAUTH_SCOPES,
+  KCODE_OAUTH_SCOPES,
   resolveKCodeOAuthEndpointConfig,
   type AccessTokenLease,
   type KCodeOAuthCore,
@@ -46,17 +46,17 @@ import {
   resolveTuiManagedBackendLane,
   resolveTuiStartupEnvironmentOption,
 } from '../cli/environment.js';
-import { resolveMcodeStartupUpdateNotice } from '../update/startup-notice.js';
-import type { McodeUpdateApplication } from '../update/application.js';
+import { resolveKcodeStartupUpdateNotice } from '../update/startup-notice.js';
+import type { KcodeUpdateApplication } from '../update/application.js';
 import { tuiErrorDiagnostic } from '../user-facing-failure.js';
 import { getConfig, resetConfig, writeTuiStatusLineSetting, type MavisRegion } from '@mavis/config';
 import { markLoginRestartHandoff } from './login-restart-handoff.js';
 import { readTuiModeSetting, writeTuiModeSetting } from '../host/tui-settings.js';
-import { schedulePendingMcodePrefixUpdate } from '../update/prefix-update.js';
-import { MCODE_TUI_RESULT_PATH_ENV } from './automation/result-writer.js';
+import { schedulePendingKcodePrefixUpdate } from '../update/prefix-update.js';
+import { KCODE_TUI_RESULT_PATH_ENV } from './automation/result-writer.js';
 import { startTuiStartupStatus, type TuiStartupStatus } from './startup-status.js';
 
-const MINIMAX_CODE_EXIT_SLOGAN = 'Intelligence with everyone, bye~';
+const KCODE_EXIT_SLOGAN = 'Intelligence with everyone, bye~';
 export interface LaunchTuiOptions {
   version: string;
   initialPrompt?: string;
@@ -111,7 +111,7 @@ export interface LaunchTuiDependencies {
   loadRuntimeLifecycle?: () => Promise<RuntimeLifecycleModule>;
   loadUpdateApplication?: (
     currentVersion: string,
-  ) => Promise<Pick<McodeUpdateApplication, 'inspect' | 'apply'>>;
+  ) => Promise<Pick<KcodeUpdateApplication, 'inspect' | 'apply'>>;
   writeExitMessage?: (message: string) => void;
   prepareDataDir?: typeof prepareTuiDataDir;
   restartProcess?: (
@@ -122,8 +122,8 @@ export interface LaunchTuiDependencies {
   createIncidentReporter?: () => TuiIncidentReporter;
   readTuiMode?: typeof readTuiModeSetting;
   writeTuiMode?: typeof writeTuiModeSetting;
-  createSharedAuthSession?: typeof createMcodeSharedAuthSession;
-  createAuthApplication?: typeof createDefaultMcodeAuthApplication;
+  createSharedAuthSession?: typeof createKcodeSharedAuthSession;
+  createAuthApplication?: typeof createDefaultKcodeAuthApplication;
 }
 
 export async function launchTui(
@@ -146,13 +146,13 @@ export async function launchTui(
   const baseTerminal = options.terminal ?? new ProcessTerminal();
   const tuiMode = options.tuiMode ?? (dependencies.readTuiMode ?? readTuiModeSetting)(dataDir);
   const terminalCapabilities = detectProcessTerminalCapabilities();
-  const authEnvironment = resolveMcodeAuthEnvironment({
+  const authEnvironment = resolveKcodeAuthEnvironment({
     runtimeRegion: process.env.MAVIS_REGION === 'en' ? 'en' : 'cn',
   });
   const bedrockLane = resolveTuiManagedBackendLane(options.lane, authEnvironment.buildEnv);
   const routingContext = bedrockLane ? { bedrockLane } : undefined;
   const sharedAuthCore: KCodeOAuthCore = (
-    dependencies.createSharedAuthSession ?? createMcodeSharedAuthSession
+    dependencies.createSharedAuthSession ?? createKcodeSharedAuthSession
   )({
     dataDir,
     ...authEnvironment,
@@ -167,7 +167,7 @@ export async function launchTui(
   const resolveAccessTokenLease = async (): Promise<AccessTokenLease | undefined> => {
     try {
       const lease = await sharedAuthCore.getAccessToken({
-        requiredScopes: [...MCODE_OAUTH_SCOPES],
+        requiredScopes: [...KCODE_OAUTH_SCOPES],
         minValidityMs: 30_000,
       });
       if (accountAuthContext?.accessToken !== lease.accessToken) {
@@ -221,8 +221,8 @@ export async function launchTui(
   const loadUpdateApplication =
     dependencies.loadUpdateApplication ??
     (async (currentVersion: string) => {
-      const { McodeUpdateApplication } = await import('../update/application.js');
-      return new McodeUpdateApplication({ currentVersion });
+      const { KcodeUpdateApplication } = await import('../update/application.js');
+      return new KcodeUpdateApplication({ currentVersion });
     });
   let updateApplicationPromise: ReturnType<typeof loadUpdateApplication> | undefined;
   const updateApplication = () => {
@@ -317,8 +317,8 @@ export async function launchTui(
         ...(presentationConfig.notifications
           ? { notifications: presentationConfig.notifications }
           : {}),
-        ...(process.env[MCODE_TUI_RESULT_PATH_ENV]
-          ? { automationResultPath: process.env[MCODE_TUI_RESULT_PATH_ENV] }
+        ...(process.env[KCODE_TUI_RESULT_PATH_ENV]
+          ? { automationResultPath: process.env[KCODE_TUI_RESULT_PATH_ENV] }
           : {}),
         ...(options.workspaceRoots ? { workspaceRoots: options.workspaceRoots } : {}),
         homeDir: homeDirectory,
@@ -329,7 +329,7 @@ export async function launchTui(
         externalEditorCommand: options.externalEditorCommand,
         observability,
         incidentReporter,
-        auth: (dependencies.createAuthApplication ?? createDefaultMcodeAuthApplication)({
+        auth: (dependencies.createAuthApplication ?? createDefaultKcodeAuthApplication)({
           dataDir,
           ...authEnvironment,
           sharedAuthCore,
@@ -381,7 +381,7 @@ export async function launchTui(
         },
         ...(options.resumeDraftAfterLogin ? { resumeDraftAfterLogin: true } : {}),
         checkForUpdate: async () =>
-          resolveMcodeStartupUpdateNotice(await (await updateApplication()).inspect()),
+          resolveKcodeStartupUpdateNotice(await (await updateApplication()).inspect()),
         inspectUpdate: async () => (await updateApplication()).inspect(),
         applyUpdate: async (plan, progress) => (await updateApplication()).apply(plan, progress),
       });
@@ -727,7 +727,7 @@ export async function restartTuiProcess(
   const args = resolveRestartArguments(process.execPath, process.argv, sessionId, initialPrompt);
   const environment = resolveRestartEnvironment(process.env, region);
   if (
-    await schedulePendingMcodePrefixUpdate(
+    await schedulePendingKcodePrefixUpdate(
       process.argv[1],
       process.execPath,
       process.pid,
@@ -802,7 +802,7 @@ function isExistingFile(file: string): boolean {
 
 export function formatTuiExitMessage(sessionId?: string): string {
   const sessionHint = sessionId ? formatTuiSessionHint(sessionId) : undefined;
-  return `${sessionHint ?? '\n'}${sessionHint ? '\n' : ''}${MINIMAX_CODE_EXIT_SLOGAN}\n`;
+  return `${sessionHint ?? '\n'}${sessionHint ? '\n' : ''}${KCODE_EXIT_SLOGAN}\n`;
 }
 
 export function formatTuiSessionHint(sessionId: string): string | undefined {

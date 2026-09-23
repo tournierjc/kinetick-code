@@ -1,7 +1,7 @@
 import {
   formatTuiPermissionMode,
   formatTuiPermissionModeCompact,
-  MINIMAX_CODE_PERMISSION_MODES,
+  KCODE_PERMISSION_MODES,
   type TuiPermissionMode,
 } from '../../../application/permission-mode.js';
 import { getKeybindings, matchesKey } from '../../engine/public.js';
@@ -10,7 +10,7 @@ import { truncateToWidth, visibleWidth } from '../../rendering/text.js';
 import { tuiChalk as chalk, tuiColors as colors } from '../../theme/runtime.js';
 import { questionnaireFrameContentWidth, renderQuestionnaireFrame } from './decision-frame.js';
 
-type VisiblePermissionMode = (typeof MINIMAX_CODE_PERMISSION_MODES)[number];
+type VisiblePermissionMode = (typeof KCODE_PERMISSION_MODES)[number];
 
 const PERMISSION_MODE_DESCRIPTIONS: Record<VisiblePermissionMode, string> = {
   default: 'Confirm sensitive actions',
@@ -27,7 +27,7 @@ export class TuiPermissionModePicker implements Component {
     private readonly onCancel: () => void,
     private readonly requestRender: () => void = () => undefined,
   ) {
-    const currentIndex = MINIMAX_CODE_PERMISSION_MODES.indexOf(
+    const currentIndex = KCODE_PERMISSION_MODES.indexOf(
       currentMode as VisiblePermissionMode,
     );
     this.selectedIndex = currentIndex >= 0 ? currentIndex : 0;
@@ -37,23 +37,23 @@ export class TuiPermissionModePicker implements Component {
     if (matchesKey(data, 'up')) {
       this.selectedIndex =
         this.selectedIndex === 0
-          ? MINIMAX_CODE_PERMISSION_MODES.length - 1
+          ? KCODE_PERMISSION_MODES.length - 1
           : this.selectedIndex - 1;
       this.requestRender();
       return;
     }
     if (matchesKey(data, 'down')) {
-      this.selectedIndex = (this.selectedIndex + 1) % MINIMAX_CODE_PERMISSION_MODES.length;
+      this.selectedIndex = (this.selectedIndex + 1) % KCODE_PERMISSION_MODES.length;
       this.requestRender();
       return;
     }
     if (/^[1-3]$/u.test(data)) {
-      const mode = MINIMAX_CODE_PERMISSION_MODES[Number(data) - 1];
+      const mode = KCODE_PERMISSION_MODES[Number(data) - 1];
       if (mode) this.onSelect(mode);
       return;
     }
     if (matchesKey(data, 'enter')) {
-      const mode = MINIMAX_CODE_PERMISSION_MODES[this.selectedIndex];
+      const mode = KCODE_PERMISSION_MODES[this.selectedIndex];
       if (mode) this.onSelect(mode);
       return;
     }
@@ -77,7 +77,7 @@ export class TuiPermissionModePicker implements Component {
             compact ? 'Choose a tool access policy.' : 'Choose how KCode handles tool access.',
           ),
           '',
-          ...MINIMAX_CODE_PERMISSION_MODES.flatMap((mode, index) =>
+          ...KCODE_PERMISSION_MODES.flatMap((mode, index) =>
             renderMode(mode, {
               active: mode === this.currentMode,
               focused: index === this.selectedIndex,

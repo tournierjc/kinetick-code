@@ -1,5 +1,5 @@
 import type { TuiIncidentSink, TuiObservability } from '../observability/index.js';
-import type { McodeAuthPort } from '../auth/application.js';
+import type { KcodeAuthPort } from '../auth/application.js';
 import type { TuiRuntime, TuiWorkspaceRoot } from '../runtime/port.js';
 import type {
   TuiAttachment,
@@ -61,7 +61,7 @@ export interface CreateTuiAppOptions extends TuiUpdateOptions {
   productFeatures?: Partial<TuiProductFeatures>;
   observability?: TuiObservability;
   incidentReporter?: TuiIncidentSink;
-  auth?: McodeAuthPort;
+  auth?: KcodeAuthPort;
   externalEditorCommand?: string;
   editDraftInExternalEditor?: EditTuiDraftInExternalEditor;
   readClipboardText?: TuiTextClipboardReader;

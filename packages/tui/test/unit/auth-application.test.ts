@@ -3,7 +3,7 @@ import type { LogoutResult } from '@mavis/oauth-core';
 
 import { createLocalAuthFixture } from '../../../oauth-core/test/helpers/local-auth.js';
 
-import { McodeAuthApplication } from '../../src/auth/application.js';
+import { KcodeAuthApplication } from '../../src/auth/application.js';
 
 function sharedCore(status: 'anonymous' | 'authenticated' | 'logout_pending' = 'anonymous') {
   return {
@@ -32,7 +32,7 @@ describe('McodeAuthApplication', () => {
   it('uses Shared OAuth Device Flow as its only login path', async () => {
     const core = sharedCore();
     const onProgress = vi.fn();
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       region: 'cn',
       buildEnv: 'test',
@@ -54,7 +54,7 @@ describe('McodeAuthApplication', () => {
 
   it('lets Core reuse an authenticated session without forcing a refresh', async () => {
     const core = sharedCore('authenticated');
-    const application = new McodeAuthApplication({ dataDir: '/data', sharedAuthCore: core });
+    const application = new KcodeAuthApplication({ dataDir: '/data', sharedAuthCore: core });
 
     await expect(application.login()).resolves.toEqual({
       state: 'already-authenticated',
@@ -70,7 +70,7 @@ describe('McodeAuthApplication', () => {
       const fixture = await createLocalAuthFixture();
       try {
         const core = fixture.createManager();
-        const application = new McodeAuthApplication({
+        const application = new KcodeAuthApplication({
           dataDir: fixture.dataDir, sharedAuthCore: core, region: 'cn', buildEnv: 'test',
         });
         await application.login();
@@ -90,7 +90,7 @@ describe('McodeAuthApplication', () => {
     const chinaCore = sharedCore('authenticated');
     const globalCore = sharedCore();
     const resolveSharedAuthCore = vi.fn(() => globalCore);
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       region: 'cn',
       buildEnv: 'test',
@@ -111,7 +111,7 @@ describe('McodeAuthApplication', () => {
   it('persists only the non-sensitive selected region after login succeeds', async () => {
     const core = sharedCore();
     const writeRegionPreference = vi.fn();
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       region: 'cn',
       buildEnv: 'test',
@@ -131,7 +131,7 @@ describe('McodeAuthApplication', () => {
     const chinaCore = sharedCore();
     const globalCore = sharedCore('authenticated');
     const resolveSharedAuthCore = vi.fn(() => globalCore);
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       region: 'cn',
       buildEnv: 'test',
@@ -163,7 +163,7 @@ describe('McodeAuthApplication', () => {
     'logs out %s/%s with the matching browser logout page',
     async (region, buildEnv, origin) => {
       const core = sharedCore('authenticated');
-      const application = new McodeAuthApplication({
+      const application = new KcodeAuthApplication({
         dataDir: '/data',
         region,
         buildEnv,
@@ -181,7 +181,7 @@ describe('McodeAuthApplication', () => {
 
   it('treats logout of an already anonymous shared domain as a safe no-op', async () => {
     const core = sharedCore();
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       sharedAuthCore: core,
       region: 'cn',
@@ -200,7 +200,7 @@ describe('McodeAuthApplication', () => {
   it('provides browser logout while server revocation is pending', async () => {
     const core = sharedCore('authenticated');
     core.logout.mockResolvedValue({ status: 'logout_pending', generation: 2 });
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       sharedAuthCore: core,
       region: 'en',
@@ -218,7 +218,7 @@ describe('McodeAuthApplication', () => {
   it('preserves login failures without reporting usage events', async () => {
     const core = sharedCore();
     core.login.mockRejectedValueOnce(new Error('OAuth authorization failed.'));
-    const application = new McodeAuthApplication({
+    const application = new KcodeAuthApplication({
       dataDir: '/data',
       sharedAuthCore: core,
     });

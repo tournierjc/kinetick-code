@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { McodeProviderModel, McodeProviderView } from '../../src/provider/contract.js';
-import { McodeProviderApplication } from '../../src/provider/application.js';
+import type { KcodeProviderModel, KcodeProviderView } from '../../src/provider/contract.js';
+import { KcodeProviderApplication } from '../../src/provider/application.js';
 
 function createPort() {
   return {
-    discoverUserModelsCandidate: vi.fn(async (): Promise<readonly McodeProviderModel[]> => []),
+    discoverUserModelsCandidate: vi.fn(async (): Promise<readonly KcodeProviderModel[]> => []),
     listProviderPresets: vi.fn(async () => []),
     getCodexOAuthStatus: vi.fn(async () => ({
       state: 'disconnected' as const,
@@ -71,7 +71,7 @@ function createPort() {
 
 describe('McodeProviderApplication', () => {
   it('exposes a disconnected Codex OAuth row when Runtime makes it visible', async () => {
-    const application = new McodeProviderApplication(createPort());
+    const application = new KcodeProviderApplication(createPort());
 
     const snapshot = await application.snapshot({ includeCodexOAuth: true });
 
@@ -93,7 +93,7 @@ describe('McodeProviderApplication', () => {
       state: 'hidden',
       providerId: 'openai-codex',
     });
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot({ includeCodexOAuth: true });
 
@@ -108,7 +108,7 @@ describe('McodeProviderApplication', () => {
       state: 'disconnected',
       providerId: 'github-copilot',
     });
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot({ includeCopilotOAuth: true });
 
@@ -125,7 +125,7 @@ describe('McodeProviderApplication', () => {
   });
 
   it('omits the Copilot OAuth row when Runtime marks it hidden', async () => {
-    const application = new McodeProviderApplication(createPort());
+    const application = new KcodeProviderApplication(createPort());
 
     const snapshot = await application.snapshot({ includeCopilotOAuth: true });
 
@@ -152,7 +152,7 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'claude-opus-4.8', displayName: 'Claude Opus 4.8' }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot({ includeCopilotOAuth: true });
 
@@ -170,7 +170,7 @@ describe('McodeProviderApplication', () => {
 
   it('builds a CLI-owned snapshot without exposing raw API keys', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -206,7 +206,7 @@ describe('McodeProviderApplication', () => {
   it('marks OAuth active when the MiniMax source is Token Plan', async () => {
     const port = createPort();
     port.getMiniMaxModelSource.mockResolvedValueOnce('token_plan');
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -217,7 +217,7 @@ describe('McodeProviderApplication', () => {
 
   it('forwards MiniMax source changes through the CLI port', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     await expect(application.setMiniMaxSource('token_plan')).resolves.toBe('token_plan');
 
@@ -226,7 +226,7 @@ describe('McodeProviderApplication', () => {
 
   it('forwards custom provider creation through the CLI port', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     await application.create({
       name: 'OpenAI',
@@ -249,7 +249,7 @@ describe('McodeProviderApplication', () => {
 
   it('saves a tested provider candidate and selects its chosen model atomically', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const result = await application.saveCandidate({
       name: 'OpenAI',
@@ -287,7 +287,7 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'gpt-5.6' }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -298,7 +298,7 @@ describe('McodeProviderApplication', () => {
 
   it('uses provider and model-specific connectivity tests', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     await application.test('custom_provider:openai');
     await application.test('custom_provider:openai', 'gpt-4.1');
@@ -323,7 +323,7 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'byok-large-5', selected: true }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -350,7 +350,7 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'byok-large-5', selected: true }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -360,7 +360,7 @@ describe('McodeProviderApplication', () => {
 
 
 describe('saved provider model refresh', () => {
-  const provider: McodeProviderView = {
+  const provider: KcodeProviderView = {
     providerId: 'custom_provider:work', name: 'Work', kind: 'custom',
     enabled: true, readOnly: false, active: true, hasApiKey: true,
     configRevision: 'rev-1', baseUrl: 'https://models.example/v1',
@@ -373,7 +373,7 @@ describe('saved provider model refresh', () => {
       { modelId: 'old-model', displayName: 'Do not overwrite saved settings' },
       { modelId: 'new-model', displayName: 'New model' }, { modelId: ' new-model ' }, { modelId: ' old-model ' },
     ]);
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).resolves.toBe(1);
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).resolves.toBe(1);
     const identity = { providerId: provider.providerId, expectedRevision: 'rev-1', baseUrl: provider.baseUrl };
     expect(port.discoverUserModelsCandidate).toHaveBeenCalledWith(identity);
     expect(port.saveUserModelProviderCandidate).toHaveBeenCalledWith({
@@ -388,14 +388,14 @@ describe('saved provider model refresh', () => {
   it.each([{ models: [] }, { models: [{ modelId: 'old-model' }] }])('does not save an empty or unchanged discovery result', async ({ models }) => {
     const port = createPort();
     port.discoverUserModelsCandidate.mockResolvedValue(models);
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).resolves.toBe(0);
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).resolves.toBe(0);
     expect(port.saveUserModelProviderCandidate).not.toHaveBeenCalled();
   });
 
   it('keeps the saved configuration when discovery fails', async () => {
     const port = createPort();
     port.discoverUserModelsCandidate.mockRejectedValue(new Error('Authentication failed'));
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Authentication failed');
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Authentication failed');
     expect(port.saveUserModelProviderCandidate).not.toHaveBeenCalled();
   });
 
@@ -403,14 +403,14 @@ describe('saved provider model refresh', () => {
     const port = createPort();
     port.discoverUserModelsCandidate.mockResolvedValue([{ modelId: 'new-model' }]);
     port.saveUserModelProviderCandidate.mockRejectedValue(new Error('Configuration changed'));
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Configuration changed');
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Configuration changed');
     expect(port.saveUserModelProviderCandidate).toHaveBeenCalledOnce();
     expect(port.createUserModelProvider).not.toHaveBeenCalled();
   });
 
   it('rejects a missing revision before making any request', async () => {
     const port = createPort();
-    await expect(new McodeProviderApplication(port).refreshModels({ ...provider, configRevision: undefined })).rejects.toThrow('Reopen /provider');
+    await expect(new KcodeProviderApplication(port).refreshModels({ ...provider, configRevision: undefined })).rejects.toThrow('Reopen /provider');
     expect(port.discoverUserModelsCandidate).not.toHaveBeenCalled();
   });
 });

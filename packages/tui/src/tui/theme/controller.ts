@@ -6,7 +6,7 @@ import type {
   TuiThemeSnapshot,
 } from './contracts.js';
 import { type RgbColor, appearanceFromRgb, resolveEnvironmentAppearance } from './detection.js';
-import { MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME } from './palettes.js';
+import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from './palettes.js';
 import type { TUI } from '../engine/public.js';
 
 export type TuiThemeUi = Pick<
@@ -141,7 +141,7 @@ export class TuiThemeController {
 
   private applyRenderTheme(): void {
     applyTuiRenderTheme(
-      this.state.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME,
+      this.state.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME,
       this.state.colorLevel,
     );
   }

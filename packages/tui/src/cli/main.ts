@@ -1,19 +1,19 @@
 import {
-  MINIMAX_CODE_SUPPORTED_NODE_VERSIONS,
-  MINIMAX_CODE_VERSION,
+  KCODE_SUPPORTED_NODE_VERSIONS,
+  KCODE_VERSION,
   supportsTuiNodeVersion,
 } from '../build-info.js';
 import type { RawTuiExecOptions } from '../headless/invocation.js';
 import type { MavisRegion } from '@mavis/config';
 import { createTuiProgram, type TuiInteractiveLaunchRequest } from './program.js';
-import type { McodeProviderCliRequest } from './provider-command.js';
-import type { McodePluginCliRequest } from '../plugin/contract.js';
+import type { KcodeProviderCliRequest } from './provider-command.js';
+import type { KcodePluginCliRequest } from '../plugin/contract.js';
 import { tuiErrorDiagnostic } from '../user-facing-failure.js';
 import { configureTuiNetworkProxy } from './network-proxy.js';
 import { consumeLoginRestartHandoff } from '../tui/login-restart-handoff.js';
 
 const OUTPUT_DRAIN_TIMEOUT_MS = 250;
-const MINIMAX_CODE_PROCESS_TITLE = 'minimax-code';
+const KCODE_PROCESS_TITLE = 'kinetick-code';
 
 export interface TuiOutputStream {
   readonly destroyed: boolean;
@@ -58,12 +58,12 @@ export interface RunTuiCliDependencies {
   readonly runLogout?: (region?: MavisRegion) => Promise<string>;
   readonly runUpdate?: (version: string) => Promise<void>;
   readonly runProvider?: (
-    request: McodeProviderCliRequest,
+    request: KcodeProviderCliRequest,
     version: string,
     lane?: string,
   ) => Promise<string>;
   readonly runPlugin?: (
-    request: McodePluginCliRequest,
+    request: KcodePluginCliRequest,
     version: string,
     lane?: string,
   ) => Promise<string>;
@@ -74,13 +74,13 @@ export interface RunTuiCliDependencies {
 
 export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promise<void> {
   const processRef = dependencies.processRef ?? process;
-  processRef.title = MINIMAX_CODE_PROCESS_TITLE;
+  processRef.title = KCODE_PROCESS_TITLE;
   const resumeDraftAfterLogin = consumeLoginRestartHandoff(processRef.env);
   const supportsNodeVersion =
     dependencies.supportsNodeVersion ?? ((version: string) => supportsTuiNodeVersion(version));
   if (!supportsNodeVersion(processRef.versions.node)) {
     processRef.stderr.write(
-      `Kinetick Code supports Node.js ${MINIMAX_CODE_SUPPORTED_NODE_VERSIONS}; current version is ${processRef.versions.node}.\n`,
+      `Kinetick Code supports Node.js ${KCODE_SUPPORTED_NODE_VERSIONS}; current version is ${processRef.versions.node}.\n`,
     );
     processRef.exitCode = 1;
     return;
@@ -93,7 +93,7 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
     });
     const createProgram = dependencies.createProgram ?? createTuiProgram;
     await createProgram({
-      version: MINIMAX_CODE_VERSION,
+      version: KCODE_VERSION,
       allowStartupEnvironmentSelection: dependencies.allowStartupEnvironmentSelection,
       launchTui: async ({
         initialPrompt,
@@ -107,7 +107,7 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
       }) => {
         const launchTui = dependencies.launchTui ?? defaultLaunchTui;
         await launchTui({
-          version: MINIMAX_CODE_VERSION,
+          version: KCODE_VERSION,
           ...(initialPrompt ? { initialPrompt } : {}),
           ...(model ? { model } : {}),
           ...(sessionId ? { sessionId } : {}),
@@ -125,13 +125,13 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
         await runExec(
           prompt,
           lane ? { ...commandOptions, lane } : commandOptions,
-          MINIMAX_CODE_VERSION,
+          KCODE_VERSION,
         );
         completedCommandExitMode = 'natural';
       },
       runAcp: async (lane) => {
         const runAcp = dependencies.runAcp ?? defaultRunAcp;
-        await runAcp(MINIMAX_CODE_VERSION, lane);
+        await runAcp(KCODE_VERSION, lane);
         completedCommandExitMode = 'natural';
       },
       runLogin: async (region, openBrowser, lane) => {
@@ -147,16 +147,16 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
       runUpdate: async () => {
         completedCommandExitMode = 'natural';
         const runUpdate = dependencies.runUpdate ?? defaultRunUpdate;
-        await runUpdate(MINIMAX_CODE_VERSION);
+        await runUpdate(KCODE_VERSION);
       },
       runProvider: async (request, lane) => {
         const runProvider = dependencies.runProvider ?? defaultRunProvider;
-        processRef.stdout.write(`${await runProvider(request, MINIMAX_CODE_VERSION, lane)}\n`);
+        processRef.stdout.write(`${await runProvider(request, KCODE_VERSION, lane)}\n`);
         completedCommandExitMode = 'natural';
       },
       runPlugin: async (request, lane) => {
         const runPlugin = dependencies.runPlugin ?? defaultRunPlugin;
-        processRef.stdout.write(`${await runPlugin(request, MINIMAX_CODE_VERSION, lane)}\n`);
+        processRef.stdout.write(`${await runPlugin(request, KCODE_VERSION, lane)}\n`);
         completedCommandExitMode = 'natural';
       },
     }).parseAsync(processRef.argv, { from: 'node' });
@@ -268,24 +268,24 @@ async function defaultRunLogout(region?: MavisRegion): Promise<string> {
 }
 
 async function defaultRunUpdate(version: string): Promise<void> {
-  const { runMcodeUpdate } = await import('./update.js');
-  await runMcodeUpdate(version);
+  const { runKcodeUpdate } = await import('./update.js');
+  await runKcodeUpdate(version);
 }
 
 async function defaultRunProvider(
-  request: McodeProviderCliRequest,
+  request: KcodeProviderCliRequest,
   version: string,
   lane?: string,
 ): Promise<string> {
-  const { runMcodeProviderCommand } = await import('./provider-command.js');
-  return runMcodeProviderCommand({ request, version, lane });
+  const { runKcodeProviderCommand } = await import('./provider-command.js');
+  return runKcodeProviderCommand({ request, version, lane });
 }
 
 async function defaultRunPlugin(
-  request: McodePluginCliRequest,
+  request: KcodePluginCliRequest,
   version: string,
   lane?: string,
 ): Promise<string> {
-  const { runMcodePluginCommand } = await import('./plugin-command.js');
-  return runMcodePluginCommand({ request, version, lane });
+  const { runKcodePluginCommand } = await import('./plugin-command.js');
+  return runKcodePluginCommand({ request, version, lane });
 }

@@ -7,17 +7,17 @@ import {
   KCODE_RELEASES_URL,
   KcodeReleaseService,
   buildKcodeInstallCommand,
-  compareMcodeVersions,
+  compareKcodeVersions,
   kcodeReleaseArchiveNames,
   parseKcodeChecksum,
   parseKcodeReleaseChannel,
-  parseMcodeVersion,
+  parseKcodeVersion,
   selectKcodeRelease,
   verifyKcodeArtifact,
   type KcodeRelease,
   type KcodeReleaseDependencies,
 } from '../../src/update/release.js';
-import { McodeUpdateCancelledError } from '../../src/update/progress.js';
+import { KcodeUpdateCancelledError } from '../../src/update/progress.js';
 
 const ARCHIVE_BYTES = Buffer.from('kinetick code release archive bytes');
 const tempDirectories: string[] = [];
@@ -264,14 +264,14 @@ describe('KCode release channel', () => {
   });
 
   it('orders versions so a prerelease follows its release and its own builds', () => {
-    expect(compareMcodeVersions('0.5.3', '0.5.2-fork.9')).toBeGreaterThan(0);
-    expect(compareMcodeVersions('0.5.2-fork.2', '0.5.2-fork.1')).toBeGreaterThan(0);
-    expect(compareMcodeVersions('0.5.2', '0.5.2-fork.1')).toBeGreaterThan(0);
-    expect(compareMcodeVersions('0.5.2-fork.1', '0.5.2')).toBeLessThan(0);
-    expect(compareMcodeVersions('0.5.2-fork.1', '0.5.2-fork.1')).toBe(0);
-    expect(parseMcodeVersion('0.5.2-fork.1')).toBe('0.5.2-fork.1');
-    expect(() => parseMcodeVersion('latest')).toThrow(/Invalid KCode version/u);
-    expect(() => parseMcodeVersion('../0.5.2')).toThrow(/Invalid KCode version/u);
+    expect(compareKcodeVersions('0.5.3', '0.5.2-fork.9')).toBeGreaterThan(0);
+    expect(compareKcodeVersions('0.5.2-fork.2', '0.5.2-fork.1')).toBeGreaterThan(0);
+    expect(compareKcodeVersions('0.5.2', '0.5.2-fork.1')).toBeGreaterThan(0);
+    expect(compareKcodeVersions('0.5.2-fork.1', '0.5.2')).toBeLessThan(0);
+    expect(compareKcodeVersions('0.5.2-fork.1', '0.5.2-fork.1')).toBe(0);
+    expect(parseKcodeVersion('0.5.2-fork.1')).toBe('0.5.2-fork.1');
+    expect(() => parseKcodeVersion('latest')).toThrow(/Invalid KCode version/u);
+    expect(() => parseKcodeVersion('../0.5.2')).toThrow(/Invalid KCode version/u);
   });
 
   it('builds the install command for each owning package manager', () => {
@@ -437,7 +437,7 @@ describe('KcodeReleaseService', () => {
       service([releaseEntry('0.6.0-fork.1', { prerelease: true })]).check({
         signal: controller.signal,
       }),
-    ).rejects.toBeInstanceOf(McodeUpdateCancelledError);
+    ).rejects.toBeInstanceOf(KcodeUpdateCancelledError);
   });
 
 });

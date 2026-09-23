@@ -1,11 +1,11 @@
 import {
-  createMcodeNpmRuntimeEnvironment,
-  detectMcodeInstallSource,
-  resolveInstalledMcodePackageVersion,
-  resolveMcodeInstallRoot,
-  resolveMcodeNpmPrefixInstall,
-  type McodeInstallSource,
-  type McodeNpmPrefixInstall,
+  createKcodeNpmRuntimeEnvironment,
+  detectKcodeInstallSource,
+  resolveInstalledKcodePackageVersion,
+  resolveKcodeInstallRoot,
+  resolveKcodeNpmPrefixInstall,
+  type KcodeInstallSource,
+  type KcodeNpmPrefixInstall,
 } from './install-source.js';
 import {
   KCODE_RELEASES_URL,
@@ -15,7 +15,7 @@ import {
   type KcodeReleaseInstallSource,
   type KcodeReleaseRequest,
 } from './release.js';
-import type { McodeUpdateOperationOptions } from './progress.js';
+import type { KcodeUpdateOperationOptions } from './progress.js';
 
 /**
  * Plan for an installation this build owns: a package-manager global install
@@ -30,7 +30,7 @@ export interface KcodeReleasePlan {
   readonly artifactUrl: string;
 }
 
-export type McodeUpdatePlan =
+export type KcodeUpdatePlan =
   | (KcodeReleasePlan & { readonly kind: 'current' })
   | (KcodeReleasePlan & { readonly kind: 'ahead' })
   | (KcodeReleasePlan & { readonly kind: 'available' })
@@ -41,20 +41,20 @@ export type McodeUpdatePlan =
       readonly command: string;
     };
 
-export interface McodeUpdateOutcome {
+export interface KcodeUpdateOutcome {
   readonly applied: boolean;
   readonly message: string;
   readonly restartRequired?: boolean;
 }
 
-export type McodeUpdateApplyOptions = McodeUpdateOperationOptions;
+export type KcodeUpdateApplyOptions = KcodeUpdateOperationOptions;
 
-export interface McodeUpdateApplicationOptions {
+export interface KcodeUpdateApplicationOptions {
   readonly currentVersion: string;
   readonly installRoot?: string;
   readonly environment?: NodeJS.ProcessEnv;
   readonly platform?: NodeJS.Platform;
-  readonly prefixInstall?: McodeNpmPrefixInstall;
+  readonly prefixInstall?: KcodeNpmPrefixInstall;
   readonly entryFile?: string;
   readonly runtimeExecutable?: string;
 }
@@ -66,8 +66,8 @@ export interface ReleaseUpdateService {
   resolveInstallCommand(request?: KcodeReleaseRequest): Promise<string>;
 }
 
-export interface McodeUpdateApplicationDependencies {
-  readonly detectInstallSource: () => Promise<McodeInstallSource>;
+export interface KcodeUpdateApplicationDependencies {
+  readonly detectInstallSource: () => Promise<KcodeInstallSource>;
   readonly createReleaseService: (source: KcodeReleaseInstallSource) => ReleaseUpdateService;
   readonly readInstalledPackageVersion: () => string | undefined;
 }
@@ -80,34 +80,34 @@ export interface McodeUpdateApplicationDependencies {
  * replaced in place: its launcher, receipts and metadata keys describe that
  * distributor, so the plan tells the user how to install this build instead.
  */
-export class McodeUpdateApplication {
+export class KcodeUpdateApplication {
   private readonly currentVersion: string;
   private readonly platform: NodeJS.Platform;
   private readonly environment: NodeJS.ProcessEnv;
   private readonly installEnvironment: NodeJS.ProcessEnv;
   private readonly installRoot: string;
-  private readonly prefixInstall?: McodeNpmPrefixInstall;
+  private readonly prefixInstall?: KcodeNpmPrefixInstall;
   private readonly entryFile?: string;
   private readonly runtimeExecutable: string;
-  private readonly dependencies: McodeUpdateApplicationDependencies;
+  private readonly dependencies: KcodeUpdateApplicationDependencies;
 
   constructor(
-    options: McodeUpdateApplicationOptions,
-    dependencies: Partial<McodeUpdateApplicationDependencies> = {},
+    options: KcodeUpdateApplicationOptions,
+    dependencies: Partial<KcodeUpdateApplicationDependencies> = {},
   ) {
     this.currentVersion = options.currentVersion;
     const environment = options.environment ?? process.env;
     const platform = options.platform ?? process.platform;
     this.platform = platform;
     this.environment = environment;
-    this.installRoot = options.installRoot ?? resolveMcodeInstallRoot(environment);
+    this.installRoot = options.installRoot ?? resolveKcodeInstallRoot(environment);
     this.entryFile = options.entryFile ?? process.argv[1];
     this.runtimeExecutable = options.runtimeExecutable ?? process.execPath;
     this.prefixInstall =
-      options.prefixInstall ?? resolveMcodeNpmPrefixInstall(this.entryFile, platform);
+      options.prefixInstall ?? resolveKcodeNpmPrefixInstall(this.entryFile, platform);
     // The install step has to build native dependencies against the Node that
     // runs this process, not against whichever npm the user's shell finds.
-    this.installEnvironment = createMcodeNpmRuntimeEnvironment(
+    this.installEnvironment = createKcodeNpmRuntimeEnvironment(
       environment,
       this.runtimeExecutable,
       platform,
@@ -116,7 +116,7 @@ export class McodeUpdateApplication {
       detectInstallSource:
         dependencies.detectInstallSource ??
         (() =>
-          detectMcodeInstallSource({
+          detectKcodeInstallSource({
             installRoot: this.installRoot,
             platform,
             prefixInstall: () => this.prefixInstall,
@@ -136,11 +136,11 @@ export class McodeUpdateApplication {
             },
           })),
       readInstalledPackageVersion:
-        dependencies.readInstalledPackageVersion ?? resolveInstalledMcodePackageVersion,
+        dependencies.readInstalledPackageVersion ?? resolveInstalledKcodePackageVersion,
     };
   }
 
-  async inspect(): Promise<McodeUpdatePlan> {
+  async inspect(): Promise<KcodeUpdatePlan> {
     const source = await this.dependencies.detectInstallSource();
     if (source === 'unsupported') {
       return {
@@ -166,9 +166,9 @@ export class McodeUpdateApplication {
   }
 
   async apply(
-    plan: McodeUpdatePlan,
-    options: McodeUpdateApplyOptions = {},
-  ): Promise<McodeUpdateOutcome> {
+    plan: KcodeUpdatePlan,
+    options: KcodeUpdateApplyOptions = {},
+  ): Promise<KcodeUpdateOutcome> {
     if (plan.kind === 'manual' || plan.kind === 'current' || plan.kind === 'ahead') {
       throw new Error(`KCode update plan ${plan.kind} cannot be applied automatically.`);
     }
@@ -207,7 +207,7 @@ export class McodeUpdateApplication {
   }
 }
 
-function isPackageManagerSource(source: McodeInstallSource): source is KcodeReleaseInstallSource {
+function isPackageManagerSource(source: KcodeInstallSource): source is KcodeReleaseInstallSource {
   return (
     source === 'npm-global' ||
     source === 'pnpm-global' ||
@@ -224,7 +224,7 @@ function isPackageManagerSource(source: McodeInstallSource): source is KcodeRele
  * launcher active on the release it already points at, which is why the plan
  * names the manual install instead.
  */
-function unsupportedInstallationMessage(source: McodeInstallSource): string {
+function unsupportedInstallationMessage(source: KcodeInstallSource): string {
   const layout =
     source === 'managed-installer'
       ? 'The upstream installer owns this installation, and its launcher, receipts and install ' +
@@ -239,7 +239,7 @@ function unsupportedInstallationMessage(source: McodeInstallSource): string {
 }
 
 /** Channel a plan belongs to, for user-facing update messages. */
-export function mcodeUpdateChannelLabel(plan: McodeUpdatePlan): string {
+export function kcodeUpdateChannelLabel(plan: KcodeUpdatePlan): string {
   if (plan.kind === 'manual') return 'the release channel';
   return `the ${plan.channel} channel`;
 }

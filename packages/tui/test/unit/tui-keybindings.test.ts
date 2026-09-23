@@ -6,7 +6,7 @@ import {
   resolveTuiKeybinding,
   formatTuiKeybinding,
 } from "../../src/tui/shell/keybindings.js";
-import { MINIMAX_CODE_COMMANDS } from "../../src/tui/commands/catalog.js";
+import { KCODE_COMMANDS } from "../../src/tui/commands/catalog.js";
 
 describe("TUI shell keybindings", () => {
   it("maps terminal sequences to semantic shell actions", () => {
@@ -252,7 +252,7 @@ describe("TUI shell keybindings", () => {
       rows.find((row) => row.ids.includes("interaction.scroll-up"))?.ids,
     ).toEqual(["interaction.scroll-up", "interaction.scroll-down"]);
     expect(
-      MINIMAX_CODE_COMMANDS.find((command) => command.name === "transcript")
+      KCODE_COMMANDS.find((command) => command.name === "transcript")
         ?.shortcut,
     ).toBeUndefined();
     expect(rows).toContainEqual({

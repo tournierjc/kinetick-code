@@ -7,7 +7,7 @@ import { assertValidOutputSchema } from './contract.js';
 import { prepareDiagnosticsDirectory } from './diagnostics.js';
 import {
   findTuiAttachmentLimitViolation,
-  MINIMAX_CODE_MAX_ATTACHMENT_COUNT,
+  KCODE_MAX_ATTACHMENT_COUNT,
 } from '../application/attachment-policy.js';
 import { inferTuiNativeVideoMimeType } from '../application/video-mime.js';
 import { resolveWslPath } from '../host/wsl-path.js';
@@ -135,7 +135,7 @@ export async function resolveTuiExecInvocation(
   const attachmentLimitViolation = findTuiAttachmentLimitViolation(attachments);
   if (attachmentLimitViolation === 'count') {
     throw invocationError(
-      `You can attach up to ${String(MINIMAX_CODE_MAX_ATTACHMENT_COUNT)} files.`,
+      `You can attach up to ${String(KCODE_MAX_ATTACHMENT_COUNT)} files.`,
     );
   }
   if (attachmentLimitViolation === 'total-bytes') {

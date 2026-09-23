@@ -28,7 +28,7 @@ import {
 } from "../../src/runtime/event-normalizer.js";
 import type { SendMessageReq } from "@mavis/local-runtime-v2/cli-service";
 import type { TuiObservability } from "../../src/observability/local-observability.js";
-import type { McodeAuthProgress } from "../../src/auth/application.js";
+import type { KcodeAuthProgress } from "../../src/auth/application.js";
 import { formatTuiShortcut } from "../../src/tui/shell/shortcut-labels.js";
 import { createTuiHostKeybindings } from "../../src/tui/shell/keybindings.js";
 import { stripAnsi } from "../../src/tui/rendering/text.js";
@@ -1115,13 +1115,13 @@ describe("createTuiApp", () => {
       await app.ready;
 
       expect(stripAnsi(app.tui.render(80).join("\n"))).toContain(
-        "Ask Mcode to do anything",
+        "Ask Kcode to do anything",
       );
 
       app.editor.handleInput("R");
 
       expect(stripAnsi(app.tui.render(80).join("\n"))).not.toContain(
-        "Ask Mcode to do anything",
+        "Ask Kcode to do anything",
       );
       expect(app.editor.getText()).toBe("R");
     } finally {
@@ -5046,7 +5046,7 @@ describe("createTuiApp", () => {
     const auth = {
       login: vi.fn(
         async (
-          onProgress?: (progress: McodeAuthProgress) => void,
+          onProgress?: (progress: KcodeAuthProgress) => void,
           _region?: "cn" | "en",
         ) => {
           authenticated = true;
@@ -12486,7 +12486,7 @@ describe("createTuiApp", () => {
         expect(screen.getScrollBuffer().filter((line) => line.match(/Answer (\d+)/u)?.[1] === String(index))).toHaveLength(1);
       }
       screen.scrollLines(10000);
-      expect(screen.getViewport().join("\n")).toContain("Ask Mcode to do anything");
+      expect(screen.getViewport().join("\n")).toContain("Ask Kcode to do anything");
     } finally {
       finish?.();
       await app.stop();

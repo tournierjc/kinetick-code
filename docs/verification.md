@@ -68,6 +68,22 @@ Coverage: 24 cases in `packages/tui/test/unit/update-release.test.ts` (release s
 
 Not run: an actual upgrade of an installed CLI (no installation is replaced on this machine), the Windows refusal path on Windows, and an update through a proxy. The live channel read-back in the previous entry still applies — the API and asset URLs are unchanged.
 
+### Identity rename, 2026-09-23
+
+Internal naming now matches the product name; no wire contract and no persisted user state moved. The maintainer asked for it directly: outside the README credit, nothing user-visible or internal should read `minimax-code` or `mcode`.
+
+Renamed in `packages/**`, `test/**` and `scripts/**`: the `Mcode*`/`mcode*` identifiers and the `MINIMAX_CODE_*`/`MCODE_*` TypeScript constants (`KcodeUpdateApplication`, `detectKcodeInstallSource`, `resolveKcodeInstallRoot`, `KCODE_WELCOME_DESIGN`, `KCODE_PACKAGE_NAME`, …), the workspace package names (`@mavis/code` for the CLI package, `kinetick-code` for the repository root, with the generated `tsconfig.standalone.json` paths following, 127 package exports), and the values this build writes itself: the composer placeholder, `process.title`, the shell PATH marker (`# Added by Kinetick Code`), the recoverable-delete shim header (`# Managed by Kinetick Code`), the data-directory hint, the GitHub `User-Agent` used when importing plugins, and the packaged release manifest's `repository` field and archive README links. Those last links previously combined the upstream URL with *this* repository's revision, which does not exist upstream.
+
+Recognition of earlier releases is preserved: the PATH integration still matches the marker an older install wrote, so no second managed block is appended; the shim is rewritten in place when its header differs; install-source detection still accepts the pre-rename internal identity `@minimax/code`; and the updater still accepts `minimax-code-<version>.tar.gz`.
+
+Unchanged, with `docs/open-source-status.md#product-identity` recording why: the ACP extension namespace and `mcode/session/*` methods, the `minimax-code-login` method id and ACP agent name, `device_platform`/`browser_name`/`client: mcode`, the feedback API's reported `Client  mcode <version>` identity, `X-MCode-*` headers, `MCODE_*`/`MINIMAX_*` environment variables, `v2/mcode/*`, `.minimax*` and `.mcode` data locations, `.mcode-update-*` files, the `minimax-code` installer receipt and `mcode` launcher names, `mcode-tools` with its `@minimax/*` names and the plugin manifest key `mcode`, `@minimax-ai/code` as the installed package identity, the `@minimax/mcode-sandbox-runtime` dependency, the `--harness minimax-code` benchmark label, the upstream-guarded issue workflows, and the upstream attribution files.
+
+`pnpm verify` passed all 14 applicable gates on Linux arm64 with Node.js 26.5.1 and pnpm 9.12.0 at revision `3970b88`: source inventory (4,233 reviewed paths), generated paths, source preview, release tooling, typecheck, build, standalone and egress boundaries, built artifacts, capabilities (172 files, 4,570 passed, 15 skipped, 0 failed), status contract, smoke, offline BYOK, and permission policy. `test:windows`, `test:sandbox` and `test:release-package` were skipped as not applicable on this platform. The identity was also read back from the built CLI: `kcode --help` reports `Usage: kcode` and "Kinetick Code — terminal coding agent".
+
+Coverage: `packages/local-runtime/test/unit/infra/kcode-path-integration-markers.test.ts` adds seven cases for infrastructure that had none — the current marker with its export line, the no-duplicate guarantee for both the current and the pre-rename marker, the macOS profile pair, the shim's header and its delegation to `mavis-trash`, the in-place rewrite of a shim written by an earlier release, and the Windows skip.
+
+Not run: the Windows PATH branch beyond its platform stub, macOS runner behaviour, an interactive TUI session on this change, and an upgrade of a real installation.
+
 ### Release-preparation verification, 2026-09-12
 
 `pnpm verify` was run on `3de31f0e365e635c52d661c0a14c9ee69e65f099` in an isolated worktree after a frozen-lockfile install, on macOS arm64 with Node.js 26.4.0 and pnpm 9.12.0.

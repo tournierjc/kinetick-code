@@ -130,6 +130,9 @@
       "@mavis/browser-core": [
         "./packages/browser-core/src/index.ts"
       ],
+      "@mavis/code/package.json": [
+        "./packages/tui/package.json"
+      ],
       "@mavis/config": [
         "./packages/config/src/index.ts"
       ],
@@ -372,9 +375,6 @@
       ],
       "@mavis/system-reminder": [
         "./packages/agent-modules/system-reminder/src/index.ts"
-      ],
-      "@minimax/code/package.json": [
-        "./packages/tui/package.json"
       ],
       "@minimax/mcode-sandbox-runtime": [
         "./third_party/sandbox-runtime/src/index.ts"

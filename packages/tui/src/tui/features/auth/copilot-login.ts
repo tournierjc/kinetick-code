@@ -1,5 +1,5 @@
-import type { McodeProviderApplication } from '../../../provider/application.js';
-import type { McodeCopilotOAuthStatus } from '../../../provider/contract.js';
+import type { KcodeProviderApplication } from '../../../provider/application.js';
+import type { KcodeCopilotOAuthStatus } from '../../../provider/contract.js';
 import { getKeybindings, Key, matchesKey } from '../../engine/public.js';
 import type { Component } from '../../rendering/component.js';
 import { sanitizeTerminalText } from '../../rendering/terminal-text.js';
@@ -9,7 +9,7 @@ import { tuiChalk as chalk, tuiColors as colors } from '../../theme/runtime.js';
 
 interface CopilotLoginOptions {
   application: Pick<
-    McodeProviderApplication,
+    KcodeProviderApplication,
     'connectCopilotOAuth' | 'getCopilotOAuthStatus' | 'cancelCopilotOAuthLogin'
   >;
   openExternalTarget(url: string): Promise<void>;
@@ -29,7 +29,7 @@ export class TuiCopilotLogin implements Component {
   readonly fullscreenViewport = true;
   readonly handlesViewportKeys = true;
   private phase: 'loading' | 'starting' | 'waiting' | 'failed' = 'loading';
-  private status: McodeCopilotOAuthStatus | undefined;
+  private status: KcodeCopilotOAuthStatus | undefined;
   private error: string | undefined;
   private browserHint: string | undefined;
   private openedUrl: string | undefined;
@@ -138,7 +138,7 @@ export class TuiCopilotLogin implements Component {
     }
   }
 
-  private update(status: McodeCopilotOAuthStatus): void {
+  private update(status: KcodeCopilotOAuthStatus): void {
     if (this.cancelling) return;
     this.status = status;
     this.error = undefined;

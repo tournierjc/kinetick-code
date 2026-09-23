@@ -1,7 +1,7 @@
 import { TuiFailure } from '../failure.js';
 import type { ExecResult } from './contract.js';
 
-export const MINIMAX_CODE_EXEC_EXIT_CODES = Object.freeze({
+export const KCODE_EXEC_EXIT_CODES = Object.freeze({
   success: 0,
   invocation: 2,
   config: 3,
@@ -14,7 +14,7 @@ export const MINIMAX_CODE_EXEC_EXIT_CODES = Object.freeze({
 });
 
 export type TuiExecErrorKind = keyof Pick<
-  typeof MINIMAX_CODE_EXEC_EXIT_CODES,
+  typeof KCODE_EXEC_EXIT_CODES,
   'invocation' | 'config' | 'runtime' | 'internal' | 'cancelled' | 'brokenPipe'
 >;
 
@@ -36,24 +36,24 @@ export class TuiExecError extends TuiFailure {
 export function exitCodeForExecResult(result: ExecResult): number {
   switch (result.status) {
     case 'succeeded':
-      return MINIMAX_CODE_EXEC_EXIT_CODES.success;
+      return KCODE_EXEC_EXIT_CODES.success;
     case 'failed':
-      if (result.error?.category === 'config') return MINIMAX_CODE_EXEC_EXIT_CODES.config;
-      if (result.error?.category === 'internal') return MINIMAX_CODE_EXEC_EXIT_CODES.internal;
-      return MINIMAX_CODE_EXEC_EXIT_CODES.runtime;
+      if (result.error?.category === 'config') return KCODE_EXEC_EXIT_CODES.config;
+      if (result.error?.category === 'internal') return KCODE_EXEC_EXIT_CODES.internal;
+      return KCODE_EXEC_EXIT_CODES.runtime;
     case 'timeout':
-      return MINIMAX_CODE_EXEC_EXIT_CODES.timeout;
+      return KCODE_EXEC_EXIT_CODES.timeout;
     case 'cancelled':
-      return MINIMAX_CODE_EXEC_EXIT_CODES.cancelled;
+      return KCODE_EXEC_EXIT_CODES.cancelled;
     case 'limit_exceeded':
-      return MINIMAX_CODE_EXEC_EXIT_CODES.limit;
+      return KCODE_EXEC_EXIT_CODES.limit;
   }
-  return MINIMAX_CODE_EXEC_EXIT_CODES.internal;
+  return KCODE_EXEC_EXIT_CODES.internal;
 }
 
 export function exitCodeForExecError(error: unknown): number {
   if (error instanceof TuiExecError) {
-    return MINIMAX_CODE_EXEC_EXIT_CODES[error.kind];
+    return KCODE_EXEC_EXIT_CODES[error.kind];
   }
-  return MINIMAX_CODE_EXEC_EXIT_CODES.internal;
+  return KCODE_EXEC_EXIT_CODES.internal;
 }

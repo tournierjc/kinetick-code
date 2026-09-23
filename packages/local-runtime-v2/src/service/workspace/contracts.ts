@@ -245,7 +245,7 @@ export interface GitWorktreeInfo {
   isMain?: boolean;
   isLocked?: boolean;
   isActive?: boolean;
-  isMcodeManaged?: boolean;
+  isKcodeManaged?: boolean;
   lastModifiedMs?: number;
 }
 

@@ -30,7 +30,7 @@ import type { TuiGoalFlow } from './goal-flow.js';
 import type { TuiPlanModeFlow } from '../interaction/plan-mode-flow.js';
 import type { TuiPermissionModeFlow } from '../interaction/permission-mode-flow.js';
 import type { MavisRegion } from '@mavis/config';
-import type { McodeAuthPort } from '../../../auth/application.js';
+import type { KcodeAuthPort } from '../../../auth/application.js';
 import { markTuiAuthorizationUrl } from '../../../auth/authorization-url.js';
 import type { TuiMode } from '../../engine/public.js';
 import type { TuiKeybindingOverride, TuiKeybindingRegistry } from '../../shell/keybindings.js';
@@ -78,7 +78,7 @@ export interface TuiCommandFlowOptions {
   readonly goalFlow?: Pick<TuiGoalFlow, 'execute' | 'resumeBlocked'>;
   readonly planModeFlow?: TuiPlanModeFlow;
   readonly permissionModeFlow?: TuiPermissionModeFlow;
-  readonly auth?: McodeAuthPort;
+  readonly auth?: KcodeAuthPort;
   readonly openExternalTarget?: TuiExternalTargetOpener;
   readonly interactionFlow: TuiInteractionFlow;
   readonly sessionFlow: TuiSessionFlow;
