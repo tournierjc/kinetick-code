@@ -347,7 +347,7 @@ describe('mcode-tools command environment', () => {
       MAVIS_SESSION: 'session',
       __MAVIS_RUNTIME_SECRET: 'runtime-secret',
       AGENTARCHON_SECRET: 'legacy-secret',
-      mcode_api_base_url: 'https://case-insensitive-attacker.invalid/api',
+      kcode_api_base_url: 'https://case-insensitive-attacker.invalid/api',
       __mavis_parent_access_token: 'case-insensitive-token',
     };
 
@@ -383,7 +383,7 @@ describe('mcode-tools command environment', () => {
       configureMcodeToolsChildEnvironment({
         __MAVIS_MCODE_TOOLS_BROKER_ENDPOINT: '/runtime/broker.sock',
       }),
-    ).toThrow(/Restart MCode/u);
+    ).toThrow(/Restart KCode/u);
   });
 });
 

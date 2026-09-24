@@ -45,6 +45,28 @@ export {
   withOpenRouterAttributionHeaders,
 } from './openrouter-attribution.js';
 export {
+  ALWAYS_DENIED_HOSTS,
+  EgressBlockedError,
+  MANAGED_MODEL_API_HOSTS,
+  MANAGED_SERVICE_HOSTS,
+  REPORTING_HOSTS,
+  installEgressGuard,
+  isEgressBlocked,
+  isEgressBlockedError,
+  parseAllowedOriginList,
+  parseHostList,
+  resolveEgressMode,
+  resolveEgressPolicy,
+} from './egress-guard.js';
+export type {
+  EgressAttempt,
+  EgressDecisionInput,
+  EgressGuard,
+  EgressMode,
+  EgressPolicy,
+  InstallEgressGuardOptions,
+} from './egress-guard.js';
+export {
   retryWindowsFileSystemOperation,
   type WindowsFileSystemRetryOptions,
 } from './windows-file-system.js';
@@ -132,12 +154,8 @@ export {
 } from './cron-purpose.js';
 
 export {
-  DESKTOP_METRICS_BATCH_PATH,
   MetricsClient,
-  MetricsReporter,
-  MetricsReportError,
   buildMetricKey,
-  createDesktopReporter,
   createMetricsClient,
 } from './metrics-proxy.js';
 
@@ -152,7 +170,6 @@ export {
   type DiskLogTransportOptions,
 } from './logging/index.js';
 export type {
-  CreateDesktopReporterOptions,
   CreateMetricsClientOptions,
   MetricsBatchReporter,
   MetricLabels,
@@ -160,7 +177,6 @@ export type {
   MetricType,
   MetricsClientOptions,
   MetricsClientRetryOptions,
-  MetricsReporterOptions,
   ReportMetricsBatchRequest,
   ReportMetricsBatchResponse,
 } from './metrics-proxy.js';
@@ -425,3 +441,8 @@ export type IMDirectoryEntry = import('./channel-plugin.js').ChannelDirectoryEnt
 export type IMChannelPlugin = import('./channel-plugin.js').ChannelPlugin;
 
 export { withOpenCodeGoHeaders } from './opencode-go-headers.js';
+export {
+  CREDENTIAL_HEADER_NAMES,
+  UNAUTHENTICATED_PROVIDER_API_KEY,
+  withClearedCredentialHeaders,
+} from './credential-headers.js';

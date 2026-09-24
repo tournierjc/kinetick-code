@@ -15,6 +15,7 @@ import type { TuiShellState } from './contracts.js';
 import { fitFirstStatusCandidate, fitLine, normalizeWidth } from './frame.js';
 import { formatTuiAgentStatusLine, type TuiAgentStatus } from './status-protocol.js';
 import { TUI_STATUS_LINE_DEFAULT_ITEMS, type TuiStatusLineItem } from './status-line-items.js';
+import { formatTuiCostUsd } from '../../application/session-cost.js';
 import { renderCustomStatusLines } from './custom-status-text.js';
 
 export { type TuiRuntimeStatus, type TuiShellState } from './contracts.js';
@@ -35,11 +36,11 @@ export class TuiUpdateNotice implements Component {
 
     const headline = fitFirstStatusCandidate(
       [
-        ` ${chalk.bold.hex(colors.signal)('✦ A new version of MCode is available')} ${chalk.hex(
+        ` ${chalk.bold.hex(colors.signal)('✦ A new version of KCode is available')} ${chalk.hex(
           colors.text,
         )('— update for the latest improvements')}`,
-        ` ${chalk.bold.hex(colors.signal)(`✦ MCode ${this.availableVersion} is available`)}`,
-        ` ${chalk.bold.hex(colors.signal)('✦ MCode update available')}`,
+        ` ${chalk.bold.hex(colors.signal)(`✦ KCode ${this.availableVersion} is available`)}`,
+        ` ${chalk.bold.hex(colors.signal)('✦ KCode update available')}`,
       ],
       safeWidth,
     );
@@ -47,7 +48,7 @@ export class TuiUpdateNotice implements Component {
       [
         ` ${chalk.hex(colors.muted)("Run '")}${chalk.bold.hex(colors.signal)(
           '/update',
-        )}${chalk.hex(colors.muted)(`' to install MCode ${this.availableVersion}`)}`,
+        )}${chalk.hex(colors.muted)(`' to install KCode ${this.availableVersion}`)}`,
         ` ${chalk.hex(colors.muted)('Run ')}${chalk.bold.hex(colors.signal)(
           '/update',
         )}${chalk.hex(colors.muted)(` to install ${this.availableVersion}`)}`,
@@ -244,6 +245,11 @@ function buildStatusSegment(
         ],
         { shrinkPriority: 45, dropPriority: 70 },
       );
+    case 'session-cost':
+      return createStatusSegment(
+        [renderSessionCost(state, 'full'), renderSessionCost(state, 'compact')],
+        { shrinkPriority: 47, dropPriority: 15 },
+      );
     case 'cache-read-ratio':
       return createStatusSegment(
         [
@@ -288,6 +294,19 @@ function renderCustomStatus(
 ): string {
   const firstLine = (state.customStatusText ?? '').split(/\r?\n/u, 1)[0] ?? '';
   return renderCustomStatusLines(firstLine, maxWidth, colorMode)[0] ?? '';
+}
+
+function renderSessionCost(
+  state: TuiShellState,
+  density: 'full' | 'compact' = 'full',
+): string {
+  const cost = state.sessionCostUsd;
+  if (typeof cost !== 'number' || !Number.isFinite(cost) || cost <= 0) return '';
+  const value = formatTuiCostUsd(cost);
+  const approximate = state.sessionCostUnpriced === true;
+  const label =
+    density === 'full' ? `💰${approximate ? '~' : ''}${value}` : `${approximate ? '~' : ''}${value}`;
+  return chalk.hex(colors.muted)(label);
 }
 
 function renderCacheReadRatio(

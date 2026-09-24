@@ -313,6 +313,12 @@ function resolveStableShell(input: ResolveTuiVisiblePresentationInput): TuiShell
     ...resolveAccountShellState(input.snapshot.account, input.selectedModel, input.selectedEffort),
     sessionCount: input.snapshot.sessions.length,
     sessionCacheReadRatio: sessionCacheMetrics?.cacheReadRatio,
+    ...(input.snapshot.sessionCost
+      ? {
+          sessionCostUsd: input.snapshot.sessionCost.total.costUsd,
+          sessionCostUnpriced: input.snapshot.sessionCost.hasUnpricedRows || undefined,
+        }
+      : {}),
     contextUsage: input.snapshot.contextSnapshot?.contextUsage,
     contextWindowTokens:
       input.snapshot.contextSnapshot?.model?.contextWindow ??

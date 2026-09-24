@@ -1,30 +1,28 @@
 import type { MavisBuildEnv, MavisRegion } from '@mavis/config';
 import {
-  resolveMCodeOAuthEndpointConfig,
-  type MCodeOAuthEndpointEnvironment,
+  resolveKCodeOAuthEndpointConfig,
+  type KCodeOAuthEndpointEnvironment,
 } from '@mavis/oauth-core';
 
-import { createMcodeSharedAuthSession } from '../runtime/auth-session.js';
-import { McodeAuthApplication, type McodeAuthApplicationOptions } from './application.js';
-import { resolveMcodeAuthEnvironment } from './environment.js';
+import { createKcodeSharedAuthSession } from '../runtime/auth-session.js';
+import { KcodeAuthApplication, type KcodeAuthApplicationOptions } from './application.js';
+import { resolveKcodeAuthEnvironment } from './environment.js';
 import { writeTuiRegionPreference } from './region-preference.js';
 
-export interface CreateDefaultMcodeAuthApplicationOptions {
+export interface CreateDefaultKcodeAuthApplicationOptions {
   dataDir: string;
   region?: MavisRegion;
   buildEnv?: MavisBuildEnv;
-  oauthEndpointEnvironment?: MCodeOAuthEndpointEnvironment;
-  createSharedSession?: typeof createMcodeSharedAuthSession;
-  telemetry?: McodeAuthApplicationOptions['telemetry'];
-  telemetrySource?: McodeAuthApplicationOptions['telemetrySource'];
-  writeRegionPreference?: McodeAuthApplicationOptions['writeRegionPreference'];
-  sharedAuthCore?: McodeAuthApplicationOptions['sharedAuthCore'];
+  oauthEndpointEnvironment?: KCodeOAuthEndpointEnvironment;
+  createSharedSession?: typeof createKcodeSharedAuthSession;
+  writeRegionPreference?: KcodeAuthApplicationOptions['writeRegionPreference'];
+  sharedAuthCore?: KcodeAuthApplicationOptions['sharedAuthCore'];
 }
 
-export function createDefaultMcodeAuthApplication(
-  options: CreateDefaultMcodeAuthApplicationOptions,
-): McodeAuthApplication {
-  const environment = resolveMcodeAuthEnvironment({
+export function createDefaultKcodeAuthApplication(
+  options: CreateDefaultKcodeAuthApplicationOptions,
+): KcodeAuthApplication {
+  const environment = resolveKcodeAuthEnvironment({
     runtimeRegion: options.region,
     runtimeBuildEnv: options.buildEnv,
   });
@@ -34,22 +32,20 @@ export function createDefaultMcodeAuthApplication(
     dataDir: options.dataDir,
     region,
     buildEnv,
-    ...(options.telemetry ? { telemetry: options.telemetry } : {}),
-    ...(options.telemetrySource ? { telemetrySource: options.telemetrySource } : {}),
     writeRegionPreference: options.writeRegionPreference ?? writeTuiRegionPreference,
-  } satisfies Omit<McodeAuthApplicationOptions, 'sharedAuthCore'>;
+  } satisfies Omit<KcodeAuthApplicationOptions, 'sharedAuthCore'>;
   const createSharedAuthCore = (requestedRegion: MavisRegion) =>
-    (options.createSharedSession ?? createMcodeSharedAuthSession)({
+    (options.createSharedSession ?? createKcodeSharedAuthSession)({
       dataDir: options.dataDir,
       region: requestedRegion,
       buildEnv,
-      oauthEndpoints: resolveMCodeOAuthEndpointConfig(
+      oauthEndpoints: resolveKCodeOAuthEndpointConfig(
         options.oauthEndpointEnvironment ?? process.env,
         { buildEnv, region: requestedRegion },
       ),
     });
   const sharedAuthCore = options.sharedAuthCore ?? createSharedAuthCore(region);
-  return new McodeAuthApplication({
+  return new KcodeAuthApplication({
     ...applicationOptions,
     sharedAuthCore,
     resolveSharedAuthCore: createSharedAuthCore,

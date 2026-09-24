@@ -5,8 +5,8 @@ import {
   type ClipboardImageReader,
 } from './clipboard-image-draft.js';
 import {
-  MINIMAX_CODE_MAX_ATTACHMENT_COUNT,
-  MINIMAX_CODE_MAX_TOTAL_ATTACHMENT_BYTES,
+  KCODE_MAX_ATTACHMENT_COUNT,
+  KCODE_MAX_TOTAL_ATTACHMENT_BYTES,
 } from '../../../application/attachment-policy.js';
 import { tuiAttachmentLabel, type ResolveTuiAttachmentOptions } from './attachments.js';
 import type { TuiClipboardImageLease } from '../../../host/clipboard-image.js';
@@ -329,7 +329,7 @@ export class TuiComposerDraft {
     warn = true,
     current: readonly TuiAttachment[] = this.attachments,
   ): boolean {
-    if (current.length >= MINIMAX_CODE_MAX_ATTACHMENT_COUNT) {
+    if (current.length >= KCODE_MAX_ATTACHMENT_COUNT) {
       if (warn) {
         this.options.append(
           'You can attach up to 10 files. Remove one before adding another.',
@@ -339,7 +339,7 @@ export class TuiComposerDraft {
       return false;
     }
     const totalBytes = current.reduce((sum, item) => sum + item.sizeBytes, 0);
-    if (totalBytes + attachment.sizeBytes > MINIMAX_CODE_MAX_TOTAL_ATTACHMENT_BYTES) {
+    if (totalBytes + attachment.sizeBytes > KCODE_MAX_TOTAL_ATTACHMENT_BYTES) {
       if (warn) {
         this.options.append(
           'Attachments can total up to 100 MB. Remove an attachment or choose a smaller file.',

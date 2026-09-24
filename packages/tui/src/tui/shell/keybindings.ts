@@ -24,6 +24,15 @@ export type TuiShellKeyAction =
   | 'toggle-details'
   | 'toggle-plan'
   | 'toggle-side-session'
+  | 'previous-tab'
+  | 'next-tab'
+  | 'close-tab'
+  | 'move-tab-earlier'
+  | 'move-tab-later'
+  | 'switch-tab-slot'
+  | 'rename-tab'
+  | 'toggle-tab-grouping'
+  | 'toggle-tab-collapse'
   | 'cycle-permission'
   | 'scroll-up'
   | 'scroll-down'
@@ -128,6 +137,22 @@ export class TuiKeybindingRegistry {
 
   list(): readonly TuiKeybindingDefinition[] {
     return [...this.bindings.values()].map((definition) => this.effective(definition));
+  }
+  /**
+   * 1-based direct tab slot this keypress selects, or undefined.
+   *
+   * Slots share one shell action but not one key, so the slot number has to be
+   * recovered from the key that matched rather than from `resolve()`.
+   */
+  resolveTabSlot(data: string, context: TuiKeybindingContext): number | undefined {
+    if (isKeyRelease(data)) return undefined;
+    for (const binding of TAB_KEYBINDINGS) {
+      const effective = this.effective(binding);
+      if (this.matches(data, effective) && scopeMatches(effective.when, context)) {
+        return Number(effective.id.slice('tabs.slot-'.length));
+      }
+    }
+    return undefined;
   }
 
   get(id: string): TuiKeybindingDefinition | undefined {
@@ -261,6 +286,107 @@ function keySignature(key: KeyId): string {
   return `${parts.sort().join('+')}+${base}`;
 }
 
+/**
+ * Direct tab slots. Each slot is its own binding so a user override moves one
+ * slot instead of the whole row, and so `/hotkeys` can list them together.
+ *
+ * `ctrl+shift+left/right` cycles tabs; `ctrl+pageUp/ctrl+pageDown` and `ctrl+w`
+ * are deliberately not used because the editor layer already claims them and
+ * nothing detects a shell-versus-editor collision. `alt+<n>` and `alt+w` are
+ * free in both layers and survive legacy terminals as ESC-prefixed bytes.
+ */
+const TAB_SLOT_KEYS = [
+  'alt+1',
+  'alt+2',
+  'alt+3',
+  'alt+4',
+  'alt+5',
+  'alt+6',
+  'alt+7',
+  'alt+8',
+  'alt+9',
+] as const satisfies readonly KeyId[];
+
+const TAB_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
+  {
+    id: 'tabs.previous',
+    key: 'ctrl+shift+left',
+    action: 'previous-tab',
+    when: 'application',
+    description: 'Switch to the previous open Session tab',
+    helpOrder: 124,
+    helpGroup: 'tabs.cycle',
+  },
+  {
+    id: 'tabs.next',
+    key: 'ctrl+shift+right',
+    action: 'next-tab',
+    when: 'application',
+    description: 'Switch to the next open Session tab',
+    helpOrder: 124,
+    helpGroup: 'tabs.cycle',
+  },
+  {
+    id: 'tabs.move-earlier',
+    key: 'shift+alt+left',
+    action: 'move-tab-earlier',
+    when: 'application',
+    description: 'Move the visible Session tab one slot earlier',
+    helpOrder: 125,
+    helpGroup: 'tabs.order',
+  },
+  {
+    id: 'tabs.move-later',
+    key: 'shift+alt+right',
+    action: 'move-tab-later',
+    when: 'application',
+    description: 'Move the visible Session tab one slot later',
+    helpOrder: 125,
+    helpGroup: 'tabs.order',
+  },
+  {
+    id: 'tabs.close',
+    key: 'alt+w',
+    action: 'close-tab',
+    when: 'application',
+    description: 'Close the visible Session tab',
+    helpOrder: 125,
+  },
+  {
+    id: 'tabs.rename',
+    key: 'alt+r',
+    action: 'rename-tab',
+    when: 'application',
+    description: 'Rename the visible Session tab',
+    helpOrder: 127,
+  },
+  {
+    id: 'tabs.grouping',
+    key: 'alt+g',
+    action: 'toggle-tab-grouping',
+    when: 'application',
+    description: 'Group the Session tabs by project',
+    helpOrder: 128,
+  },
+  {
+    id: 'tabs.collapse',
+    key: 'alt+h',
+    action: 'toggle-tab-collapse',
+    when: 'application',
+    description: 'Fold every other project group, or unfold them all',
+    helpOrder: 129,
+  },
+  ...TAB_SLOT_KEYS.map((key, index) => ({
+    id: `tabs.slot-${index + 1}`,
+    key,
+    action: 'switch-tab-slot' as const,
+    when: 'application' as const,
+    description: `Switch to the Session tab in slot 1-${TAB_SLOT_KEYS.length}`,
+    helpOrder: 126,
+    helpGroup: 'tabs.slots',
+  })),
+];
+
 const DEFAULT_TUI_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
   {
     id: 'app.clear',
@@ -291,7 +417,7 @@ const DEFAULT_TUI_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
     key: 'ctrl+z',
     action: 'suspend',
     when: 'application',
-    description: 'Suspend MCode and return to the shell',
+    description: 'Suspend KCode and return to the shell',
     helpOrder: 122,
   },
   {
@@ -302,6 +428,7 @@ const DEFAULT_TUI_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
     description: 'Toggle between the parent and temporary side conversation',
     helpOrder: 123,
   },
+  ...TAB_KEYBINDINGS,
   {
     id: 'welcome.resume-codex',
     key: 'ctrl+u',
@@ -578,6 +705,14 @@ export function resolveTuiKeybinding(
   context: TuiKeybindingContext,
 ): TuiShellKeyAction | undefined {
   return defaultTuiKeybindings.resolve(data, context);
+}
+
+/** 1-based direct tab slot this keypress selects on the default registry. */
+export function resolveTuiTabSlot(
+  data: string,
+  context: TuiKeybindingContext,
+): number | undefined {
+  return defaultTuiKeybindings.resolveTabSlot(data, context);
 }
 
 function validateDefinition(definition: TuiKeybindingDefinition): void {

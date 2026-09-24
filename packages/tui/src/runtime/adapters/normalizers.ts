@@ -40,6 +40,7 @@ export function normalizeSessionInfoView(session: SessionInfoView): TuiSession {
       : undefined) as 'hidden' | 'visible' | undefined,
     purpose: session.purpose,
     archived: session.archived,
+    pinned: session.pinned,
     workspaceDir: session.workspaceDir,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,

@@ -1,17 +1,17 @@
 import type {
-  McodePluginCatalog,
-  McodePluginMarketplace,
-  McodePluginRuntimeAccess,
-  McodePluginView,
+  KcodePluginCatalog,
+  KcodePluginMarketplace,
+  KcodePluginRuntimeAccess,
+  KcodePluginView,
 } from './contract.js';
 
-export class McodePluginApplication {
-  constructor(private readonly access: McodePluginRuntimeAccess) {}
+export class KcodePluginApplication {
+  constructor(private readonly access: KcodePluginRuntimeAccess) {}
 
   async catalog(input: {
     readonly includeAvailable: boolean;
-    readonly marketplace?: McodePluginMarketplace;
-  }): Promise<McodePluginCatalog> {
+    readonly marketplace?: KcodePluginMarketplace;
+  }): Promise<KcodePluginCatalog> {
     if (!input.includeAvailable) {
       return {
         installed: await this.access.listInstalledPlugins({
@@ -20,7 +20,7 @@ export class McodePluginApplication {
         available: [],
       };
     }
-    const marketplaces: readonly McodePluginMarketplace[] = input.marketplace
+    const marketplaces: readonly KcodePluginMarketplace[] = input.marketplace
       ? [input.marketplace]
       : ['official', 'local'];
     const [installed, ...marketplaceCatalogs] = await Promise.all([
@@ -34,15 +34,15 @@ export class McodePluginApplication {
     return partitionCatalog([...merged.values()]);
   }
 
-  install(plugin: McodePluginView): Promise<McodePluginView> {
+  install(plugin: KcodePluginView): Promise<KcodePluginView> {
     return this.mutate(plugin, 'install');
   }
 
-  remove(plugin: McodePluginView): Promise<McodePluginView> {
+  remove(plugin: KcodePluginView): Promise<KcodePluginView> {
     return this.mutate(plugin, 'remove');
   }
 
-  setEnabled(plugin: McodePluginView, enabled: boolean): Promise<McodePluginView> {
+  setEnabled(plugin: KcodePluginView, enabled: boolean): Promise<KcodePluginView> {
     return this.mutate(plugin, enabled ? 'enable' : 'disable');
   }
 
@@ -51,9 +51,9 @@ export class McodePluginApplication {
   }
 
   private async mutate(
-    plugin: McodePluginView,
+    plugin: KcodePluginView,
     action: 'install' | 'remove' | 'enable' | 'disable',
-  ): Promise<McodePluginView> {
+  ): Promise<KcodePluginView> {
     const result = await this.access.mutatePlugin({
       action,
       plugin: { name: plugin.name, marketplace: plugin.marketplace },
@@ -62,9 +62,9 @@ export class McodePluginApplication {
   }
 }
 
-function partitionCatalog(plugins: readonly McodePluginView[]): McodePluginCatalog {
-  const installed: McodePluginView[] = [];
-  const available: McodePluginView[] = [];
+function partitionCatalog(plugins: readonly KcodePluginView[]): KcodePluginCatalog {
+  const installed: KcodePluginView[] = [];
+  const available: KcodePluginView[] = [];
   for (const plugin of plugins) {
     (plugin.installed ? installed : available).push(plugin);
   }

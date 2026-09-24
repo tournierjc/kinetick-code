@@ -720,6 +720,11 @@ export interface SessionInfoView {
   title?: string;
   parentSessionId?: string;
   archived?: boolean;
+  /**
+   * Whether the Session sits in the product's ordered pin list. Pins are not stored
+   * on the Session, so this is projected per read rather than read from a column.
+   */
+  pinned?: boolean;
   status?: SessionStatusInfoView;
   createdAt?: number;
   updatedAt?: number;
@@ -900,6 +905,23 @@ export interface ArchiveSessionInput {
 
 export interface ArchiveSessionResult {
   success?: boolean;
+}
+
+/**
+ * Pin or unpin a Session. Pins are an ordered product-level list, not a column on
+ * the Session, so a pinned Session comes back first in the pin list rather than
+ * carrying state of its own.
+ */
+export interface PinSessionInput {
+  id: string;
+  pinned?: boolean;
+  /** 0-based slot in the pinned list; omitted appends to the end of the pinned block. */
+  insertIndex?: number;
+}
+
+export interface PinSessionResult {
+  success?: boolean;
+  pinned?: boolean;
 }
 
 export interface CompressSessionInput {

@@ -22,6 +22,7 @@ import { sanitizeTuiUrl } from '../../rendering/url.js';
 import { resolveTuiThinkingChoice } from '../model/thinking.js';
 import { resolveTuiEffortChoice } from '../model/effort.js';
 import { resolveTuiSessionCacheMetrics } from '../../../application/session-cache-metrics.js';
+import type { SessionCostBreakdown } from '../../../application/session-cost.js';
 import type {
   TranscriptContextVisualization,
   TranscriptInspectionReport,
@@ -196,7 +197,7 @@ export function createTuiAccountStatusInspection(
   const quotaRows = createTokenPlanQuotaRows(account).filter((row) => row.label !== 'Video');
   if (quotaRows.length > 0) sections.push({ title: 'Quota', rows: quotaRows });
   return {
-    title: `MCode status${options.version ? ` · v${safeInline(options.version)}` : ''}`,
+    title: `KCode status${options.version ? ` · v${safeInline(options.version)}` : ''}`,
     badge: options.accountLoading
       ? { label: 'Loading account…', tone: 'neutral' }
       : accountStatusBadge(status),
@@ -418,7 +419,7 @@ export function createTuiRuntimeInspection(
               rows: [
                 {
                   label: 'Current run',
-                  value: 'MCode may use built-in defaults until the config is fixed and restarted.',
+                  value: 'KCode may use built-in defaults until the config is fixed and restarted.',
                   tone: 'warning' as const,
                 },
               ],
@@ -442,15 +443,15 @@ export function createTuiRuntimeInspection(
 function configurationNextStep(diagnostics: TuiRuntimeDiagnostics): string {
   const path = safe(diagnostics.configPath ?? 'the config file');
   if (diagnostics.warnings.some((issue) => issue.includes('does not exist'))) {
-    return `Create or restore ${path}, restart MCode, then run /doctor again.`;
+    return `Create or restore ${path}, restart KCode, then run /doctor again.`;
   }
   if (diagnostics.warnings.some((issue) => issue.includes('cannot be read'))) {
-    return `Check access to ${path}, restart MCode, then run /doctor again.`;
+    return `Check access to ${path}, restart KCode, then run /doctor again.`;
   }
   if (diagnostics.warnings.some((issue) => issue.includes('defaultModel'))) {
-    return `Set defaultModel in ${path} to an available provider/model, restart MCode, then run /doctor again.`;
+    return `Set defaultModel in ${path} to an available provider/model, restart KCode, then run /doctor again.`;
   }
-  return `Fix ${path}, restart MCode, then run /doctor again.`;
+  return `Fix ${path}, restart KCode, then run /doctor again.`;
 }
 
 export function createTuiConfigInspection(
@@ -494,11 +495,14 @@ export function createTuiConfigInspection(
   };
 }
 
+
 export interface TuiUsagePresentationOptions {
   readonly context?: TuiContextSnapshotResponse;
   readonly model?: TuiModel;
   readonly account?: TuiAccountStatus;
   readonly scope?: 'session' | 'account';
+  /** Session-tree cost aggregate (root + delegated sub-agent Sessions). */
+  readonly cost?: SessionCostBreakdown;
 }
 
 export function formatTuiUsage(
@@ -558,6 +562,7 @@ function resolveTuiUsagePresentation(
     ? `${safeInline(options.model.providerId)}/${safeInline(options.model.modelId)}`
     : 'Model unavailable';
   const cacheMetrics = resolveTuiSessionCacheMetrics(summary);
+  const cost = options.cost;
   return {
     kind: 'usage',
     model,
@@ -568,7 +573,36 @@ function resolveTuiUsagePresentation(
     ...(cacheMetrics ? { cacheMetrics } : {}),
     context,
     ...(accountRows.length > 0 ? { accountRows } : {}),
+    ...(cost
+      ? {
+          costTotalUsd: cost.total.costUsd,
+          rootCostUsd: cost.root.costUsd,
+          costUnpriced: cost.hasUnpricedRows || undefined,
+          costModels: cost.models.map((row) => ({
+            model: row.model,
+            scope: costScopeOf(cost, row.model),
+            costUsd: row.costUsd,
+            unpricedRows: row.unpricedRows,
+            totalTokens: row.totalTokens,
+            inputTokens: row.inputTokens,
+            outputTokens: row.outputTokens,
+            cacheReadTokens: row.cacheReadTokens,
+            cacheReadRatio: row.cacheReadRatio,
+            turns: row.turns,
+          })),
+        }
+      : {}),
   };
+}
+
+function costScopeOf(
+  cost: SessionCostBreakdown,
+  model: string,
+): 'agent' | 'subagent' | 'both' {
+  const scopes = cost.models.find((row) => row.model === model)?.scopes;
+  if (!scopes) return 'agent';
+  if (scopes.has('agent') && scopes.has('subagent')) return 'both';
+  return scopes.has('subagent') ? 'subagent' : 'agent';
 }
 
 function createUsageAccountRows(

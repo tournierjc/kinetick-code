@@ -15,7 +15,7 @@ const WEB_ORIGINS: Record<MavisRegion, Record<MavisBuildEnv, string>> = {
   },
 };
 
-export function buildMcodeLogoutUrl(scope: {
+export function buildKcodeLogoutUrl(scope: {
   readonly region: MavisRegion;
   readonly buildEnv: MavisBuildEnv;
 }): string {

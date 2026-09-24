@@ -112,7 +112,29 @@ describe('custom BYOK planning', () => {
     ).toBeUndefined();
   });
 
-  it('fails closed when custom provider credentials are incomplete', () => {
+  it('plans an endpoint that needs no authentication without a credential', () => {
+    const base = { provider: 'custom_provider:work', providerKey: 'work', modelId: 'model' };
+
+    // No key, no sign-in: the endpoint is reached without a credential, and the
+    // plan says so instead of refusing to resolve.
+    expect(
+      planCustomProviderResolution({
+        ...base,
+        byok: {
+          custom_provider: {
+            work: { options: { baseURL: ' http://127.0.0.1:11434/v1 ' }, models: { model: {} } },
+          },
+        },
+      }),
+    ).toMatchObject({
+      unauthenticatedEndpoint: true,
+      baseUrl: 'http://127.0.0.1:11434/v1',
+      contextWindow: 200_000,
+      maxTokens: 16_384,
+    });
+  });
+
+  it('fails closed when the endpoint itself is incomplete', () => {
     const base = {
       provider: 'custom_provider:work',
       providerKey: 'work',
@@ -121,16 +143,10 @@ describe('custom BYOK planning', () => {
     expect(() =>
       planCustomProviderResolution({
         ...base,
-        byok: { custom_provider: { work: { models: { model: {} } } } },
-      }),
-    ).toThrow('api_key not configured');
-    expect(() =>
-      planCustomProviderResolution({
-        ...base,
         byok: {
           custom_provider: {
             work: {
-              options: { apiKey: 'key' },
+              options: {},
               models: { model: {} },
             },
           },
@@ -201,6 +217,43 @@ describe('custom BYOK planning', () => {
       contextWindow: 5,
       maxTokens: 6,
     });
+  });
+
+  it('prefers a model-level wire protocol over the provider default', () => {
+    // One provider can front models that only speak different protocols upstream
+    // (GitHub Copilot: Claude on Messages, GPT-5 on Responses, Gemini on
+    // Completions), so `models.<id>.provider.api` overrides the provider's `api`.
+    const planFor = (rawModel: string) =>
+      planCustomProviderResolution({
+        provider: 'custom_provider:github-copilot',
+        providerKey: 'github-copilot',
+        modelId: 'gpt-5.4',
+        byok: {
+          custom_provider: {
+            'github-copilot': {
+              api: 'openai-completions',
+              kind: 'oauth',
+              options: { baseURL: 'https://api.githubcopilot.com' },
+              models: { 'gpt-5.4': JSON.parse(rawModel) },
+            },
+          },
+        },
+      })?.api;
+
+    expect(planFor('{"provider":{"api":"openai-responses"}}')).toBe('openai-responses');
+    expect(planFor('{"provider":{"api":"anthropic-messages"}}')).toBe('anthropic-messages');
+    // A model that declares no protocol of its own keeps the provider default.
+    expect(planFor('{}')).toBe('openai-completions');
+    expect(planFor('{"provider":{}}')).toBe('openai-completions');
+    // The tree is restored from JSON, so the override may arrive malformed. Only a
+    // recognized protocol switches it; anything else leaves the provider's own api.
+    expect(planFor('{"provider":"openai-responses"}')).toBe('openai-completions');
+    expect(planFor('{"provider":{"api":7}}')).toBe('openai-completions');
+    expect(planFor('{"provider":null}')).toBe('openai-completions');
+    expect(planFor('{"provider":{"api":"not-a-protocol"}}')).toBe('openai-completions');
+    expect(planFor('{"provider":{"api":"openai-codex-responses"}}')).toBe(
+      'openai-codex-responses',
+    );
   });
 });
 
@@ -307,5 +360,60 @@ describe('custom BYOK compat overrides', () => {
     expect(
       planWithCompat('{"compat":{"__proto__":{"supportsDeveloperRole":false}}}'),
     ).toBeUndefined();
+  });
+});
+
+describe('custom BYOK thinking shape', () => {
+  const plan = (
+    providerKey: string,
+    baseUrl: string,
+    compat?: Record<string, unknown>,
+    modelId = 'deepseek-v4-flash',
+  ) =>
+    planCustomProviderResolution({
+      provider: `custom_provider:${providerKey}`,
+      providerKey,
+      modelId,
+      byok: {
+        custom_provider: {
+          [providerKey]: {
+            api: 'openai-completions',
+            options: { apiKey: 'sk-test', baseURL: baseUrl },
+            models: {
+              [modelId]: { ...(compat ? { compat } : {}) },
+            },
+          },
+        },
+      },
+    });
+
+  it('applies the thinking shape the endpoint family declares', () => {
+    expect(plan('deepseek', 'https://api.deepseek.com')?.modelCompat).toMatchObject({
+      thinkingFormat: 'deepseek',
+      supportsReasoningEffort: true,
+    });
+  });
+
+  it('keeps a thinking format the model declares, and leaves strangers alone', () => {
+    expect(
+      plan('deepseek', 'https://api.deepseek.com', { thinkingFormat: 'openai' })?.modelCompat,
+    ).toMatchObject({ thinkingFormat: 'openai' });
+
+    // The model id identifies the family when the endpoint does not: a gateway
+    // that fronts `deepseek-v4-*` still needs DeepSeek's thinking shape.
+    expect(plan('work', 'https://gateway.example/v1')?.modelCompat).toMatchObject({
+      thinkingFormat: 'deepseek',
+    });
+
+    // A model that belongs to nobody gets no shape at all.
+    expect(
+      plan('work', 'https://api.openai.com/v1', undefined, 'gpt-5-mini')?.modelCompat,
+    ).toBeUndefined();
+  });
+
+  it('applies the aggregator shape for OpenRouter', () => {
+    expect(
+      plan('openrouter', 'https://openrouter.ai/api/v1', undefined, 'gpt-5-mini')?.modelCompat,
+    ).toMatchObject({ thinkingFormat: 'openrouter', supportsReasoningEffort: true });
   });
 });

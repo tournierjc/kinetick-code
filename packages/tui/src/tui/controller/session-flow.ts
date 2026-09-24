@@ -10,6 +10,18 @@ import type { TuiRotationEvent, TuiSessionCatalogEvent } from '../../types/runti
 import type { TuiComposerDraft } from '../features/composer/draft.js';
 import type { TuiRunProjection } from '../state/run-projection.js';
 import type { TuiStateStore } from '../state/store.js';
+import {
+  applyingTuiTabGroupCollapse,
+  foldingTuiTabGroups,
+  cycleTuiTab,
+  moveTuiTab,
+  selectTuiTabAfterClose,
+  selectTuiTabSlot,
+} from '../state/tabs.js';
+import {
+  resolveTuiSessionTabGroupRefs,
+  type TuiSessionTabGroupRef,
+} from '../shell/session-tabs.js';
 import type { TuiChatController } from './chat-controller.js';
 import type { TuiFeatureFlow } from './product/feature-flow.js';
 import type { TuiInteractionFlow } from './interaction/interaction-flow.js';
@@ -55,7 +67,6 @@ export interface TuiSessionFlowOptions {
   readonly followBottom?: () => void;
   readonly requestWelcomeRebuild: () => void;
   readonly switchComposerDraft?: (sessionKey: string) => Promise<void>;
-  readonly detachForegroundObserver?: () => void;
   readonly adoptForegroundRun?: () => void;
   readonly preparePluginHookSessionSwitch?: (
     sessionId: string,
@@ -106,6 +117,272 @@ export class TuiSessionFlow {
     return this.sideConversation;
   }
 
+  /** Open tabs in bar order; the visible Session is always one of them. */
+  private openTabOrder(): readonly string[] {
+    return this.options.stateStore.snapshot().tabs.order;
+  }
+
+  /** Project of the visible Session, used to fold and unfold its group. */
+  private visibleGroupRef(): TuiSessionTabGroupRef | undefined {
+    const sessionId = this.visibleSessionId();
+    if (!sessionId) return undefined;
+    return resolveTuiSessionTabGroupRefs(this.options.controller.snapshot().sessions).get(
+      sessionId,
+    );
+  }
+
+  private visibleSessionId(): string | undefined {
+    return this.options.controller.snapshot().session?.sessionId;
+  }
+
+  /**
+   * Switch to the next (`delta` 1) or previous (`delta` -1) open tab.
+   *
+   * Switching keeps the same rule as `/sessions`: the visible Session changes and the
+   * run it was showing keeps running in the background, streaming into that Session's
+   * own pane (see `docs/tui-capabilities.md`). Nothing is aborted by a switch.
+   *
+   * Folding a project group only changes what the bar draws, so cycling walks
+   * every open tab and a folded group stays reachable from the keyboard.
+   */
+  async cycleTab(delta: 1 | -1): Promise<void> {
+    const current = this.visibleSessionId();
+    const target = cycleTuiTab(this.openTabOrder(), current, delta);
+    if (!target || target === current) {
+      this.options.append('Only one Session tab is open. Use /sessions to open another.', 'warning');
+      return;
+    }
+    await this.activateSessionById(target);
+  }
+
+  /**
+   * Move the visible tab one slot along the bar.
+   *
+   * Direct slots are positional (`Alt+<n>`), so this is how a Session is put on the
+   * key the user expects; the order is otherwise insertion order and never reshuffles
+   * on its own. At either end the move is refused with a hint rather than wrapped, so
+   * the bar moves exactly as far as asked.
+   */
+  async moveTab(delta: 1 | -1): Promise<void> {
+    const current = this.visibleSessionId();
+    if (!current) return;
+    const order = this.openTabOrder();
+    const next = moveTuiTab(order, current, delta);
+    if (next === order) {
+      this.options.append(
+        delta < 0 ? 'This tab is already first.' : 'This tab is already last.',
+        'warning',
+      );
+      return;
+    }
+    this.options.stateStore.dispatch({ type: 'tabs/move', sessionId: current, delta });
+  }
+
+  /** Switch to the Session bound to a 1-based direct tab slot (`Alt+<n>`). */
+  async activateTabSlot(slot: number): Promise<void> {
+    const target = selectTuiTabSlot(this.openTabOrder(), slot);
+    if (!target) {
+      this.options.append(`No open Session tab in slot ${slot}.`, 'warning');
+      return;
+    }
+    if (target === this.visibleSessionId()) return;
+    await this.activateSessionById(target);
+  }
+
+  /**
+   * Close the visible tab and show its neighbour.
+   *
+   * The neighbour is activated *before* the close because the tab list refuses
+   * to close the visible tab; that keeps the invariant that a Session is always
+   * on screen. Closing the last tab starts a new Session instead. Nothing is
+   * deleted: the Session keeps its history and returns through `/sessions`.
+   *
+   * A refused switch (live run, or a failed projection load) leaves the tab in
+   * place rather than dropping it silently.
+   */
+  async closeTab(): Promise<void> {
+    if (this.stopped) return;
+    const current = this.visibleSessionId();
+    if (!current) return;
+    if (this.options.hasLiveRun?.()) {
+      // Closing would detach the turn with nothing left on the bar to return to.
+      this.options.append('Stop the running turn before closing its tab.', 'warning');
+      this.options.onChanged();
+      return;
+    }
+    const neighbour = selectTuiTabAfterClose(this.openTabOrder(), current);
+    if (neighbour) {
+      await this.activateSessionById(neighbour);
+      if (this.visibleSessionId() !== neighbour) return;
+    } else {
+      await this.startNew();
+      if (this.visibleSessionId() !== undefined) return;
+    }
+    this.options.stateStore.dispatch({ type: 'tabs/close', sessionId: current });
+    // The closed Session has no tab left, so its pane is released with it.
+    this.options.controller.releaseSessionTranscript(current);
+    this.options.onChanged();
+  }
+
+  /**
+   * Rename the visible Session, which is what the tab label shows.
+   *
+   * Without a title the session manager opens on its rename field, so the tab
+   * and `/sessions` share one rename affordance and one source of truth; the bar
+   * re-reads the catalog on the next frame, so no refresh is needed here.
+   */
+  async renameTab(title?: string): Promise<void> {
+    if (this.stopped) return;
+    const sessionId = this.visibleSessionId();
+    if (!sessionId) {
+      this.options.append('Start or resume a Session before renaming its tab.', 'warning');
+      return;
+    }
+    const trimmed = title?.trim();
+    if (!trimmed) {
+      await this.options.featureFlow.showSessionManager('', { initialRenameSessionId: sessionId });
+      return;
+    }
+    const renamed = await this.options.controller.renameSession(sessionId, trimmed);
+    this.options.append(`Session renamed to “${renamed.title?.trim() || trimmed}”.`);
+    this.options.onChanged();
+  }
+
+  /** Group the tab bar by project, or go back to a single strip. */
+  async setTabGrouping(grouped: boolean): Promise<void> {
+    const state = this.options.stateStore.snapshot();
+    if (state.tabs.grouped === grouped) return;
+    this.options.stateStore.dispatch({ type: 'tabs/toggleGrouping', grouped });
+    const refs = resolveTuiSessionTabGroupRefs(this.options.controller.snapshot().sessions);
+    const open = new Set(state.tabs.order);
+    const projects = new Set(
+      [...refs.entries()]
+        .filter(([sessionId]) => open.has(sessionId))
+        .map(([, ref]) => ref.key),
+    );
+    if (grouped && projects.size < 2) {
+      this.options.append('Grouping needs tabs from more than one project.');
+    }
+    this.options.onChanged();
+  }
+
+  /**
+   * Fold every project group but the one holding the visible tab, or unfold them
+   * all again.
+   *
+   * Folding the visible tab's own group would hide the Session on screen — the
+   * same rule that stops the visible tab from being closed — so the key folds the
+   * groups *around* it. Cycling and the direct slots still reach every open tab,
+   * so a folded group is never a keyboard dead end.
+   */
+  async toggleTabGroupCollapse(): Promise<void> {
+    const state = this.options.stateStore.snapshot();
+    const ref = this.visibleGroupRef();
+    if (!ref || !state.tabs.grouped) {
+      this.options.append('Project grouping is off. Turn it on with /tabs group on.', 'warning');
+      return;
+    }
+    const refs = resolveTuiSessionTabGroupRefs(this.options.controller.snapshot().sessions);
+    const groupKeys = [...new Set(state.tabs.order.map((id) => refs.get(id)?.key))].filter(
+      (key): key is string => key !== undefined,
+    );
+    const folded = foldingTuiTabGroups(groupKeys, ref.key, state.tabs.collapsedGroups);
+    if (folded === state.tabs.collapsedGroups) {
+      this.options.append('Only one project group is open, so there is nothing to fold.', 'warning');
+      return;
+    }
+    this.options.stateStore.dispatch({ type: 'tabs/setCollapsedGroups', groupKeys: folded });
+    this.options.append(
+      folded.length === 0
+        ? 'Showing every project group again.'
+        : `${ref.label} holds the visible tab, so it stays open; the other project groups are folded.`,
+    );
+    this.options.onChanged();
+  }
+
+  /**
+   * Open a fresh Session as another tab.
+   *
+   * The Session is created before the first prompt: an empty Session with an empty
+   * composer is what a new tab is, so `/new` does not leave an untitled blank view
+   * waiting for a prompt to become a tab. The Session being left keeps its tab, its
+   * pane and a running turn — this is navigation, not a clear — which is why there
+   * is no idle gate here: switching away from a live turn is allowed, and the run
+   * goes on streaming into its own pane. `/btw` opens its side session the same way.
+   */
+  async openNewSessionTab(input: { readonly workspaceDir: string }): Promise<void> {
+    if (this.stopped) return;
+    const current = this.options.controller.snapshot().session;
+    let opened: TuiSession;
+    try {
+      opened = await this.options.runtime.createSession({
+        workspaceDir: current?.workspaceDir ?? input.workspaceDir,
+      });
+    } catch {
+      this.options.append("Couldn't open a new Session. Try again.", 'error');
+      this.options.onChanged();
+      return;
+    }
+    if (this.stopped) return;
+    await this.activateSessionById(opened.sessionId, {
+      // With no Session on screen the Composer holds a draft for a conversation that
+      // does not exist yet: leave it in place so the app adopts it into the Session
+      // this navigation just created, instead of loading that Session's empty draft.
+      carryComposerDraft: current === undefined,
+    });
+    if (this.stopped) return;
+    if (this.options.controller.snapshot().session?.sessionId !== opened.sessionId) return;
+    this.options.onChanged();
+  }
+
+  /**
+   * Start a fresh Session in the tab that is already on screen.
+   *
+   * `/clear` keeps the tab: the bar keeps its length and the new Session takes the
+   * replaced tab's position, and with it its direct slot, so this is a fresh
+   * conversation where you were rather than one more tab at the end. The Session
+   * being replaced keeps its history and stays resumable from `/sessions` — nothing
+   * is archived or deleted. A running turn is refused here for the same reason
+   * closing its tab is: the live Session would be left with nothing on the bar to
+   * return to.
+   */
+  async replaceSessionInTab(input: { readonly workspaceDir: string }): Promise<void> {
+    if (this.stopped) return;
+    const current = this.options.controller.snapshot().session;
+    if (this.options.hasLiveRun?.()) {
+      this.options.append('Stop the running turn before clearing its tab.', 'warning');
+      this.options.onChanged();
+      return;
+    }
+    let opened: TuiSession;
+    try {
+      opened = await this.options.runtime.createSession({
+        workspaceDir: current?.workspaceDir ?? input.workspaceDir,
+      });
+    } catch {
+      this.options.append("Couldn't open a new Session. Try again.", 'error');
+      this.options.onChanged();
+      return;
+    }
+    if (this.stopped) return;
+    const previousSessionId = current?.sessionId;
+    await this.activateSessionById(opened.sessionId);
+    if (this.stopped) return;
+    if (this.options.controller.snapshot().session?.sessionId !== opened.sessionId) return;
+    if (previousSessionId && previousSessionId !== opened.sessionId) {
+      this.options.stateStore.dispatch({
+        type: 'tabs/replace',
+        sessionId: previousSessionId,
+        replacementId: opened.sessionId,
+      });
+      // The replaced Session has no tab left, so its pane is released with it.
+      this.options.controller.releaseSessionTranscript(previousSessionId);
+      await this.options.preparePluginHookSessionSwitch?.(previousSessionId, 'clear');
+      if (this.stopped) return;
+    }
+    this.options.onChanged();
+  }
+
   async startNew(
     options: {
       readonly endPreviousSession?: boolean;
@@ -124,7 +401,6 @@ export class TuiSessionFlow {
       await this.options.composerDraft.discard();
     }
     if (this.stopped || sessionSequence !== this.sessionSequence) return;
-    this.options.detachForegroundObserver?.();
     this.options.interactionFlow.deactivate();
     this.options.featureFlow.resetSessionState();
     try {
@@ -151,13 +427,22 @@ export class TuiSessionFlow {
   async activateSessionById(
     sessionId: string,
     options: {
-      readonly allowDuringLiveRun?: boolean;
       /** Internal parent/side projection switch; keep the pair alive. */
       readonly preserveSideConversation?: boolean;
+      /**
+       * The Composer text already belongs to this navigation: with no Session on
+       * screen it is a draft for a conversation that does not exist yet, so the app
+       * adopts it into the Session being opened instead of loading that Session's
+       * own empty draft.
+       */
+      readonly carryComposerDraft?: boolean;
     } = {},
   ): Promise<void> {
     if (this.stopped) return;
-    if (!options.allowDuringLiveRun && !this.allowUserSessionNavigation('/sessions')) return;
+    // Switching leaves the previous Session's turn running: the controller aborts
+    // only its own delivery stream and detaches the run, and the tab keeps showing
+    // the state from the Runtime events, so no navigation gate is needed here.
+    const previousHadLiveRun = Boolean(this.options.hasLiveRun?.());
     if (!options.preserveSideConversation) await this.disposeSideConversation();
     const sessionSequence = ++this.sessionSequence;
     const requestedSessionId = sessionId;
@@ -166,9 +451,10 @@ export class TuiSessionFlow {
     const targetSessionId = resolvedSession.sessionId;
     const previousSessionId = this.options.controller.snapshot().session?.sessionId;
     const previousSessionKey = previousSessionId ?? 'new-session';
-    await this.options.switchComposerDraft?.(targetSessionId);
-    if (this.stopped || sessionSequence !== this.sessionSequence) return;
-    this.options.detachForegroundObserver?.();
+    if (!options.carryComposerDraft) {
+      await this.options.switchComposerDraft?.(targetSessionId);
+      if (this.stopped || sessionSequence !== this.sessionSequence) return;
+    }
     try {
       await this.options.controller.loadSessionProjection(targetSessionId);
     } catch (error) {
@@ -217,6 +503,13 @@ export class TuiSessionFlow {
     }
     this.options.followBottom?.();
     this.options.onChanged();
+    if (previousHadLiveRun && previousSessionId && previousSessionId !== targetSessionId) {
+      // The turn was detached, not cancelled: say so, because the composer and the
+      // status line now describe the Session on screen.
+      this.options.append(
+        'The previous Session keeps running in the background; switch back to its tab to watch it.',
+      );
+    }
     if (requestedSessionId !== targetSessionId) {
       this.options.append(
         'Sub-agent Sessions are internal. Opened the parent Session instead.',
@@ -274,7 +567,8 @@ export class TuiSessionFlow {
     reference: string,
     options: { silent?: boolean } = {},
   ): Promise<boolean> {
-    if (!this.allowUserSessionNavigation('/sessions')) return true;
+    // A reference resolves to a switch, which is allowed while a turn runs: the
+    // previous Session keeps running in the background.
     const normalized = reference.trim();
     const index = Number(normalized);
     if (Number.isInteger(index) && index >= 1) {
@@ -393,7 +687,6 @@ export class TuiSessionFlow {
     };
     try {
       await this.activateSessionById(side.sessionId, {
-        allowDuringLiveRun: true,
         preserveSideConversation: true,
       });
     } catch (error) {
@@ -435,7 +728,6 @@ export class TuiSessionFlow {
         ? sideConversation.parentSessionId
         : sideConversation.sideSessionId;
     await this.activateSessionById(targetSessionId, {
-      allowDuringLiveRun: true,
       preserveSideConversation: true,
     });
     return true;
@@ -463,7 +755,6 @@ export class TuiSessionFlow {
     }
 
     await this.activateSessionById(sideConversation.parentSessionId, {
-      allowDuringLiveRun: true,
       preserveSideConversation: true,
     });
     this.sideConversation = undefined;
@@ -569,7 +860,7 @@ export class TuiSessionFlow {
       }
       await this.options.controller.whenIdle();
       if (this.stopped) return;
-      await this.activateSessionById(event.newSessionId, { allowDuringLiveRun: true });
+      await this.activateSessionById(event.newSessionId);
       return;
     }
     if (event.type === 'session.deleted' && currentSessionId === event.sessionId) {

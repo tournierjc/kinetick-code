@@ -1,54 +1,54 @@
-export type McodePluginMarketplace = 'official' | 'local';
+export type KcodePluginMarketplace = 'official' | 'local';
 
-export interface McodePluginCapabilities {
+export interface KcodePluginCapabilities {
   readonly appCount: number;
   readonly mcpServerCount: number;
   readonly skillCount: number;
 }
 
-export interface McodePluginView {
+export interface KcodePluginView {
   readonly pluginId: string;
   readonly name: string;
   readonly displayName: string;
-  readonly marketplace: McodePluginMarketplace;
+  readonly marketplace: KcodePluginMarketplace;
   readonly version?: string;
   readonly description?: string;
   readonly author?: string;
   readonly installed: boolean;
   readonly enabled: boolean;
-  readonly capabilities: McodePluginCapabilities;
+  readonly capabilities: KcodePluginCapabilities;
 }
 
-export interface McodePluginCatalog {
-  readonly installed: readonly McodePluginView[];
-  readonly available: readonly McodePluginView[];
+export interface KcodePluginCatalog {
+  readonly installed: readonly KcodePluginView[];
+  readonly available: readonly KcodePluginView[];
 }
 
-export interface McodePluginRuntimeAccess {
+export interface KcodePluginRuntimeAccess {
   listInstalledPlugins(input?: {
-    readonly marketplace?: McodePluginMarketplace;
-  }): Promise<readonly McodePluginView[]>;
+    readonly marketplace?: KcodePluginMarketplace;
+  }): Promise<readonly KcodePluginView[]>;
   listMarketplacePlugins(input: {
-    readonly marketplace: McodePluginMarketplace;
-  }): Promise<readonly McodePluginView[]>;
+    readonly marketplace: KcodePluginMarketplace;
+  }): Promise<readonly KcodePluginView[]>;
   mutatePlugin(input: {
     readonly action: 'install' | 'remove' | 'enable' | 'disable';
-    readonly plugin: { readonly name: string; readonly marketplace: McodePluginMarketplace };
+    readonly plugin: { readonly name: string; readonly marketplace: KcodePluginMarketplace };
   }): Promise<{ readonly installed: boolean; readonly enabled: boolean }>;
   refreshPlugins(): Promise<void>;
 }
 
-export type McodePluginCliRequest =
+export type KcodePluginCliRequest =
   | {
       readonly action: 'list';
-      readonly marketplace?: McodePluginMarketplace;
+      readonly marketplace?: KcodePluginMarketplace;
       readonly available?: boolean;
       readonly json?: boolean;
     }
   | {
       readonly action: 'add' | 'remove' | 'enable' | 'disable';
       readonly selector: string;
-      readonly marketplace?: McodePluginMarketplace;
+      readonly marketplace?: KcodePluginMarketplace;
       readonly json?: boolean;
     }
   | { readonly action: 'marketplace-list'; readonly json?: boolean }

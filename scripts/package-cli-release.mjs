@@ -9,6 +9,8 @@ import { c as createTar } from 'tar';
 import { cliBuildVersion, cliExternalModules } from './lib/cli-release.mjs';
 import { readExtraction, dependencyLicensesPath } from './lib/release-metadata.mjs';
 
+import { PACKAGE_NAME } from './lib/package-identity.mjs';
+
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = file => JSON.parse(readFileSync(file, 'utf8'));
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -62,11 +64,11 @@ export function releaseManifest(importers, version) {
     target[name] = [...versions][0];
   }
   return {
-    name: '@minimax-ai/code', version, private: true, type: 'module', license: 'MIT',
-    description: 'MiniMax Code CLI built from the tagged public source.',
-    bin: { mcode: 'cli.js' },
+    name: PACKAGE_NAME, version, private: true, type: 'module', license: 'MIT',
+    description: 'Kinetick Code CLI built from the tagged public source.',
+    bin: { kcode: 'cli.js' },
     engines: json(path.join(root, 'package.json')).engines,
-    repository: { type: 'git', url: 'https://github.com/MiniMax-AI/minimax-code.git' },
+    repository: { type: 'git', url: 'https://github.com/tournierjc/kinetick-code.git' },
     dependencies, optionalDependencies,
   };
 }
@@ -86,17 +88,20 @@ export async function packageCliRelease({ tag, out }) {
     writeFileSync(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
     copyLicenses(stage);
     writeFileSync(path.join(stage, 'release.json'), JSON.stringify({ version, tag, revision, buildNode: process.version }, null, 2) + '\n');
-    writeFileSync(path.join(stage, 'README.md'), `# MiniMax Code ${version}
+    writeFileSync(path.join(stage, 'README.md'), `# Kinetick Code ${version}
 
-Built from https://github.com/MiniMax-AI/minimax-code/tree/${revision}.
+Built from https://github.com/tournierjc/kinetick-code/tree/${revision}.
 Install this tar.gz with npm. Node.js must satisfy the package engines requirement.
 Keep optional dependencies enabled and allow better-sqlite3 installation scripts.
-Update by installing a newer GitHub release archive; the built-in updater follows npm.
-The archive uses the same package name, mcode command and user data as the official npm CLI.
-See https://github.com/MiniMax-AI/minimax-code/blob/${revision}/docs/installation.md.
+Update by installing a newer GitHub release archive; the built-in updater follows this
+repository's releases.
+The archive installs as ${PACKAGE_NAME}, under the \`kcode\` command, and shares the data
+directory with the official npm CLI. An installation made before this product took its own
+name stays behind as @minimax-ai/code; remove it with \`npm uninstall --global @minimax-ai/code\`.
+See https://github.com/tournierjc/kinetick-code/blob/${revision}/docs/installation.md.
 `);
     mkdirSync(out, { recursive: true });
-    const archive = path.join(out, `minimax-code-${version}.tar.gz`);
+    const archive = path.join(out, `kinetick-code-${version}.tar.gz`);
     if (existsSync(archive) || existsSync(`${archive}.sha256`)) throw new Error(`Output already exists: ${archive}`);
     await createTar({ file: archive, gzip: true, cwd: temporary, portable: true }, ['package']);
     writeFileSync(`${archive}.sha256`, `${digest(readFileSync(archive))}  ${path.basename(archive)}\n`, { flag: 'wx' });

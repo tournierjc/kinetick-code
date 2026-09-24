@@ -1,5 +1,5 @@
 import { TuiPluginAutocomplete } from '../../commands/plugin-autocomplete.js';
-import type { McodePluginRuntimeAccess } from '../../../plugin/contract.js';
+import type { KcodePluginRuntimeAccess } from '../../../plugin/contract.js';
 import type { Component } from '../../rendering/component.js';
 import type { Terminal } from '../../engine/public.js';
 import {
@@ -27,9 +27,9 @@ import type {
 } from '../../../runtime/port.js';
 import {
   type TuiCommandCatalog,
-  MINIMAX_CODE_ACTIVE_RUN_COMMANDS,
-  MINIMAX_CODE_COMMANDS,
-  MINIMAX_CODE_DISCOVERABLE_COMMANDS,
+  KCODE_ACTIVE_RUN_COMMANDS,
+  KCODE_COMMANDS,
+  KCODE_DISCOVERABLE_COMMANDS,
   type TuiCommand,
 } from '../../commands/catalog.js';
 import { TuiHelpPanel } from '../../features/help/panel.js';
@@ -59,10 +59,8 @@ export interface TuiSteerOptions {
 
 export function createTuiInitialAutocomplete(
   workspace: string | readonly TuiWorkspaceRoot[],
-  workspaceFiles?: Partial<
-    TuiWorkspaceFilePort & Pick<McodePluginRuntimeAccess, 'listInstalledPlugins'>
-  >,
-  builtInCommands: readonly TuiCommand[] = MINIMAX_CODE_DISCOVERABLE_COMMANDS,
+  workspaceFiles?: Partial<TuiWorkspaceFilePort>,
+  builtInCommands: readonly TuiCommand[] = KCODE_DISCOVERABLE_COMMANDS,
 ) {
   return createTuiAutocomplete(builtInCommands, [], workspace, workspaceFiles);
 }
@@ -72,7 +70,7 @@ export function createTuiAutocomplete(
   skillCommands: readonly TuiCommand[],
   workspace: string | readonly TuiWorkspaceRoot[],
   workspaceFiles?: Partial<
-    TuiWorkspaceFilePort & Pick<McodePluginRuntimeAccess, 'listInstalledPlugins'>
+    TuiWorkspaceFilePort & Pick<KcodePluginRuntimeAccess, 'listInstalledPlugins'>
   >,
   shellCwd?: () => string,
 ): AutocompleteProvider {
@@ -90,7 +88,7 @@ export function createTuiAutocomplete(
 
 export function buildTuiSkillCommands(result: TuiSkillList): TuiCommand[] {
   const builtinNames = new Set(
-    [...MINIMAX_CODE_COMMANDS, ...MINIMAX_CODE_ACTIVE_RUN_COMMANDS].flatMap((command) =>
+    [...KCODE_COMMANDS, ...KCODE_ACTIVE_RUN_COMMANDS].flatMap((command) =>
       [command.name, ...(command.aliases ?? [])].map((name) => name.toLocaleLowerCase()),
     ),
   );
@@ -268,7 +266,7 @@ export class TuiActiveRunFlow {
       : '';
     this.autocompleteHasLiveRun = this.hasLiveRun(chat);
     const builtInCommands = [
-      ...(this.commandCatalog?.searchableCommands ?? MINIMAX_CODE_DISCOVERABLE_COMMANDS),
+      ...(this.commandCatalog?.searchableCommands ?? KCODE_DISCOVERABLE_COMMANDS),
     ];
     const skillCommands = this.options.skillCommands();
     const workspace =
@@ -312,7 +310,7 @@ export class TuiActiveRunFlow {
     if (this.isStopped()) return;
     const panel = new TuiHelpPanel({
       commands: [
-        ...(this.commandCatalog?.discoverableCommands ?? MINIMAX_CODE_DISCOVERABLE_COMMANDS),
+        ...(this.commandCatalog?.discoverableCommands ?? KCODE_DISCOVERABLE_COMMANDS),
       ],
       queueEnabled: this.options.queueEnabled,
       keybindings: this.options.keybindings,
@@ -577,7 +575,7 @@ class TuiAutocompleteProvider implements AutocompleteProvider {
     skillCommands: readonly TuiCommand[],
     workspace: string | readonly TuiWorkspaceRoot[],
     private readonly workspaceFiles?: Partial<
-      TuiWorkspaceFilePort & Pick<McodePluginRuntimeAccess, 'listInstalledPlugins'>
+      TuiWorkspaceFilePort & Pick<KcodePluginRuntimeAccess, 'listInstalledPlugins'>
     >,
     shellCwd?: () => string,
   ) {

@@ -13,7 +13,6 @@ const required = [
   'packages/tui/src/runtime/auth-session.ts',
   'packages/tui/src/runtime/mcode-tools-integration.ts',
   'packages/tui/src/account/matrix-account-client.ts',
-  'packages/tui/src/checkin/http-gateway.ts',
   'packages/tui/src/runtime/feedback/service.ts',
   'packages/tui/src/update/application.ts',
   'packages/local-runtime-v2/src/service/plugin-system/plugin/runtime/registry-client.ts',

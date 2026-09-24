@@ -39,24 +39,110 @@ function githubCli(root) {
   throw new Error('Install and authenticate gh (or gh-axi) to create the version PR.');
 }
 
-function createVersionPullRequest({ root, branch, version, tag }) {
+const pullRequestRetryDelaysMs = [2_000, 4_000, 8_000];
+
+function sleepFor(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function versionPullRequestNumber(cli, root, branch) {
+  try {
+    const listed = execFileSync(cli, ['pr', 'list', '--head', branch, '--state', 'all', '--json', 'number'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return JSON.parse(listed).length;
+  } catch { return 0; }
+}
+
+// `gh pr create` has failed on this repository with
+// "GraphQL: … does not have the correct permissions to execute CreatePullRequest"
+// — for the v0.5.2-fork.2 release — while the REST endpoint of the same
+// authenticated client created the pull request without complaint. The fallback
+// keeps the release from ending in a manual step.
+function createVersionPullRequestViaApi(cli, root, { branch, title, body }) {
+  const { nameWithOwner } = JSON.parse(execFileSync(cli, ['repo', 'view', '--json', 'nameWithOwner'],
+    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+  execFileSync(cli, ['api', '-X', 'POST', `repos/${nameWithOwner}/pulls`, '-f', `title=${title}`,
+    '-f', `head=${branch}`, '-f', 'base=main', '-F', `body=@${body}`],
+  { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+// The tag and the release branch are already pushed when this runs, so a
+// failure here must never read as a failed release. `gh pr create` can also
+// fail on a transient API error when it runs immediately after the push,
+// because the new head branch is not resolvable yet: that is the race behind
+// the "no commits between" and "head sha can't be blank" responses. Retry with
+// bounded backoff, accept a PR that exists, and when it truly cannot be
+// created, name the recovery instead of surfacing a child-process error.
+export function createVersionPullRequest({ root, branch, version, tag, attempts = pullRequestRetryDelaysMs.length + 1,
+  delaysMs = pullRequestRetryDelaysMs, sleep = sleepFor }) {
+  const cli = githubCli(root);
+  const title = `chore: release Kinetick Code ${version}`;
   const temporary = mkdtempSync(path.join(tmpdir(), 'mcode-version-pr-'));
   try {
     const body = path.join(temporary, 'body.md');
     writeFileSync(body, `Update the root and TUI source versions to ${version}.\n\nTag \`${tag}\` points to this version commit. The tag-triggered CLI release workflow builds and validates the npm installation archive. Merge this PR to carry the released source version back to main; do not move or recreate the release tag.\n`);
-    execFileSync(githubCli(root), ['pr', 'create', '--base', 'main', '--head', branch,
-      '--title', `chore: release MiniMax Code ${version}`, '--body-file', body], { cwd: root, stdio: 'inherit' });
+    let failure = '';
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        execFileSync(cli, ['pr', 'create', '--base', 'main', '--head', branch,
+          '--title', title, '--body-file', body], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        return;
+      } catch (error) {
+        failure = `${error.stderr || error.stdout || error.message}`.trim();
+        // An earlier attempt can have created the PR before failing to report it.
+        if (/already exists/i.test(failure)) return;
+        if (attempt + 1 < attempts) {
+          console.error(`gh pr create failed (attempt ${attempt + 1} of ${attempts}): ${failure}`);
+          sleep(delaysMs[Math.min(attempt, delaysMs.length - 1)]);
+        }
+      }
+    }
+    // The retries may have succeeded without reporting a URL, and the PR may
+    // pre-date this run when a maintainer re-runs the release command.
+    if (versionPullRequestNumber(cli, root, branch) > 0) {
+      console.error(`Version PR for ${branch} already exists; continuing.`);
+      return;
+    }
+    // `gh pr create` can be refused on this repository while the same client's
+    // REST endpoint works, so try that before asking for a hand.
+    try {
+      createVersionPullRequestViaApi(cli, root, { branch, title, body });
+      console.error(`Created the version PR for ${branch} through the REST endpoint.`);
+      return;
+    } catch (error) {
+      failure = `${failure}\nvia the API: ${`${error.stderr || error.message}`.trim()}`;
+    }
+    if (versionPullRequestNumber(cli, root, branch) > 0) {
+      console.error(`Version PR for ${branch} already exists; continuing.`);
+      return;
+    }
+    throw new Error(`The release is pushed (tag ${tag}, branch ${branch}) but its version PR could not be created: ${failure}\n` +
+      `Create it by hand, without touching the tag:\n  ${cli} pr create --base main --head ${branch} --title "${title}" --body "<release notes>"`);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }
 
 export function releaseCli({ root, version, dryRun = false, openPullRequest = createVersionPullRequest }) {
   const tag = `v${version}`;
   versionFromTag(tag);
+  // Retired scheme: releases used to be `<upstream core>-fork.N` prereleases.
+  // Refuse the suffix so it cannot come back by habit; the version is a plain
+  // number of this repository's own sequence. A bare `-fork` is a valid SemVer
+  // prerelease identifier, so it needs refusing explicitly rather than by the
+  // ordinal pattern alone.
+  if (/-fork(\.|$)/.test(version)) {
+    throw new Error('The `-fork` release suffix is retired; release a plain version (see docs/releasing.md).');
+  }
   const branch = `release/${tag}`;
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   if (git('status', '--porcelain')) throw new Error('Release requires a clean working tree, including untracked files.');
   const current = cliBuildVersion(root, null);
-  if (compareVersions(version, current) <= 0) throw new Error(`Release version must be newer than ${current}.`);
+  // Versions are this repository's own plain SemVer sequence: the release must
+  // simply be newer than the committed one. A prerelease tag is still allowed
+  // when it is genuinely newer (0.5.3-rc.1 above 0.5.2), and it publishes as a
+  // GitHub prerelease that the `stable` channel ignores.
+  if (compareVersions(version, current) <= 0) {
+    throw new Error(`Release version must be newer than ${current}.`);
+  }
   git('fetch', '--no-tags', 'origin', 'main');
   const base = git('rev-parse', 'HEAD');
   if (base !== git('rev-parse', 'refs/remotes/origin/main')) throw new Error('Start the release from the latest origin/main commit.');
@@ -80,11 +166,11 @@ export function releaseCli({ root, version, dryRun = false, openPullRequest = cr
     writeFileSync(file, JSON.stringify(manifest, null, 2) + '\n');
   }
   git('add', '--', ...versionFiles);
-  git('commit', '-m', `chore: release MiniMax Code ${version}`);
+  git('commit', '-m', `chore: release Kinetick Code ${version}`);
   if (git('status', '--porcelain')) throw new Error('Working tree changed during the version commit; inspect it before tagging.');
   if (git('diff', '--name-only', base, 'HEAD') !== [...versionFiles].sort().join('\n')) throw new Error('Version commit must change only the two package manifests.');
   cliBuildVersion(root, tag);
-  git('tag', '-a', tag, '-m', `MiniMax Code ${version}`);
+  git('tag', '-a', tag, '-m', `Kinetick Code ${version}`);
   // Push both refs or neither. Never force an existing tag or update main.
   git('push', '--atomic', '--set-upstream', 'origin', `refs/heads/${branch}:refs/heads/${branch}`, `refs/tags/${tag}:refs/tags/${tag}`);
   console.log(`Pushed ${branch} and ${tag}; CI will build and publish the archive after validation.`);

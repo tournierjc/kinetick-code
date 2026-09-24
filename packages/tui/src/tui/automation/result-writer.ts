@@ -4,7 +4,7 @@ import path from 'node:path';
 import { isExecResultV1, type ExecResultV1 } from '../../application/exec-result.js';
 import { parseTuiStatusLineItems } from '../shell/status-line-items.js';
 
-export const MCODE_TUI_RESULT_PATH_ENV = 'MCODE_TUI_RESULT_PATH';
+export const KCODE_TUI_RESULT_PATH_ENV = 'MCODE_TUI_RESULT_PATH';
 
 export interface TuiAutomationResultWriter {
   write(result: ExecResultV1): Promise<void>;

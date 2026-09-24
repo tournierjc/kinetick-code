@@ -17,71 +17,9 @@ import { parse as parseYaml } from 'yaml';
 import { cliBuildVersion, cliExternalModules, cliReleaseTargets, versionFromTag } from '../scripts/lib/cli-release.mjs';
 import { releaseManifest } from '../scripts/package-cli-release.mjs';
 import { validateReleaseReports } from '../scripts/publish-cli-release.mjs';
-import { compareVersions, releaseCli } from '../scripts/release-cli.mjs';
-import { compareRuns, exitCodeForStatus, renderReport, spread, validateRun, validateRequest, validateToolOutput, median, selectScenarios } from '../scripts/perf/report.mjs';
+import { compareVersions, createVersionPullRequest, releaseCli } from '../scripts/release-cli.mjs';
+import { compareRuns, validateRun, validateRequest, validateToolOutput, median, selectScenarios } from '../scripts/perf/report.mjs';
 import { copyMcodeToolsArtifact, downloadMcodeToolsArtifact, MCODE_TOOLS_ARTIFACT } from '../scripts/lib/mcode-tools-artifact.mjs';
-import { checkWindowsSourceLocation, runWindowsSourceLocationCheck } from '../scripts/check-windows-source-location.mjs';
-
-test('Windows source preflight accepts localized fsutil labels', () => {
-  const result = checkWindowsSourceLocation({
-    platform: 'win32',
-    cwd: 'C:\\repo',
-    execFile: (_command, args) => args[1] === 'drivetype'
-      ? 'Laufwerkstyp: DRIVE_FIXED\n'
-      : 'Dateisystemname: NTFS\n',
-  });
-  assert.deepEqual(result, { ok: true, skipped: false });
-});
-
-test('Windows source preflight requires a local NTFS checkout', () => {
-  const calls = [];
-  const execFile = (command, args) => {
-    calls.push([command, args]);
-    if (args[1] === 'drivetype') return 'Drive type is : DRIVE_FIXED\n';
-    return 'File System Name             : NTFS\n';
-  };
-  assert.deepEqual(
-    checkWindowsSourceLocation({ platform: 'win32', cwd: 'C:\\repo', execFile }),
-    { ok: true, skipped: false },
-  );
-  assert.deepEqual(calls.map(([command, args]) => [command, args[1], args[2]]), [
-    ['fsutil', 'drivetype', 'C:'],
-    ['fsutil', 'volumeinfo', 'C:'],
-  ]);
-});
-
-test('Windows source preflight rejects unsupported volumes clearly', () => {
-  const run = (driveType, volumeInfo, cwd = 'C:\\repo', allowNonFixed = false) => checkWindowsSourceLocation({
-    platform: 'win32', cwd, allowNonFixed,
-    execFile: (_command, args) => args[1] === 'drivetype' ? driveType : volumeInfo,
-  });
-  assert.match(run('Drive type is : DRIVE_REMOTE\n', 'File System Name : NTFS\n').reason, /not a local fixed drive/);
-  assert.deepEqual(
-    run('Drive type is : DRIVE_REMOTE\n', 'File System Name : NTFS\n', 'C:\\repo', true),
-    { ok: true, skipped: false },
-  );
-  assert.match(run('Drive type is : DRIVE_FIXED\n', 'File System Name : NTFS\n', '\\\\server\\share\\repo').reason, /not a local drive-letter path/);
-});
-
-test('Windows source preflight is a no-op on non-Windows platforms', () => {
-  assert.deepEqual(
-    checkWindowsSourceLocation({ platform: 'linux', execFile: () => assert.fail('must not run fsutil') }),
-    { ok: true, skipped: true },
-  );
-});
-
-test('Windows source preflight propagates a failed check to the CLI', () => {
-  const messages = [];
-  const result = runWindowsSourceLocationCheck({
-    platform: 'win32',
-    cwd: 'C:\\repo',
-    execFile: () => { throw new Error('fsutil unavailable'); },
-    report: (message) => messages.push(message),
-  });
-  assert.equal(result.ok, false);
-  assert.equal(messages.length, 1);
-  assert.match(messages[0], /fsutil unavailable/);
-});
 
 test('artifact download recovers from TLS reset and interrupted response bodies', async () => {
   const reset = new TypeError('fetch failed', { cause: Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }) });
@@ -222,91 +160,17 @@ test('performance request audit rejects truncated wire history and empty tool re
   assert.doesNotThrow(() => validateToolOutput(realpathSync(process.cwd()) + '\n', 'pwd', process.cwd()));
 });
 
-const perfConfig = { repetitions: 3, confirmPairs: 2, maxSpread: 0.3, thresholds: { cpuSeconds: { relative: 0.2, absolute: 0.5 } } };
-const perfRuns = values => values.map(cpuSeconds => ({ cpuSeconds }));
-
-test('performance comparison settles clean first pairs and rejects incomplete or invalid samples', () => {
+test('performance comparison rejects incomplete, invalid and unstable samples', () => {
+  const config = { repetitions: 3, maxSpread: 0.3, thresholds: { cpuSeconds: { relative: 0.2, absolute: 0.5 } } };
+  const runs = values => values.map(cpuSeconds => ({ cpuSeconds }));
   assert.equal(median([3, 1, 2]), 2);
-  assert.equal(compareRuns(perfRuns([10, 10, 10]), perfRuns([10, 10, 10]), perfConfig)[0].status, 'PASS');
-  assert.equal(compareRuns(perfRuns([1, 1, 1]), perfRuns([1.4, 1.4, 1.4]), perfConfig)[0].status, 'PASS');
-  // Over budget or noisy on either side: escalate to confirmation pairs instead of a verdict.
-  assert.equal(compareRuns(perfRuns([10, 10, 10]), perfRuns([13, 13, 13]), perfConfig)[0].status, 'NEEDS_CONFIRMATION');
-  assert.equal(compareRuns(perfRuns([10, 10, 10]), perfRuns([10, 10, 14]), perfConfig)[0].status, 'NEEDS_CONFIRMATION');
-  assert.equal(compareRuns(perfRuns([10, 10, 14]), perfRuns([10, 10, 10]), perfConfig)[0].status, 'NEEDS_CONFIRMATION');
-  // Without confirmation pairs configured, the first pairs are final and never escalate.
-  const single = { ...perfConfig, confirmPairs: 0 };
-  assert.equal(compareRuns(perfRuns([10, 10, 10]), perfRuns([13, 13, 13]), single)[0].status, 'REGRESSION');
-  assert.equal(compareRuns(perfRuns([10, 10, 10]), perfRuns([10, 10, 14]), single)[0].status, 'INCONCLUSIVE');
-  assert.throws(() => compareRuns(perfRuns([10, 10]), perfRuns([10, 10, 10]), perfConfig));
-  assert.throws(() => compareRuns(perfRuns([10, 10, 10, 10]), perfRuns([10, 10, 10, 10]), perfConfig));
-  assert.throws(() => compareRuns(perfRuns([10, NaN, 10]), perfRuns([10, 10, 10]), perfConfig));
-  assert.throws(() => compareRuns(perfRuns([0, 0, 0]), perfRuns([10, 10, 10]), perfConfig));
-});
-
-test('performance confirmation pairs fail confirmed regressions and absorb single outliers', () => {
-  const five = (before, after) => compareRuns(perfRuns(before), perfRuns(after), perfConfig)[0];
-  // Consistently worse beyond budget: confirmed regression.
-  assert.equal(five([10, 10, 10, 10, 10], [13, 13, 13, 13, 13]).status, 'REGRESSION');
-  // One corrupted pair cannot veto a confirmed regression.
-  assert.equal(five([10, 10, 10, 10, 20], [13, 13, 13, 13, 13]).status, 'REGRESSION');
-  // Unanimous paired evidence outranks side dispersion.
-  assert.equal(five([10, 10, 10, 10, 10], [13, 13, 18, 13, 20]).status, 'REGRESSION');
-  // One slow candidate sample no longer blocks a faster candidate.
-  const outlier = five([10, 10, 10, 10, 10], [9.5, 9.6, 9.7, 9.6, 13.5]);
-  assert.deepEqual([outlier.status, outlier.pairs, outlier.overBudgetPairs, outlier.trimmedSamples], ['PASS', 5, 1, 1]);
-  assert.ok(outlier.headSpread <= 0.3);
-  // Persistent noise stays inconclusive: neither a block nor a pass.
-  assert.equal(five([10, 10, 10, 10, 10], [9, 9.5, 10, 14, 15]).status, 'INCONCLUSIVE');
-  // An over-budget median that pairs do not reproduce is inconclusive, not a regression.
-  assert.equal(five([10, 14, 10, 14, 10], [13, 13, 13, 13, 13]).status, 'INCONCLUSIVE');
-  // Separate medians must not turn one over-budget paired delta into a regression.
-  const shifted = five([10, 10, 10, 20, 20], [10.1, 10.1, 20.1, 20.1, 20.1]);
-  assert.deepEqual([shifted.status, shifted.overBudgetPairs], ['INCONCLUSIVE', 1]);
-  assert.equal(spread([10, 10, 14]), 0.4);
-  assert.equal(spread([10, 10, 14], 1), 0);
-  assert.throws(() => spread([10, 10], 1));
-});
-
-test('performance exit codes fail regressions and errors but not inconclusive noise', () => {
-  assert.equal(exitCodeForStatus('PASS'), 0);
-  assert.equal(exitCodeForStatus('REGRESSION'), 1);
-  assert.equal(exitCodeForStatus('ERROR'), 1);
-  assert.equal(exitCodeForStatus('INCONCLUSIVE'), 2);
-  assert.throws(() => exitCodeForStatus('NEEDS_CONFIRMATION'));
-});
-
-test('performance workflow warns on basic inconclusive runs but fails full inconclusive runs', () => {
-  const workflow = parseYaml(readFileSync(new URL('../.github/workflows/performance.yml', import.meta.url), 'utf8'));
-  const compare = workflow.jobs.performance.steps.find(s => s.name === 'Compare on this runner');
-  assert.match(compare.run, /\|\| status=\$\?/);
-  assert.match(compare.run, /if \[ "\$status" -eq 2 \]/);
-  assert.match(compare.run, /if \[ "\$PERF_SUITE" = "full" \]/);
-  assert.match(compare.run, /::error title=Full performance check inconclusive::/);
-  assert.match(compare.run, /exit 2/);
-  assert.match(compare.run, /::warning title=Performance check inconclusive::/);
-  assert.match(compare.run, /exit 0/);
-  assert.match(compare.run, /exit "\$status"/);
-  const config = JSON.parse(readFileSync(new URL('../scripts/perf/config.json', import.meta.url), 'utf8'));
-  assert.equal(config.confirmPairs, 2);
-});
-
-test('performance report states suite-specific inconclusive behavior', () => {
-  const row = { metric: 'durationMs', baseline: 17820, candidate: 17530, change: -0.016,
-    pairs: 5, overBudgetPairs: 1, trimmedSamples: 1, baseSpread: 0.05, headSpread: 0.34, status: 'INCONCLUSIVE' };
-  const report = { status: 'INCONCLUSIVE', baseRevision: 'base-sha', headRevision: 'head-sha',
-    benchmarkRepository: 'https://example.invalid/bench', benchmarkRevision: 'bench-sha',
-    nodeVersion: 'v22.0.0', bunVersion: '1.0.0',
-    host: { cpuModel: 'test', cpus: 3, totalMemBytes: 2 ** 33, platform: 'darwin', osRelease: '24.0.0', arch: 'arm64' },
-    config: { repetitions: 3, confirmPairs: 2 }, suite: 'basic', selectedScenarios: ['upstream-100'],
-    results: [{ id: 'upstream-100', comparison: [row] }] };
-  const markdown = renderReport(report);
-  assert.match(markdown, /Status: \*\*INCONCLUSIVE\*\* — runner too noisy to conclude; non-blocking for the basic suite/);
-  assert.match(markdown, /\| 1\/5 \| INCONCLUSIVE \|/);
-  assert.match(markdown, /basic-suite result as a non-blocking warning/);
-  assert.match(markdown, /confirmation pairs when unsettled/);
-  const full = renderReport({ ...report, suite: 'full' });
-  assert.match(full, /Status: \*\*INCONCLUSIVE\*\* — runner too noisy to conclude; blocking for the full suite/);
-  assert.match(full, /full-suite result fails the check/);
+  assert.equal(compareRuns(runs([10, 10, 10]), runs([10, 10, 10]), config)[0].status, 'PASS');
+  assert.equal(compareRuns(runs([10, 10, 10]), runs([13, 13, 13]), config)[0].status, 'REGRESSION');
+  assert.equal(compareRuns(runs([1, 1, 1]), runs([1.4, 1.4, 1.4]), config)[0].status, 'PASS');
+  assert.equal(compareRuns(runs([10, 10, 10]), runs([10, 10, 20]), config)[0].status, 'INCONCLUSIVE');
+  assert.throws(() => compareRuns(runs([10, 10]), runs([10, 10, 10]), config));
+  assert.throws(() => compareRuns(runs([10, NaN, 10]), runs([10, 10, 10]), config));
+  assert.throws(() => compareRuns(runs([0, 0, 0]), runs([10, 10, 10]), config));
 });
 
 test('performance measurements require complete successful tool execution', () => {
@@ -415,6 +279,17 @@ test('release command rejects dirty trees, version regressions, stale bases and 
   const f = cliReleaseFixture(t);
   const release = version => releaseCli({ root: f.root, version, dryRun: true });
   for (const version of ['1.2.3', '1.2.2', '1.2.3-rc.1']) assert.throws(() => release(version), /must be newer/);
+  // The retired `-fork.N` scheme is refused even when it would order above the
+  // committed version, and so is a bare `-fork`, which is a valid SemVer
+  // prerelease identifier and would otherwise carry the retired name into a tag.
+  assert.throws(() => release('1.2.3-fork.1'), /-fork` release suffix is retired/);
+  assert.throws(() => release('1.2.4-fork.2'), /-fork` release suffix is retired/);
+  assert.throws(() => release('1.2.4-fork'), /-fork` release suffix is retired/);
+  assert.throws(() => release('2.0.0-fork'), /-fork` release suffix is retired/);
+  // A genuinely newer version passes, plain or prerelease.
+  releaseCli({ root: f.root, version: '1.2.4-rc.1', dryRun: true });
+  releaseCli({ root: f.root, version: '1.2.4', dryRun: true });
+  releaseCli({ root: f.root, version: '2.0.0', dryRun: true });
   writeFileSync(path.join(f.root, 'untracked'), 'unfinished');
   assert.throws(() => release('1.2.4'), /clean working tree/);
   f.git('add', 'untracked'); f.git('commit', '-m', 'Unreviewed change');
@@ -441,6 +316,108 @@ test('rejected tag pushes cannot leave a partial remote release branch or open a
   assert.equal(f.git('rev-parse', 'v1.2.4^{commit}'), f.git('rev-parse', 'HEAD'));
 });
 
+// The version PR is the only release step that talks to GitHub, and it runs
+// immediately after the atomic push. A transient failure there used to surface
+// as a bare child-process error with no hint that the tag and branch were
+// already pushed, so a release that was publishing looked broken. The tests
+// above inject `openPullRequest` and never reach this function; these drive it
+// through a stub `gh` on PATH.
+function fakeGithubCli(t, mode) {
+  const bin = mkdtempSync(path.join(tmpdir(), 'fake-gh-'));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  const calls = path.join(bin, 'create-calls'), log = path.join(bin, 'create-args'), listed = path.join(bin, 'pull-request-exists');
+  const program = `#!/usr/bin/env node
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === '--help') process.exit(0);
+if (args[0] === 'pr' && args[1] === 'list') {
+  process.stdout.write(existsSync(${JSON.stringify(listed)}) ? '[{"number":51}]' : '[]');
+  process.exit(0);
+}
+if (args[0] === 'repo' && args[1] === 'view') {
+  process.stdout.write('{"nameWithOwner":"example/kinetick-code"}');
+  process.exit(0);
+}
+appendFileSync(${JSON.stringify(log)}, args.join(' ') + '\\n');
+if (args[0] === 'api') {
+  if (${JSON.stringify(mode)} === 'failing') {
+    process.stderr.write('HTTP 403: Resource not accessible by integration');
+    process.exit(1);
+  }
+  process.stdout.write('{"number":51,"html_url":"https://github.com/example/kinetick-code/pull/51"}');
+  process.exit(0);
+}
+const attempt = (existsSync(${JSON.stringify(calls)}) ? Number(readFileSync(${JSON.stringify(calls)}, 'utf8')) : 0) + 1;
+writeFileSync(${JSON.stringify(calls)}, String(attempt));
+const mode = ${JSON.stringify(mode)};
+if (mode === 'graphql-only') {
+  process.stderr.write('GraphQL: tournierjc does not have the correct permissions to execute CreatePullRequest');
+  process.exit(1);
+}
+if (mode.startsWith('transient:') && attempt <= Number(mode.slice('transient:'.length))) {
+  process.stderr.write("GraphQL: Head sha can't be blank, No commits between main and release/v1.2.4 (createPullRequest)");
+  process.exit(1);
+}
+if (mode === 'exists') {
+  process.stderr.write('a pull request for branch "release/v1.2.4" into branch "main" already exists');
+  process.exit(1);
+}
+if (mode === 'failing') {
+  process.stderr.write('HTTP 403: Resource not accessible by integration');
+  process.exit(1);
+}
+process.stdout.write('https://github.com/example/kinetick-code/pull/51');
+`;
+  writeFileSync(path.join(bin, 'gh'), program, { mode: 0o755 });
+  // A wrapper that refuses to run keeps `gh-axi` out of the search path on hosts that install it.
+  writeFileSync(path.join(bin, 'gh-axi'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const previous = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${previous}`;
+  t.after(() => { process.env.PATH = previous; });
+  return { listed,
+    createCalls: () => existsSync(calls) ? Number(readFileSync(calls, 'utf8')) : 0,
+    createArguments: () => existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [] };
+}
+
+test('version PR creation retries the transient failure that follows the release push', { skip: process.platform === 'win32' }, t => {
+  const fake = fakeGithubCli(t, 'transient:2');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(fake.createCalls(), 3);
+  assert.equal(fake.createArguments().length, 3);
+  for (const arguments_ of fake.createArguments())
+    assert.match(arguments_, /^pr create --base main --head release\/v1\.2\.4 --title chore: release Kinetick Code 1\.2\.4 --body-file /);
+});
+
+test('version PR creation accepts an existing pull request and otherwise names the recovery', { skip: process.platform === 'win32' }, t => {
+  const existing = fakeGithubCli(t, 'exists');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(existing.createCalls(), 1);
+
+  const created = fakeGithubCli(t, 'failing');
+  writeFileSync(created.listed, 'created by an earlier attempt\n');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(created.createCalls(), 4);
+
+  const missing = fakeGithubCli(t, 'failing');
+  assert.throws(() => createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} }),
+    error => {
+      assert.match(error.message, /HTTP 403: Resource not accessible by integration/);
+      assert.match(error.message, /The release is pushed \(tag v1\.2\.4, branch release\/v1\.2\.4\)/);
+      assert.match(error.message, /gh pr create --base main --head release\/v1\.2\.4 --title "chore: release Kinetick Code 1\.2\.4"/);
+      assert.match(error.message, /via the API: HTTP 403/);
+      return true;
+    });
+});
+
+test('version PR creation falls back to the REST endpoint when gh pr create is refused', { skip: process.platform === 'win32' }, t => {
+  const fake = fakeGithubCli(t, 'graphql-only');
+  createVersionPullRequest({ root: process.cwd(), branch: 'release/v1.2.4', version: '1.2.4', tag: 'v1.2.4', sleep: () => {} });
+  assert.equal(fake.createCalls(), 4);
+  const created = fake.createArguments().filter(line => line.startsWith('api '));
+  assert.equal(created.length, 1);
+  assert.match(created[0], /^api -X POST repos\/example\/kinetick-code\/pulls -f title=chore: release Kinetick Code 1\.2\.4 -f head=release\/v1\.2\.4 -f base=main -F body=@/);
+});
+
 test('npm release manifests require native SQLite and pin installed external dependencies', t => {
   const f = fixture(t);
   for (const name of cliExternalModules) {
@@ -451,7 +428,7 @@ test('npm release manifests require native SQLite and pin installed external dep
   const manifest = releaseManifest([f.root], '0.4.13');
   assert.equal(manifest.version, '0.4.13');
   assert.equal(manifest.private, true);
-  assert.equal(manifest.bin.mcode, 'cli.js');
+  assert.equal(manifest.bin.kcode, 'cli.js');
   assert.equal(manifest.dependencies['better-sqlite3'], '1.2.3');
   assert.equal(manifest.dependencies['@vscode/ripgrep'], '1.2.3');
   assert.equal(manifest.optionalDependencies['@mariozechner/clipboard'], '1.2.3');
@@ -464,7 +441,7 @@ test('npm release manifests require native SQLite and pin installed external dep
 
 test('CLI publication requires every supported installation receipt for the exact archive and revision', t => {
   const f = fixture(t);
-  const archive = path.join(f.root, 'minimax-code-0.4.13.tar.gz');
+  const archive = path.join(f.root, 'kinetick-code-0.4.13.tar.gz');
   writeFileSync(archive, 'synthetic archive');
   const sha256 = createHash('sha256').update(readFileSync(archive)).digest('hex');
   writeFileSync(`${archive}.sha256`, `${sha256}  ${path.basename(archive)}\n`);
@@ -743,18 +720,15 @@ test('CI aggregate rejects failed, cancelled, missing and unexpectedly skipped c
     assert.notEqual(run({ ...full, DOCS_ONLY: scope }), 0);
 });
 
-test('ordinary CI runs a focused Windows contract while compatibility remains macOS/Linux', () => {
+test('ordinary CI pauses Windows without invoking release-only matrices', () => {
   const readWorkflow = name => parseYaml(readFileSync(new URL(`../.github/workflows/${name}.yml`, import.meta.url), 'utf8'));
   const ci = readWorkflow('ci');
   assert.ok(Object.hasOwn(ci.on, 'pull_request'));
   assert.deepEqual(ci.on.push.branches, ['main']);
   assert.deepEqual(Object.keys(ci.jobs).sort(), ['changes', 'docs', 'verification', 'verify']);
-  assert.deepEqual(ci.jobs.verify.strategy.matrix.os, ['ubuntu-latest', 'macos-latest', 'windows-latest']);
+  assert.deepEqual(ci.jobs.verify.strategy.matrix.os, ['ubuntu-latest', 'macos-latest']);
   assert.deepEqual(ci.jobs.verify.strategy.matrix.node, ['24']);
-  assert.deepEqual(ci.jobs.verify.strategy.matrix.include, [
-    { os: 'ubuntu-latest', node: '24', profile: 'full' },
-    { os: 'windows-latest', node: '24', profile: 'windows' },
-  ]);
+  assert.deepEqual(ci.jobs.verify.strategy.matrix.include, [{ os: 'ubuntu-latest', node: '24', profile: 'full' }]);
   assert.equal(ci.jobs.verify.needs, 'changes');
   assert.equal(ci.jobs.verify.if, "needs.changes.outputs.docs_only == 'false'");
   assert.equal(ci.jobs.docs.if, "needs.changes.outputs.docs_only == 'true'");
@@ -764,11 +738,12 @@ test('ordinary CI runs a focused Windows contract while compatibility remains ma
   const compatibility = readWorkflow('compatibility');
   assert.deepEqual(Object.keys(compatibility.on).sort(), ['schedule', 'workflow_dispatch']);
   assert.deepEqual(compatibility.jobs.compatibility.strategy.matrix.node, ['22.19.0', '24.2.0', '25', '26']);
-  assert.deepEqual(compatibility.jobs.compatibility.strategy.matrix.os, ['ubuntu-latest', 'macos-latest']);
+  assert.deepEqual(compatibility.jobs.compatibility.strategy.matrix.os, ci.jobs.verify.strategy.matrix.os);
   const audit = readWorkflow('security');
   assert.ok(Object.hasOwn(audit.on, 'pull_request'));
   assert.ok(audit.jobs['source-history-artifact'].steps.some(step => step.run?.includes('gitleaks dir dist')));
 });
+
 test('manual source candidates pin every checkout and receipt to the selected revision', () => {
   const workflow = parseYaml(readFileSync(new URL('../.github/workflows/source-candidate.yml', import.meta.url), 'utf8'));
   assert.deepEqual(Object.keys(workflow.on).sort(), ['workflow_call', 'workflow_dispatch']);
@@ -810,19 +785,19 @@ function archiveFixture(t, entries) {
 
 test('native and Node source extractors produce identical file content', async t => {
   const f = archiveFixture(t, [
-    { path: 'minimax-code/README.md', content: 'Source preview\n' },
-    { path: 'minimax-code/nested/file.txt', content: 'portable contents\n' },
+    { path: 'kinetick-code/README.md', content: 'Source preview\n' },
+    { path: 'kinetick-code/nested/file.txt', content: 'portable contents\n' },
   ]);
   for (const extractor of ['native', 'node']) {
     const output = path.join(f.directory, extractor);
     mkdirSync(output);
     assert.equal(await extractSourceArchive(f.archive, output, extractor), extractor);
-    assert.equal(readFileSync(path.join(output, 'minimax-code/nested/file.txt'), 'utf8'), 'portable contents\n');
+    assert.equal(readFileSync(path.join(output, 'kinetick-code/nested/file.txt'), 'utf8'), 'portable contents\n');
   }
 });
 
 test('Windows extraction ignores a shadow tar executable on PATH', { skip: process.platform !== 'win32' }, t => {
-  const f = archiveFixture(t, [{ path: 'minimax-code/README.md', content: 'Windows archive\n' }]);
+  const f = archiveFixture(t, [{ path: 'kinetick-code/README.md', content: 'Windows archive\n' }]);
   const shadow = path.join(f.directory, 'shadow');
   const output = path.join(f.directory, 'output');
   mkdirSync(shadow);
@@ -837,17 +812,17 @@ test('Windows extraction ignores a shadow tar executable on PATH', { skip: proce
     encoding: 'utf8', env: { ...process.env, PATH: `${shadow}${path.delimiter}${process.env.PATH ?? ''}` },
   });
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(readFileSync(path.join(output, 'minimax-code/README.md'), 'utf8'), 'Windows archive\n');
+  assert.equal(readFileSync(path.join(output, 'kinetick-code/README.md'), 'utf8'), 'Windows archive\n');
 });
 
 test('source archive rejects traversal, links, Git history and duplicate entries before writing files', async t => {
-  const good = { path: 'minimax-code/good.txt', content: 'safe' };
+  const good = { path: 'kinetick-code/good.txt', content: 'safe' };
   for (const bad of [
-    { path: 'minimax-code/../../outside.txt', content: 'unsafe' },
-    { path: 'minimax-code/link', type: 'SymbolicLink', linkpath: '../../outside' },
-    { path: 'minimax-code/link', type: 'Link', linkpath: '../../outside' },
-    { path: 'minimax-code/.git/config', content: 'history' },
-    { path: 'minimax-code/file:stream', content: 'stream' },
+    { path: 'kinetick-code/../../outside.txt', content: 'unsafe' },
+    { path: 'kinetick-code/link', type: 'SymbolicLink', linkpath: '../../outside' },
+    { path: 'kinetick-code/link', type: 'Link', linkpath: '../../outside' },
+    { path: 'kinetick-code/.git/config', content: 'history' },
+    { path: 'kinetick-code/file:stream', content: 'stream' },
     good,
   ]) {
     const f = archiveFixture(t, [good, bad]);
@@ -861,7 +836,7 @@ test('source archive rejects traversal, links, Git history and duplicate entries
 });
 
 test('candidate rejects mismatched receipts and requires successful same-revision Linux and macOS reports', t => {
-  const f = archiveFixture(t, [{ path: 'minimax-code/README.md', content: 'source' }]);
+  const f = archiveFixture(t, [{ path: 'kinetick-code/README.md', content: 'source' }]);
   const revision = 'a'.repeat(40);
   const receipt = { schemaVersion: 1, revision, sha256: createHash('sha256').update(readFileSync(f.archive)).digest('hex'), format: 'source-only-no-git-history', publicationPerformed: false };
   writeFileSync(`${f.archive}.json`, JSON.stringify(receipt));

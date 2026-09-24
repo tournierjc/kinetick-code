@@ -1,13 +1,13 @@
 import type {
-  McodeProviderTemplate,
-  McodeProviderView,
+  KcodeProviderTemplate,
+  KcodeProviderView,
 } from "../../src/provider/contract.js";
 import { stripAnsi, visibleWidth } from "../../src/tui/rendering/text.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { TuiProviderOnboarding } from "../../src/tui/features/provider/onboarding.js";
 
-const knownTemplate: McodeProviderTemplate = {
+const knownTemplate: KcodeProviderTemplate = {
   providerId: "deepseek",
   name: "DeepSeek",
   baseUrl: "https://api.deepseek.com/v1",
@@ -335,6 +335,60 @@ describe("TuiProviderOnboarding", () => {
     });
   });
 
+  it("connects a local model from the catalogue without a key", async () => {
+    const onSave = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:local-model" },
+    }));
+    const onComplete = vi.fn(async () => undefined);
+    const onboarding = new TuiProviderOnboarding({
+      templates: [],
+      onSave,
+      onComplete,
+      onCancel: vi.fn(),
+      requestRender: vi.fn(),
+    });
+
+    const catalogue = stripAnsi(onboarding.render(90).join("\n"));
+    expect(catalogue).toContain("Local model");
+    expect(catalogue).toContain("OpenAI-compatible server · API key optional");
+
+    // Down to the local entry, which pre-fills the endpoint it starts from.
+    onboarding.handleInput("\u001b[B");
+    onboarding.handleInput("\r");
+    onboarding.handleInput("\r");
+    const urlStep = stripAnsi(onboarding.render(90).join("\n"));
+    expect(urlStep).toContain("Base URL");
+    expect(urlStep).toContain("http://localhost:11434/v1");
+
+    onboarding.handleInput("\r");
+    onboarding.handleInput("qwen3-local");
+    onboarding.handleInput("\r");
+    const keyStep = stripAnsi(onboarding.render(90).join("\n"));
+    expect(keyStep).toContain("API Key (optional)");
+    expect(keyStep).toContain("left empty");
+
+    // Enter on the empty field connects the endpoint with no credential.
+    onboarding.handleInput("\r");
+
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(onSave).toHaveBeenCalledWith({
+      name: "Local model",
+      baseUrl: "http://localhost:11434/v1",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "qwen3-local",
+          displayName: "qwen3-local",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "qwen3-local",
+      saveAndUse: true,
+    });
+  });
+
   it("keeps the form open when Runtime rejects the connection test", async () => {
     const onComplete = vi.fn();
     const onboarding = new TuiProviderOnboarding({
@@ -368,7 +422,7 @@ describe("TuiProviderOnboarding", () => {
   });
 });
 
-const savedConnection: McodeProviderView = {
+const savedConnection: KcodeProviderView = {
   providerId: "custom_provider:work",
   name: "DeepSeek Work",
   kind: "custom",
@@ -481,7 +535,7 @@ describe("existing connection onboarding", () => {
 });
 
 describe("preset endpoint editing", () => {
-  const template: McodeProviderTemplate = {
+  const template: KcodeProviderTemplate = {
     providerId: "zai",
     name: "Z.AI API",
     baseUrl: "https://api.z.ai/api/paas/v4",

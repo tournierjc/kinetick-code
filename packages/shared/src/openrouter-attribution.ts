@@ -1,6 +1,6 @@
 export const OPENROUTER_ATTRIBUTION_HEADERS = {
   'HTTP-Referer': 'https://agent.minimax.io/',
-  'X-OpenRouter-Title': 'MiniMax Code',
+  'X-OpenRouter-Title': 'Kinetick Code',
   'X-OpenRouter-Categories': 'cli-agent',
 } as const;
 
@@ -16,7 +16,7 @@ export function isOpenRouterApiUrl(value: string | undefined): boolean {
 
 /**
  * OpenRouter attributes usage per request. Product-owned values intentionally
- * win case-insensitively over user/provider headers so every MiniMax Code call
+ * win case-insensitively over user/provider headers so every Kinetick Code call
  * to the official endpoint is recorded under the same application identity.
  */
 export function withOpenRouterAttributionHeaders(

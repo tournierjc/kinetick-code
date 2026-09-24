@@ -1,7 +1,7 @@
 import type { DiscoveredModel } from '../connectivity/discover-models.js';
 import { enabledCustomProviders, type ModelCacheStatusView } from '../catalog/list-models.js';
 import type { ModelCacheData } from '../catalog/model-cache.js';
-import { MINIMAX_API_PROVIDER_ID } from '../identity.js';
+import { MINIMAX_API_PROVIDER_ID, hasDedicatedConnectionSurface } from '../identity.js';
 import { LocalModelProviderError } from '../contracts.js';
 import {
   discoverUserModelsCandidate as discoverUserModelsCandidateOperation,
@@ -89,6 +89,27 @@ export class LocalModelProviderService {
     );
   }
 
+  /**
+   * Every provider this profile can route through: the builtin `provider` tree
+   * first, then the user's `custom_provider` connections. `/provider` reads
+   * this list, so a connection the runtime already serves — a hand-written
+   * `provider.openrouter`, or an entry an earlier build left behind — is visible
+   * where connections are managed instead of only in `/model`.
+   *
+   * The identities that own a dedicated row are skipped: MiniMax keeps its
+   * Token Plan and API Key rows, and Codex and Copilot keep the sign-in rows
+   * their connectors synthesize, so listing their config entries too would
+   * render one connection twice.
+   */
+  listProviders(): ModelProviderView[] {
+    const config = this.context.deps.configGetter();
+    const cache = this.context.deps.cache.load();
+    const builtin = Object.entries(config.provider ?? {})
+      .filter(([providerId]) => !hasDedicatedConnectionSurface(providerId))
+      .map(([providerId, provider]) => buildBuiltinProviderView(config, cache, providerId, provider));
+    return [...builtin, ...this.listUserProviders()];
+  }
+
   revealModelProviderApiKey(input: { providerId: string }): string {
     const config = this.context.deps.configGetter();
     if (input.providerId === MINIMAX_API_PROVIDER_ID) {
@@ -158,7 +179,8 @@ export class LocalModelProviderService {
   async createUserProvider(input: {
     name?: string;
     baseUrl: string;
-    apiKey: string;
+    /** Absent or empty saves an endpoint that needs no authentication. */
+    apiKey?: string;
     apiFormat?: string;
     headers?: Record<string, string>;
     models?: UserModelInputView[];

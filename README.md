@@ -2,12 +2,25 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/wordmark-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/wordmark-light.svg">
-    <img src="docs/assets/wordmark-light.svg" alt="MiniMax Code" width="760">
+    <img src="docs/assets/wordmark-light.svg" alt="Kinetick Code" width="784">
   </picture>
 </p>
 
-<h1 align="center">MiniMax Code</h1>
+<h1 align="center">Kinetick Code (fork)</h1>
 <p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
+
+> [!IMPORTANT]
+> **This is a community fork of [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code)** maintained at
+> [`tournierjc/kinetick-code`](https://github.com/tournierjc/kinetick-code). It merges upstream regularly and enforces
+> fork-specific boundaries (no telemetry, no managed-service clients — see [Network egress](#network-egress)).
+> The official `filecdn.minimax.chat` one-command installer and the public `@minimax-ai/code` npm package deliver
+> **upstream** builds — they do not contain this fork's changes. To run this fork, install the verified archive from
+> [fork Releases](https://github.com/tournierjc/kinetick-code/releases) or build from this source. See
+> [docs/releasing.md#fork-release-process-tournierjckinetick-code](docs/releasing.md#fork-release-process-tournierjckinetick-code) for how releases are produced.
+> **Renamed:** this fork was `tournierjc/minimax-code-fork` and its command was `mcode`. GitHub redirects the old
+> URLs, but the current command is **`kcode`** and release archives are named `kinetick-code-<version>.tar.gz`.
+> An `mcode` launcher from an earlier install keeps working until you install a current archive; see
+> [installation](docs/installation.md#renamed-from-minimax-code-fork).
 <p align="center">
   <a href="#quick-start">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -23,43 +36,49 @@
 
 Understand a project, make changes, and run tests from your terminal. Use your MiniMax account or bring your own model, with search, plugins, and multimodal tools in the same workflow.
 
-[![Real MiniMax Code TUI output: fixing clamp, inspecting the diff, and running tests](docs/assets/tui-demo.png)](docs/demo.md)
+[![Real Kinetick Code TUI output: fixing clamp, inspecting the diff, and running tests](docs/assets/tui-demo.png)](docs/demo.md)
 
 <p align="center"><a href="docs/demo.md">Watch the 20-second demo →</a> · Real terminal output, with pauses shortened</p>
 
 ## Quick start
 
-### 1. Install MCode
+### 1. Install KCode
 
-Use the official installer for your platform. It installs the latest CLI, prepares a compatible Node.js runtime when needed, and does not require `sudo` or administrator privileges. Alpine / musl Linux is not supported by the one-command installer.
-
-**macOS / Linux / WSL**
-
-```bash
-curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash
-```
-
-**Windows (PowerShell)**
-
-```powershell
-irm https://filecdn.minimax.chat/public/install.ps1 | iex
-```
-
-The scripts install into `~/.minimax-code` on macOS / Linux / WSL and `%USERPROFILE%\.minimax-code` on Windows. The launchers are `bin/mcode` and `bin/mcode-tools` on POSIX, or `mcode.cmd` / `mcode.ps1` and `mcode-tools.cmd` / `mcode-tools.ps1` on Windows. Set `MCODE_INSTALL_DIR` before installation to choose a different location. See [Uninstall](#uninstall) to remove the CLI.
-
-**npm** — if you already have **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**:
+**This fork — GitHub Release archive (recommended).** Download the archive and checksum from the
+[latest fork release](https://github.com/tournierjc/kinetick-code/releases/latest), verify the checksum, and install
+with npm. Node.js **22.19+ (22.x), 24.2+ (24.x), 25, or 26** is required; npm still needs network access to public
+npm for runtime dependencies. For a `vX.Y.Z` release:
 
 ```bash
-npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3
+# Linux; on macOS use: shasum -a 256 -c kinetick-code-X.Y.Z.tar.gz.sha256
+sha256sum -c kinetick-code-X.Y.Z.tar.gz.sha256
+npm install --global ./kinetick-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+kcode --version
 ```
 
-The npm command uses the public registry, includes the optional SQLite dependency, and permits the package and SQLite installation scripts. See the [installation guide](docs/installation.md) for version pinning and Node.js compatibility.
+The archive passed the full CI verification and npm-install checks on Linux and macOS across the supported Node
+lines before publication, and its release notes carry the source commit and SHA-256. See
+[install a fork release archive](docs/installation.md#install-a-github-release-archive) and
+[fork release process](docs/releasing.md#fork-release-process-tournierjckinetick-code).
+
+**Alternative — build from this source.** See [Build from source](#build-from-source) below.
+
+**Upstream channels (not this fork).** The official installer and public npm package track upstream only:
+
+- macOS / Linux / WSL: `curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash`
+- Windows (PowerShell): `irm https://filecdn.minimax.chat/public/install.ps1 | iex`
+- npm: `npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3`
+
+These install into `~/.minimax-code` (POSIX) or `%USERPROFILE%\.minimax-code` (Windows) with launchers `bin/kcode` /
+`bin/mcode-tools`. Use them only when you explicitly want an upstream build without this fork's changes; installing
+through them replaces a fork installation. The built-in updater installs this fork's releases only, see
+[Updating](docs/installation.md#updating). See [Uninstall](#uninstall) to remove the CLI.
 
 Reopen your terminal and check the installation:
 
 ```bash
-mcode --version
-mcode --help
+kcode --version
+kcode --help
 ```
 
 See the official [quick start](https://agent.minimax.io/docs/cli/quick-start), [features](https://agent.minimax.io/docs/cli/features), and [troubleshooting](https://agent.minimax.io/docs/cli/faq).
@@ -69,16 +88,16 @@ See the official [quick start](https://agent.minimax.io/docs/cli/quick-start), [
 For a mainland China account:
 
 ```bash
-mcode login
+kcode login
 ```
 
 For a Global account:
 
 ```bash
-mcode login --region global
+kcode login --region global
 ```
 
-Complete sign-in in your browser, then open `mcode` and use `/status` to check your account and `/provider` to choose a model. Run `mcode logout` to sign out.
+Complete sign-in in your browser, then open `kcode` and use `/status` to check your account and `/provider` to choose a model. Run `kcode logout` to sign out.
 
 Token Plan requires an account with available credits. Builds from this repository and the published npm CLI `@minimax-ai/code@0.4.12` default to `~/.minimax` for user data (or `~/.minimax-<profile>` when a profile is selected). `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can override the data directory. The installer's `~/.minimax-code` installation directory is separate from this choice. See [Accounts and data](docs/installation.md#accounts-and-data) before locating or removing configuration and sessions.
 
@@ -88,17 +107,15 @@ Token Plan requires an account with available credits. Builds from this reposito
 BYOK does not require a MiniMax login. Set `MCODE_PROVIDER_API_KEY` in your current shell, then add a provider. Replace the example URL and model name with your provider's values:
 
 ```bash
-mcode provider add --name my-provider --base-url https://example.com/v1 \
+kcode provider add --name my-provider --base-url https://example.com/v1 \
   --api-format openai-completions --model my-model \
   --api-key-env MCODE_PROVIDER_API_KEY --use
-mcode
+kcode
 ```
 
-`--use` tests the first listed model before saving and selecting it. A failed connection test saves nothing. Omit `--use` to save without testing or changing the default model. For custom/local models, add `--context-limit 32768 --output-limit 4096` (use your server's actual limits). Each value must be a positive safe integer and applies to every repeated `--model`. Inspect configured limits with `mcode provider list --json`. Omitting these flags preserves the existing model-limit defaults.
+`--use` tests the first listed model before saving and selecting it. A failed connection test saves nothing. Omit `--use` to save without testing or changing the default model. For custom/local models, add `--context-limit 32768 --output-limit 4096` (use your server's actual limits). Each value must be a positive safe integer and applies to every repeated `--model`. Inspect configured limits with `kcode provider list --json`. Omitting these flags preserves the existing model-limit defaults.
 
-Supported API formats: `openai-completions`, `openai-responses`, and `anthropic-messages`. See the [model examples](docs/examples.md#2-choose-your-own-model) for environment variable setup, connection checks, and model overrides for a single run.
-
-Providers added this way are stored under `custom_provider` in the active profile's `config.yaml`; this is the supported path for third-party or self-hosted endpoints, while `minimax_api` stays reserved for the official MiniMax API. Relays that require `Authorization: Bearer` on an Anthropic-compatible endpoint can set custom headers in `config.yaml`; see [Third-party relays and custom auth headers](docs/examples.md#third-party-relays-and-custom-auth-headers).
+Supported API formats: `openai-completions`, `openai-responses`, and `anthropic-messages`. An endpoint that needs no authentication — a server you run locally, typically — is a provider without a key: omit `--api-key-env`, leave `MCODE_PROVIDER_API_KEY` unset, and the connection is stored with no credential, so no request to it carries one. See the [model examples](docs/examples.md#2-choose-your-own-model) for environment variable setup, connection checks, and model overrides for a single run.
 
 </details>
 
@@ -108,31 +125,35 @@ Open the project you want to work on:
 
 ```bash
 cd /path/to/your/project
-mcode
+kcode
 ```
 
-Describe your task in the TUI, or submit it directly when you launch MCode:
+Describe your task in the TUI, or submit it directly when you launch KCode:
 
 ```bash
-mcode "Find a failing test, fix the implementation, and run the relevant tests."
+kcode "Find a failing test, fix the implementation, and run the relevant tests."
 ```
 
-Use `mcode init .` to generate or update project guidance in `AGENTS.md`. Describe the expected result, allowed changes, and how to verify the task.
+Use `kcode init .` to generate or update project guidance in `AGENTS.md`. Describe the expected result, allowed changes, and how to verify the task.
 
 | Entry point | Command | Use it for |
 | --- | --- | --- |
-| Interactive TUI | `mcode [prompt]` | Explore code, continue a conversation, and review changes or permissions. |
-| Headless | `mcode exec [prompt]` | Shell scripts, CI, batch work, and evaluations. |
-| ACP | `mcode acp` | Editors and clients supporting Agent Client Protocol. |
+| Interactive TUI | `kcode [prompt]` | Explore code, continue a conversation, and review changes or permissions. |
+| Headless | `kcode exec [prompt]` | Shell scripts, CI, batch work, and evaluations. |
+| ACP | `kcode acp` | Editors and clients supporting Agent Client Protocol. |
+
+See [harness integration](docs/harness-integration.md) for the `exec` and ACP
+contracts a script, CI job, or client depends on: output formats, exit codes,
+session continuation, and how approvals are answered.
 
 ### Continue your work
 
 ```bash
 # Resume the latest session in the current workspace
-mcode --continue
+kcode --continue
 
 # Open the session picker
-mcode --session
+kcode --session
 ```
 
 Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all commands and shortcuts.
@@ -149,7 +170,7 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 
 ## Uninstall
 
-Close running MCode sessions, including editor integrations, before uninstalling. First locate the command with `command -v mcode` (macOS / Linux / WSL) or `Get-Command mcode -All` (PowerShell), then follow the matching installation method below. The current official install scripts do **not** provide an uninstall flag.
+Close running KCode sessions, including editor integrations, before uninstalling. First locate the command with `command -v kcode` (macOS / Linux / WSL) or `Get-Command kcode -All` (PowerShell), then follow the matching installation method below. The current official install scripts do **not** provide an uninstall flag.
 
 ### Installed with the script
 
@@ -161,7 +182,7 @@ The commands below remove the default installation directory, including both lau
 rm -rf -- "$HOME/.minimax-code"
 ```
 
-Remove the `# MiniMax Code CLI` comment and its following PATH line from the shell file the installer updated: `~/.zshrc` for zsh; the first existing file among `~/.bashrc`, `~/.bash_profile`, and `~/.profile` for bash (or a newly created `~/.bashrc`); `~/.config/fish/config.fish` for fish; or `~/.profile` for other shells. The line is `export PATH="/absolute/install/path/bin:$PATH"`, or `fish_add_path -g "/absolute/install/path/bin"` for fish. Remove only the MCode entry, preserving other PATH settings. The installer skips this edit when `MCODE_NO_MODIFY_PATH` is set or the path is already present.
+Remove the `# Kinetick Code CLI` comment and its following PATH line from the shell file the installer updated: `~/.zshrc` for zsh; the first existing file among `~/.bashrc`, `~/.bash_profile`, and `~/.profile` for bash (or a newly created `~/.bashrc`); `~/.config/fish/config.fish` for fish; or `~/.profile` for other shells. The line is `export PATH="/absolute/install/path/bin:$PATH"`, or `fish_add_path -g "/absolute/install/path/bin"` for fish. Remove only the KCode entry, preserving other PATH settings. The installer skips this edit when `MCODE_NO_MODIFY_PATH` is set or the path is already present.
 
 **Windows (PowerShell)**
 
@@ -173,19 +194,22 @@ Open **Edit environment variables for your account**, edit the user **Path**, an
 
 ### Installed with npm or from source
 
-For a global npm installation, use the same npm installation/prefix you used to install MCode:
+For a global npm installation, use the same npm installation/prefix you used to install KCode:
 
 ```bash
-npm uninstall -g @minimax-ai/code
+npm uninstall -g kinetick-code
 ```
+
+An installation made before this product took its own name is `@minimax-ai/code`; uninstall that one the
+same way if it is still on disk.
 
 For a source build, save any work and remove only the checkout you created; see [Update or remove](docs/installation.md#update-or-remove).
 
-After uninstalling, reopen your terminal (fully restart the editor for integrated terminals) and run `command -v mcode` or `Get-Command mcode -All` again. No result means the command is no longer on PATH. If another copy appears, identify its installation method before removing it.
+After uninstalling, reopen your terminal (fully restart the editor for integrated terminals) and run `command -v kcode` or `Get-Command kcode -All` again. No result means the command is no longer on PATH. If another copy appears, identify its installation method before removing it.
 
 ### Optional: delete user data
 
-Removing the program leaves separately stored user data in place. To also delete local login state, provider configuration, caches, and sessions, first confirm the selected directory using [Accounts and data](docs/installation.md#accounts-and-data) and back up anything you need. Other MCode installations can share this directory. For the default `~/.minimax` directory only:
+Removing the program leaves separately stored user data in place. To also delete local login state, provider configuration, caches, and sessions, first confirm the selected directory using [Accounts and data](docs/installation.md#accounts-and-data) and back up anything you need. Other KCode installations can share this directory. For the default `~/.minimax` directory only:
 
 ```bash
 # macOS / Linux / WSL — permanently deletes the default user data
@@ -197,8 +221,16 @@ rm -rf -- "$HOME/.minimax"
 Remove-Item -LiteralPath "$env:USERPROFILE\.minimax" -Recurse -Force
 ```
 
-A profile uses `~/.minimax-<profile>`; `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can select a different location. Remove only the specific directories you intend to discard, without wildcard deletion. Remove any MCode-specific environment variable assignments you added to shell profiles or user environment settings if you no longer need them.
+A profile uses `~/.minimax-<profile>`; `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can select a different location. Remove only the specific directories you intend to discard, without wildcard deletion. Remove any KCode-specific environment variable assignments you added to shell profiles or user environment settings if you no longer need them.
 
+## Network egress
+
+This fork ships no telemetry and no managed-service client, and it decides every
+outbound connection before opening a socket. By default the MiniMax
+managed-service and reporting hosts are refused; loopback and the model
+endpoints you configured stay reachable. Use `MCODE_EGRESS_MODE=allowlist` to
+reach only loopback, your providers, and `MCODE_ALLOWED_ORIGINS`. See
+[docs/egress-policy.md](docs/egress-policy.md).
 ## What you can do
 
 | Task | Capabilities |
@@ -221,22 +253,22 @@ The [small, reproducible project](examples/clamp) is the same task used in the d
 
 ## Build from source
 
-To develop MCode or run this source checkout, you need Git, **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**, and **pnpm 9.12.0**. On Windows, keep the checkout on a local NTFS volume and outside cloud-synced folders; the preflight command below checks the volume before pnpm creates workspace links.
+To develop KCode or run this fork's source, clone **this** repository (not upstream) and use Git, **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**, and **pnpm 9.12.0**. On Windows, keep the checkout on a local NTFS volume and outside cloud-synced folders; the preflight command below checks the volume before pnpm creates workspace links.
 ```bash
-git clone https://github.com/MiniMax-AI/minimax-code.git
+git clone https://github.com/tournierjc/kinetick-code.git
 cd minimax-code
 node scripts/check-windows-source-location.mjs
 pnpm install --frozen-lockfile
 pnpm build
-pnpm mcode
+pnpm kcode
 ```
 
 The first build requires an internet connection. Dependencies and the integrity-checked `mcode-tools` bundle come from public npm. See the [source installation guide](docs/installation.md) for pnpm setup, system dependencies, and updates.
 
-From the source directory, use `pnpm mcode` in place of `mcode` in the examples above. To work on your own project, open its directory and launch the built CLI:
+From the source directory, use `pnpm kcode` in place of `kcode` in the examples above. To work on your own project, open its directory and launch the built CLI:
 
 ```bash
-node /absolute/path/to/minimax-code/dist/cli.js
+node /absolute/path/to/kinetick-code/dist/cli.js
 ```
 
 This repository targets the **0.4.12 source preview**. Installing the published package and building this checkout are separate paths. Matching versions do not prove identical build provenance; see the [version and evidence baseline](docs/open-source-status.md#version-and-evidence-baseline).
@@ -253,13 +285,13 @@ For now, code and documentation pull requests are accepted only from repository 
 
 ## Desktop app and support
 
-<a href="https://agent.minimax.io/download" title="Download MiniMax Code">
-  <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="MiniMax Code desktop app — click to download" width="100%" />
+<a href="https://agent.minimax.io/download" title="Download Kinetick Code">
+  <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="Kinetick Code desktop app — click to download" width="100%" />
 </a>
 
 [Download for macOS or Windows](https://agent.minimax.io/download) · [Report a problem or ask a question](https://github.com/MiniMax-AI/minimax-code/issues/new/choose)
 
-This repository also hosts issue reporting for the MiniMax Code desktop app. The published source covers the terminal TUI, headless CLI, and ACP; it does not include the desktop application's source. Select the affected product when filing an issue. For a desktop bug, include the app version, operating system, and a log upload ID if available from **Settings → General → Upload logs**. For a CLI bug, include `mcode --version`, your interface, and a minimal reproduction. Remove credentials and private project content from reports.
+This repository also hosts issue reporting for the Kinetick Code desktop app. The published source covers the terminal TUI, headless CLI, and ACP; it does not include the desktop application's source. Select the affected product when filing an issue. For a desktop bug, include the app version, operating system, and a log upload ID if available from **Settings → General → Upload logs**. For a CLI bug, include `kcode --version`, your interface, and a minimal reproduction. Remove credentials and private project content from reports.
 
 ## License
 

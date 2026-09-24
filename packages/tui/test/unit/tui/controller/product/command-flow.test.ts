@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { TuiCommandFlow } from "../../../../../src/tui/controller/product/command-flow.js";
+import { KCODE_COMMANDS } from "../../../../../src/tui/commands/catalog.js";
 import {
-  MINIMAX_CODE_TUI_LOGIN_REQUIRED_MESSAGE,
+  KCODE_TUI_LOGIN_REQUIRED_MESSAGE,
   TuiLoginRequiredError,
 } from "../../../../../src/application/login-gate.js";
 
@@ -27,6 +28,7 @@ function createReadinessCommandFlow(options: {
   exportCurrentTranscript?: (args: string) => void | Promise<void>;
   hasSession?: boolean;
   setHint?: (message: string | undefined) => void;
+  controller?: unknown;
   surface?: {
     show(component: unknown): void;
     close(component?: unknown): boolean;
@@ -38,17 +40,23 @@ function createReadinessCommandFlow(options: {
   persistTuiMode?: (mode: "regular" | "fullscreen") => void;
   reloadTui?: () => Promise<void>;
   append?: (text: string, kind?: "info" | "warning" | "error") => void;
+  sessionFlow?: unknown;
+  sessionMutationFlow?: unknown;
+  interactionFlow?: unknown;
+  auth?: unknown;
   queuedCount?: number;
+  liveRunId?: () => string | undefined;
 }) {
   return new TuiCommandFlow({
     workspaceDir: "/workspace",
-    controller: {
-      snapshot: vi.fn(() => ({
-        status: "idle" as const,
-        sessions: [],
-        ...(options.hasSession ? { session: { sessionId: "session-a" } } : {}),
-      })),
-    } as never,
+    controller: (options.controller ??
+      {
+        snapshot: vi.fn(() => ({
+          status: "idle" as const,
+          sessions: [],
+          ...(options.hasSession ? { session: { sessionId: "session-a" } } : {}),
+        })),
+      }) as never,
     activeRunFlow: { showHelp: options.showHelp ?? vi.fn() } as never,
     featureFlow: {
       ...createFeatureFlowMock(),
@@ -63,8 +71,10 @@ function createReadinessCommandFlow(options: {
     interactionFlow: {
       handleCommand: vi.fn(async () => false),
       hasPending: vi.fn(() => false),
+      ...((options.interactionFlow ?? {}) as object),
     } as never,
-    sessionFlow: {} as never,
+    sessionFlow: (options.sessionFlow ?? {}) as never,
+    sessionMutationFlow: (options.sessionMutationFlow ?? {}) as never,
     queueFlow: {} as never,
     composerDraft: { hasContent: vi.fn(() => false) } as never,
     workspaceRoots: { additionalDirectories: () => [] } as never,
@@ -79,7 +89,7 @@ function createReadinessCommandFlow(options: {
     showStatusLine: options.showStatusLine,
     reloadTui: options.reloadTui,
     queueEnabled: true,
-    liveRunId: () => undefined,
+    liveRunId: options.liveRunId ?? (() => undefined),
     runtimeStopping: () => false,
     abortLiveTurn: vi.fn(async () => false),
     leaveUi: vi.fn(async () => undefined),
@@ -89,11 +99,56 @@ function createReadinessCommandFlow(options: {
       : {}),
     append: options.append ?? vi.fn(),
     setHint: options.setHint ?? vi.fn(),
+    ...(options.auth ? { auth: options.auth } : {}),
     onChanged: vi.fn(),
   });
 }
 
 describe("TuiCommandFlow", () => {
+  it("offers the supported sign-in providers as /login arguments", () => {
+    const login = KCODE_COMMANDS.find((command) => command.name === "login");
+
+    expect(login?.argumentHint).toBe("[minimax]");
+    expect(login?.getArgumentCompletions?.("")).toEqual([
+      { value: "minimax", label: "minimax", description: "Sign in to MiniMax" },
+    ]);
+  });
+
+  it("signs in to the named provider through the same region picker as /provider", async () => {
+    const show = vi.fn();
+    const auth = { login: vi.fn() };
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      surface: { show, close: vi.fn(() => true) } as never,
+      auth,
+    });
+
+    await expect(flow.submit("/login minimax")).resolves.toBe("consumed");
+
+    expect(show).toHaveBeenCalledTimes(1);
+    // Nothing was signed in until the picker's own callback fires.
+    expect(auth.login).not.toHaveBeenCalled();
+  });
+
+  it("sends an unsupported /login provider to /provider instead of signing in to MiniMax", async () => {
+    const append = vi.fn();
+    const show = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      append,
+      surface: { show, close: vi.fn(() => true) } as never,
+      auth: {},
+    });
+
+    await expect(flow.submit("/login OpenRouter")).resolves.toBe("retained");
+
+    expect(show).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      "/login signs in to minimax. Run /provider to connect openrouter.",
+      "warning",
+    );
+  });
+
   it("opens /statusline locally without waiting for hydration or submitting a model turn", async () => {
     const showStatusLine = vi.fn();
     const whenReady = vi.fn(() => new Promise<void>(() => undefined));
@@ -492,7 +547,7 @@ describe("TuiCommandFlow", () => {
     };
     const reserveSubmission = vi.fn();
     const restoreSubmission = vi.fn();
-    const startNew = vi.fn();
+    const openNewSessionTab = vi.fn();
     const projectOptimisticUserMessage = vi.fn();
     const flow = new TuiCommandFlow({
       workspaceDir: "/workspace",
@@ -512,7 +567,7 @@ describe("TuiCommandFlow", () => {
         handleCommand: vi.fn(async () => false),
         hasPending: vi.fn(() => false),
       } as never,
-      sessionFlow: { startNew } as never,
+      sessionFlow: { openNewSessionTab } as never,
       queueFlow: {} as never,
       composerDraft: {
         capture: vi.fn(() => resources),
@@ -549,7 +604,7 @@ describe("TuiCommandFlow", () => {
     expect(reserveSubmission).toHaveBeenCalledWith(resources);
     expect(restoreSubmission).toHaveBeenCalledWith(resources);
     expect(restoreSubmission.mock.invocationCallOrder[0]).toBeLessThan(
-      startNew.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+      openNewSessionTab.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
     expect(projectOptimisticUserMessage).not.toHaveBeenCalled();
   });
@@ -1247,7 +1302,7 @@ describe("TuiCommandFlow", () => {
       submit: vi.fn(async () => {
         throw new TuiLoginRequiredError(
           { status: "needs-login", managedTokenPresent: false, warnings: [] },
-          MINIMAX_CODE_TUI_LOGIN_REQUIRED_MESSAGE,
+          KCODE_TUI_LOGIN_REQUIRED_MESSAGE,
         );
       }),
       requireLoginForAgentAction: vi.fn(async () => undefined),
@@ -1293,7 +1348,7 @@ describe("TuiCommandFlow", () => {
     expect(composerDraft.restoreSubmission).toHaveBeenCalledWith(draft);
     expect(composerDraft.completeSubmission).not.toHaveBeenCalled();
     expect(append).toHaveBeenCalledWith(
-      MINIMAX_CODE_TUI_LOGIN_REQUIRED_MESSAGE,
+      KCODE_TUI_LOGIN_REQUIRED_MESSAGE,
       "warning",
     );
   });
@@ -1508,7 +1563,7 @@ describe("TuiCommandFlow", () => {
         managedTokenPresent: false,
         warnings: [],
       },
-      MINIMAX_CODE_TUI_LOGIN_REQUIRED_MESSAGE,
+      KCODE_TUI_LOGIN_REQUIRED_MESSAGE,
     );
     const append = vi.fn();
     const queueFlow = { enqueue: vi.fn(async () => undefined) };
@@ -1579,7 +1634,7 @@ describe("TuiCommandFlow", () => {
     expect(featureFlow.compactSession).not.toHaveBeenCalled();
     expect(activeRunFlow.handle).toHaveBeenCalledWith("/steer focus here");
     expect(append).toHaveBeenCalledWith(
-      MINIMAX_CODE_TUI_LOGIN_REQUIRED_MESSAGE,
+      KCODE_TUI_LOGIN_REQUIRED_MESSAGE,
       "warning",
     );
   });
@@ -1679,5 +1734,225 @@ describe("TuiCommandFlow", () => {
     );
     expect(showPending).toHaveBeenCalledTimes(1);
     expect(activeRunFlow.handle).not.toHaveBeenCalled();
+  });
+});
+
+describe("TuiCommandFlow /tabs", () => {
+  it("cycles, closes and jumps through the open Session tabs", async () => {
+    const cycleTab = vi.fn(async () => undefined);
+    const closeTab = vi.fn(async () => undefined);
+    const activateTabSlot = vi.fn(async () => undefined);
+    const moveTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      sessionFlow: { cycleTab, closeTab, activateTabSlot, moveTab },
+    });
+
+    await expect(flow.submit("/tabs next")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs prev")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs close")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs 3")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs move left")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs move right")).resolves.toBe("consumed");
+
+    expect(cycleTab.mock.calls).toEqual([[1], [-1]]);
+    expect(closeTab).toHaveBeenCalledOnce();
+    expect(activateTabSlot).toHaveBeenCalledWith(3);
+    expect(moveTab.mock.calls).toEqual([[-1], [1]]);
+  });
+
+  it("renames the visible tab, with and without a title", async () => {
+    const renameTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      sessionFlow: { renameTab },
+    });
+
+    await expect(flow.submit("/tabs rename")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs rename Release checklist")).resolves.toBe("consumed");
+
+    expect(renameTab.mock.calls).toEqual([[undefined], ["Release checklist"]]);
+  });
+
+  it("toggles and folds project grouping", async () => {
+    const setTabGrouping = vi.fn(async () => undefined);
+    const toggleTabGroupCollapse = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      sessionFlow: { setTabGrouping, toggleTabGroupCollapse },
+    });
+
+    await expect(flow.submit("/tabs group")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs group off")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs group on")).resolves.toBe("consumed");
+    await expect(flow.submit("/tabs collapse")).resolves.toBe("consumed");
+
+    expect(setTabGrouping.mock.calls).toEqual([[true], [false], [true]]);
+    expect(toggleTabGroupCollapse).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a bare /tabs, an unknown slot and a bad group flag as usage hints", async () => {
+    const append = vi.fn();
+    const cycleTab = vi.fn(async () => undefined);
+    const activateTabSlot = vi.fn(async () => undefined);
+    const setTabGrouping = vi.fn(async () => undefined);
+    const moveTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      append,
+      sessionFlow: { cycleTab, activateTabSlot, setTabGrouping, moveTab },
+    });
+
+    await expect(flow.submit("/tabs")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs 12")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs group sideways")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs move sideways")).resolves.toBe("retained");
+    await expect(flow.submit("/tabs move")).resolves.toBe("retained");
+
+    expect(cycleTab).not.toHaveBeenCalled();
+    expect(activateTabSlot).not.toHaveBeenCalled();
+    expect(setTabGrouping).not.toHaveBeenCalled();
+    expect(moveTab).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith(
+      "Usage: /tabs <next | prev | close | move <left|right> | rename [title] | " +
+        "group [on|off] | collapse | 1-9>. The key hints are in /hotkeys.",
+      "warning",
+    );
+    expect(append).toHaveBeenCalledWith("Usage: /tabs group <on | off>.", "warning");
+    expect(append).toHaveBeenCalledWith("Usage: /tabs move <left | right>.", "warning");
+  });
+});
+
+describe("TuiCommandFlow /clone", () => {
+  it("starts the clone pipeline on the visible Session", async () => {
+    const startClone = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionMutationFlow: { startClone },
+    });
+
+    await expect(flow.submit("/clone")).resolves.toBe("consumed");
+
+    expect(startClone).toHaveBeenCalledOnce();
+  });
+
+  it("never starts a clone while an interaction is waiting for an answer", async () => {
+    const startClone = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionMutationFlow: { startClone },
+      interactionFlow: { hasPending: () => true, showPending: vi.fn() },
+    });
+
+    await expect(flow.submit("/clone")).resolves.toBe("retained");
+
+    expect(startClone).not.toHaveBeenCalled();
+  });
+});
+
+describe("TuiCommandFlow /new", () => {
+  it("opens a new Session tab, and does so while a turn is live", async () => {
+    const openNewSessionTab = vi.fn(async () => undefined);
+    const replaceSessionInTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionFlow: { openNewSessionTab, replaceSessionInTab },
+      liveRunId: () => "turn-live",
+    });
+
+    await expect(flow.submit("/new")).resolves.toBe("consumed");
+
+    expect(openNewSessionTab).toHaveBeenCalledWith({ workspaceDir: "/workspace" });
+    expect(replaceSessionInTab).not.toHaveBeenCalled();
+  });
+
+  it("starts the fresh conversation in the visible tab on /clear", async () => {
+    const openNewSessionTab = vi.fn(async () => undefined);
+    const replaceSessionInTab = vi.fn(async () => undefined);
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      hasSession: true,
+      sessionFlow: { openNewSessionTab, replaceSessionInTab },
+    });
+
+    await expect(flow.submit("/clear")).resolves.toBe("consumed");
+
+    expect(replaceSessionInTab).toHaveBeenCalledWith({ workspaceDir: "/workspace" });
+    expect(openNewSessionTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("TuiCommandFlow /pin", () => {
+  it("toggles the pin of the visible Session", async () => {
+    const pinSession = vi.fn(async (sessionId: string, pinned: boolean) => ({
+      sessionId,
+      pinned,
+    }));
+    const setHint = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      setHint,
+      controller: {
+        snapshot: () => ({
+          status: "idle",
+          session: { sessionId: "session-a" },
+          sessions: [{ sessionId: "session-a", pinned: false }],
+        }),
+        pinSession,
+      },
+    });
+
+    await expect(flow.submit("/pin")).resolves.toBe("consumed");
+
+    expect(pinSession).toHaveBeenLastCalledWith("session-a", true);
+    expect(setHint).toHaveBeenCalledWith("Session pinned.");
+
+    await expect(flow.submit("/pin off")).resolves.toBe("consumed");
+
+    expect(pinSession).toHaveBeenLastCalledWith("session-a", false);
+    expect(setHint).toHaveBeenLastCalledWith("Session unpinned.");
+  });
+
+  it("unpins with a bare /pin when the Session is already pinned", async () => {
+    const pinSession = vi.fn(async (sessionId: string, pinned: boolean) => ({
+      sessionId,
+      pinned,
+    }));
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      controller: {
+        snapshot: () => ({
+          status: "idle",
+          session: { sessionId: "session-a" },
+          sessions: [{ sessionId: "session-a", pinned: true }],
+        }),
+        pinSession,
+      },
+    });
+
+    await expect(flow.submit("/pin")).resolves.toBe("consumed");
+
+    expect(pinSession).toHaveBeenLastCalledWith("session-a", false);
+  });
+
+  it("keeps a bad /pin argument as a usage hint and pins nothing", async () => {
+    const append = vi.fn();
+    const pinSession = vi.fn();
+    const flow = createReadinessCommandFlow({
+      whenReady: async () => undefined,
+      append,
+      controller: {
+        snapshot: () => ({ status: "idle", session: { sessionId: "session-a" }, sessions: [] }),
+        pinSession,
+      },
+    });
+
+    await expect(flow.submit("/pin sideways")).resolves.toBe("retained");
+
+    expect(pinSession).not.toHaveBeenCalled();
+    expect(append).toHaveBeenCalledWith("Usage: /pin [on | off].", "warning");
   });
 });

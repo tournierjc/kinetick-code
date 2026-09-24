@@ -1,6 +1,6 @@
-export const MINIMAX_CODE_PERMISSION_MODES = ['default', 'auto', 'bypassPermissions'] as const;
+export const KCODE_PERMISSION_MODES = ['default', 'auto', 'bypassPermissions'] as const;
 
-export type TuiPermissionMode = (typeof MINIMAX_CODE_PERMISSION_MODES)[number] | 'off';
+export type TuiPermissionMode = (typeof KCODE_PERMISSION_MODES)[number] | 'off';
 
 const PERMISSION_MODE_LABELS: Record<TuiPermissionMode, string> = {
   default: 'Ask',
@@ -17,7 +17,7 @@ const PERMISSION_MODE_COMPACT_LABELS: Record<TuiPermissionMode, string> = {
 };
 
 export function normalizeTuiPermissionMode(value: unknown): TuiPermissionMode | undefined {
-  return MINIMAX_CODE_PERMISSION_MODES.find((mode) => mode === value);
+  return KCODE_PERMISSION_MODES.find((mode) => mode === value);
 }
 
 export function formatTuiPermissionMode(mode: TuiPermissionMode): string {
@@ -34,8 +34,8 @@ export function isDangerousTuiPermissionMode(mode: TuiPermissionMode): boolean {
 
 export function nextTuiPermissionMode(current: TuiPermissionMode): TuiPermissionMode {
   if (current === 'off') return 'default';
-  const currentIndex = MINIMAX_CODE_PERMISSION_MODES.indexOf(current);
-  return MINIMAX_CODE_PERMISSION_MODES[
-    (currentIndex + 1) % MINIMAX_CODE_PERMISSION_MODES.length
+  const currentIndex = KCODE_PERMISSION_MODES.indexOf(current);
+  return KCODE_PERMISSION_MODES[
+    (currentIndex + 1) % KCODE_PERMISSION_MODES.length
   ] as TuiPermissionMode;
 }

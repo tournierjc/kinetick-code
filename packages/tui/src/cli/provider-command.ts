@@ -1,16 +1,16 @@
-import { McodeProviderApplication } from '../provider/application.js';
-import type { McodeProviderApiFormat, McodeProviderSnapshot } from '../provider/contract.js';
+import { KcodeProviderApplication } from '../provider/application.js';
+import type { KcodeProviderApiFormat, KcodeProviderSnapshot } from '../provider/contract.js';
 import { prepareTuiDataDir } from '../runtime/data-dir.js';
 import { createTuiRuntime, shutdownTuiRuntime } from '../runtime/lifecycle.js';
 import { formatTuiActionFailure } from '../user-facing-failure.js';
 
-export type McodeProviderCliRequest =
+export type KcodeProviderCliRequest =
   | { readonly action: 'list'; readonly json?: boolean }
   | {
       readonly action: 'add';
       readonly name: string;
       readonly baseUrl: string;
-      readonly apiFormat: McodeProviderApiFormat;
+      readonly apiFormat: KcodeProviderApiFormat;
       readonly models: readonly string[];
       readonly contextLimit?: number;
       readonly outputLimit?: number;
@@ -28,22 +28,22 @@ export type McodeProviderCliRequest =
   | { readonly action: 'set-minimax-key'; readonly apiKeyEnv?: string }
   | { readonly action: 'use'; readonly source: 'token_plan' | 'minimax_api_key' };
 
-interface McodeProviderCommandContext {
-  readonly application: McodeProviderApplication;
+interface KcodeProviderCommandContext {
+  readonly application: KcodeProviderApplication;
   shutdown(): Promise<void>;
 }
 
-export interface RunMcodeProviderCommandOptions {
+export interface RunKcodeProviderCommandOptions {
   readonly version: string;
-  readonly request: McodeProviderCliRequest;
+  readonly request: KcodeProviderCliRequest;
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly workspaceDir?: string;
   readonly lane?: string;
-  readonly createContext?: (lane?: string) => Promise<McodeProviderCommandContext>;
+  readonly createContext?: (lane?: string) => Promise<KcodeProviderCommandContext>;
 }
 
-export async function runMcodeProviderCommand(
-  options: RunMcodeProviderCommandOptions,
+export async function runKcodeProviderCommand(
+  options: RunKcodeProviderCommandOptions,
 ): Promise<string> {
   const context = options.createContext
     ? await options.createContext(options.lane)
@@ -56,15 +56,19 @@ export async function runMcodeProviderCommand(
     if (request.action === 'add') {
       const envName = request.apiKeyEnv?.trim() || 'MCODE_PROVIDER_API_KEY';
       const apiKey = (options.environment ?? process.env)[envName]?.trim();
-      if (!apiKey) {
+      // A key is optional: without one the provider is saved as an endpoint that
+      // needs no authentication, which is the local-server case. An explicitly
+      // named variable that is empty is still an error, because the caller
+      // asked for a key and did not get one.
+      if (request.apiKeyEnv && !apiKey) {
         throw new Error(
-          `Provider API key is missing. Set ${envName} or pass --api-key-env <name>.`,
+          `Provider API key is missing. Set ${envName}, or omit --api-key-env to add an endpoint that needs no authentication.`,
         );
       }
       const input = {
         name: request.name,
         baseUrl: request.baseUrl,
-        apiKey,
+        ...(apiKey ? { apiKey } : {}),
         apiFormat: request.apiFormat,
         models: request.models.map((modelId) => ({
           modelId,
@@ -158,7 +162,7 @@ async function createProviderCommandContext(
   version: string,
   workspaceDir = process.cwd(),
   lane?: string,
-): Promise<McodeProviderCommandContext> {
+): Promise<KcodeProviderCommandContext> {
   const runtime = await createTuiRuntime({
     dataDir: await prepareTuiDataDir(),
     workspaceDir,
@@ -167,14 +171,14 @@ async function createProviderCommandContext(
     ...(lane ? { lane } : {}),
   });
   return {
-    application: new McodeProviderApplication(runtime.adapter),
+    application: new KcodeProviderApplication(runtime.adapter),
     shutdown: async () => {
       await shutdownTuiRuntime(runtime);
     },
   };
 }
 
-function formatSnapshot(snapshot: McodeProviderSnapshot, json: boolean): string {
+function formatSnapshot(snapshot: KcodeProviderSnapshot, json: boolean): string {
   if (json) return JSON.stringify(snapshot, null, 2);
   const lines = snapshot.providers.map((provider) => {
     const state = provider.active ? 'active' : provider.enabled ? 'enabled' : 'disabled';
@@ -183,7 +187,7 @@ function formatSnapshot(snapshot: McodeProviderSnapshot, json: boolean): string 
         ? 'managed login'
         : provider.hasApiKey
           ? (provider.maskedApiKey ?? 'key saved')
-          : 'no key';
+          : 'no key sent';
     return `${provider.active ? '*' : ' '} ${provider.providerId}\t${state}\t${credential}`;
   });
   return lines.join('\n');

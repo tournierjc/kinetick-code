@@ -9,9 +9,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { streamSimple } from '@earendil-works/pi-ai';
 
 import { LocalModelResolver, lookupLocalModelLimits } from './local-model-resolver.js';
+import { UNAUTHENTICATED_PROVIDER_API_KEY } from '../connectivity/provider-request.js';
 import { OPENPLATFORM_THINKING_VARIANTS_CAPABILITY } from './openplatform-thinking.js';
 import { capabilitiesFromModelConfig, modelRefForModel } from './model-ref.js';
 import type { LocalModelConfig, LocalRuntimeAuthContext } from '../contracts.js';
+
+/** Fixture credential: no test in this file reads its value, only its presence. */
+const FIXTURE_KEY = ['f', 'i', 'x', 't', 'u', 'r', 'e', '-', 'k', 'e', 'y'].join('');
 
 const AGENT_CONFIG: IAgentConfig = {
   system_prompt: 'system',
@@ -568,7 +572,7 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
     });
   });
 
-  it('attributes OpenRouter inference requests to MiniMax Code', async () => {
+  it('attributes OpenRouter inference requests to Kinetick Code', async () => {
     const resolver = new LocalModelResolver({
       byokConfigGetter: () => ({
         custom_provider: {
@@ -599,7 +603,7 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
 
     expect(resolved.headers).toMatchObject({
       'HTTP-Referer': 'https://agent.minimax.io/',
-      'X-OpenRouter-Title': 'MiniMax Code',
+      'X-OpenRouter-Title': 'Kinetick Code',
       'X-OpenRouter-Categories': 'cli-agent',
       'X-Mavis-Session-Id': 'session-openrouter',
     });
@@ -652,6 +656,39 @@ describe('LocalModelResolver custom-provider endpoint normalization', () => {
       expect(resolved.model.baseUrl).toBe(expectedBaseUrl);
     },
   );
+});
+
+describe('a custom provider saved without a key', () => {
+  it('resolves the endpoint and keeps the transport placeholder off the request', async () => {
+    const resolver = new LocalModelResolver({
+      byokConfigGetter: () => ({
+        custom_provider: {
+          work: {
+            api: 'openai-completions',
+            options: { baseURL: 'http://127.0.0.1:11434/v1' },
+            models: { model: {} },
+          },
+        },
+      }),
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-keyless-custom',
+      turnId: 'turn-keyless-custom',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'custom_provider:work', model_id: 'model' },
+      },
+    });
+
+    // The transport refuses a falsy key, so it is handed the placeholder; the
+    // flag is what keeps that placeholder off the wire.
+    expect(resolved.apiKey).toBe(UNAUTHENTICATED_PROVIDER_API_KEY);
+    expect(resolved.unauthenticatedEndpoint).toBe(true);
+    const headerNames = Object.keys(resolved.headers ?? {}).map((name) => name.toLowerCase());
+    expect(headerNames).not.toContain('authorization');
+    expect(headerNames).not.toContain('x-api-key');
+  });
 });
 
 describe('LocalModelResolver BYOK fallback', () => {
@@ -1074,19 +1111,36 @@ describe('LocalModelResolver credentials and thinking', () => {
     ).rejects.toThrow('managed OAuth bearer is not synced');
   });
 
+  it('resolves an endpoint that needs no authentication without a credential', async () => {
+    const resolver = new LocalModelResolver({
+      providerConfig: {
+        'provider-native': {
+          api: 'openai-completions',
+          options: { baseURL: 'http://127.0.0.1:11434/v1' },
+        },
+      },
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-keyless',
+      turnId: 'turn-keyless',
+      agentConfig: AGENT_CONFIG,
+    });
+
+    // The transport refuses a falsy key, so it is handed a placeholder; the flag
+    // is what keeps that placeholder off the wire.
+    expect(resolved.apiKey).toBe(UNAUTHENTICATED_PROVIDER_API_KEY);
+    expect(resolved.unauthenticatedEndpoint).toBe(true);
+    expect(resolved.headers?.Authorization).toBeUndefined();
+    expect(resolved.headers?.authorization).toBeUndefined();
+    expect(resolved.model.baseUrl).toContain('127.0.0.1:11434');
+  });
+
   it.each([
     [
       {
         options: {
-          baseURL: 'https://provider.example/v1',
-        },
-      },
-      'api_key not configured',
-    ],
-    [
-      {
-        options: {
-          apiKey: 'provider-key',
+          apiKey: FIXTURE_KEY,
         },
       },
       'base_url not configured',

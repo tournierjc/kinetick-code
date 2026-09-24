@@ -1,8 +1,8 @@
 {
-  "name": "@minimax/code",
-  "version": "0.5.4",
+  "name": "@mavis/code",
+  "version": "0.5.3",
   "private": true,
-  "description": "Minimax Code CLI and TUI product entry.",
+  "description": "Kinetick Code CLI and TUI product entry.",
   "type": "module",
   "exports": {
     "./package.json": "./package.json"

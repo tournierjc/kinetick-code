@@ -1,4 +1,4 @@
-> Thanks for your interest in contributing. For now, code and documentation pull requests are accepted only from repository collaborators. If you are not a collaborator, please [open an issue](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) so we can discuss your idea.
+> Thanks for your interest in contributing. For now, code and documentation pull requests are accepted only from repository collaborators. If you are not a collaborator, please [open an issue](https://github.com/tournierjc/kinetick-code/issues/new/choose) so we can discuss your idea.
 
 ## Change
 
@@ -9,7 +9,7 @@ Describe the user-visible problem and resulting behavior. Link a public issue wh
 ## Validation
 
 - Checks run and results (include the revision/profile where relevant):
-- Performance: basic / `perf:full` (see [requirements](https://github.com/MiniMax-AI/minimax-code/blob/main/CONTRIBUTING.md#performance-checks)); for full coverage, link a passing run for the latest PR head and intended base:
+- Performance: basic / `perf:full` (see [requirements](https://github.com/tournierjc/kinetick-code/blob/main/CONTRIBUTING.md#performance-checks)); for full coverage, link a passing run for the latest PR head and intended base:
 - NOT RUN, platform limitations and live-service boundaries:
 
 ## Publication and contribution checks

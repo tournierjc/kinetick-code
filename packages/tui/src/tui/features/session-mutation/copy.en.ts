@@ -114,6 +114,12 @@ export const SESSION_MUTATION_COPY = {
     'Fork failed. Press Enter to retry with the same operation id.',
   'sessionMutation.error.activateFork': "Couldn't switch to the forked session.",
   'sessionMutation.error.openForkManually': 'Open it manually from /sessions: {sessionId}.',
+  'sessionMutation.error.cloneRequest': "Couldn't copy this Session.",
+  'sessionMutation.error.cloneRetry': 'Press Enter to retry or Esc to cancel.',
+  'sessionMutation.error.cloneRetrySameOperation':
+    'Copy failed. Press Enter to retry with the same operation id.',
+  'sessionMutation.error.activateClone': "Couldn't switch to the copied Session.",
+  'sessionMutation.error.openCloneManually': 'Open it manually from /sessions: {sessionId}.',
   'sessionMutation.error.refresh':
     'Rewind completed, but the current Session view could not be refreshed. Reopen the Session to verify its state.',
   'sessionMutation.error.editRefresh':
@@ -133,6 +139,10 @@ export const SESSION_MUTATION_COPY = {
   'sessionMutation.hint.forkRunning':
     'Wait for the current response or press Esc to interrupt before forking.',
   'sessionMutation.hint.forkNoSession': 'Start or resume a Session before creating a Fork.',
+  'sessionMutation.hint.cloneRunning':
+    'Wait for the current response or press Esc to interrupt before copying this Session.',
+  'sessionMutation.hint.cloneNoSession': 'Start or resume a Session before copying it.',
+  'sessionMutation.hint.loadingClone': 'Checking what the copy will include…',
   'sessionMutation.hint.rewindNoSession': 'Start or resume a Session before rewinding.',
   'sessionMutation.hint.editNoSession': 'Start or resume a Session before editing a message.',
   'sessionMutation.hint.editRunning':
@@ -162,6 +172,12 @@ export const SESSION_MUTATION_COPY = {
   'sessionMutation.confirm.fromLabel': 'From',
   'sessionMutation.confirm.confirmHint': 'Enter confirm · Esc cancel',
   'sessionMutation.confirm.fork.busy': 'Creating fork…',
+  'sessionMutation.confirm.clone.title': 'Confirm copy',
+  'sessionMutation.confirm.clone.helper':
+    'This creates a new Session holding the same conversation. The source Session and files stay unchanged.',
+  'sessionMutation.confirm.clone.scope': 'Includes the conversation up to the latest reply.',
+  'sessionMutation.confirm.clone.suggestedTitle': 'Suggested title',
+  'sessionMutation.confirm.clone.busy': 'Creating copy…',
   'sessionMutation.confirm.rewind.title': 'Confirm rewind',
   'sessionMutation.confirm.rewind.filesWarning':
     'Files may have changed since this preview; skipped files will not be overwritten.',
@@ -183,6 +199,12 @@ export const SESSION_MUTATION_COPY = {
   'sessionMutation.outcome.errorSuffix': ' Error: {code}.',
   'sessionMutation.fork.unavailableReason': 'Fork unavailable: {reason}',
   'sessionMutation.fork.unavailableDefault': 'Fork unavailable: Runtime refused this fork.',
+  'sessionMutation.clone.unavailableReason': 'Copy unavailable: {reason}',
+  'sessionMutation.clone.unavailableDefault':
+    'Copy unavailable: the session has no complete reply to copy up to.',
+  'sessionMutation.command.clone.description':
+    'Copy this Session, up to its latest reply, into a new Session',
+  'sessionMutation.command.clone.unavailable': 'Start or resume a Session before copying it.',
   'sessionMutation.command.fork.description':
     'Fork from a persisted user prompt without changing files',
   'sessionMutation.command.rewind.description':

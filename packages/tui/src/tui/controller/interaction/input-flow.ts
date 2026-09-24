@@ -60,6 +60,20 @@ export interface TuiInputFlowOptions {
   readonly isSideModeActive?: () => boolean;
   /** Switches between the parent and side projections without ending either one. */
   readonly toggleSideConversation?: () => Promise<boolean>;
+  /** Cycles the open Session tabs; 1 is the next tab, -1 the previous one. */
+  readonly cycleSessionTab?: (delta: 1 | -1) => Promise<unknown>;
+  /** Move the visible tab one slot along the bar (`Shift+Alt+←/→`). */
+  readonly moveSessionTab?: (delta: 1 | -1) => Promise<unknown>;
+  /** Switches to the Session tab bound to a 1-based direct slot. */
+  readonly selectSessionTab?: (slot: number) => Promise<unknown>;
+  /** Closes the visible Session tab and shows its neighbour. */
+  readonly closeSessionTab?: () => Promise<unknown>;
+  /** Renames the visible Session tab; without a title the rename field opens. */
+  readonly renameSessionTab?: () => Promise<unknown>;
+  /** Switches project grouping of the tab bar on or off. */
+  readonly toggleSessionTabGrouping?: () => Promise<unknown>;
+  /** Folds or unfolds the visible tab's project group. */
+  readonly toggleSessionTabCollapse?: () => Promise<unknown>;
   /** Stops and destroys the visible side conversation. */
   readonly closeSideConversation?: (exitReason: 'ctrl_c' | 'ctrl_d') => Promise<boolean>;
   readonly requestProcessSuspend?: () => void;
@@ -242,12 +256,13 @@ export class TuiInputFlow {
       return { consume: true };
     }
     const keybindingRegistry = this.options.keybindings ?? getDefaultTuiKeybindingRegistry();
-    const keyAction = keybindingRegistry.resolve(data, {
+    const keybindingContext = {
       interactionActive,
       hasLiveRun: Boolean(this.options.liveRunId()),
       hasWaitingMessage: this.options.hasWaitingMessage(),
       hasRestorableDraft: Boolean(this.clearedEditorDraft),
-    });
+    };
+    const keyAction = keybindingRegistry.resolve(data, keybindingContext);
     if (keyAction !== 'resume-codex') this.options.dismissRecentCodexSession?.();
     if (keyAction !== 'clear') this.ctrlCExitArmed = false;
     if (keyAction !== 'interrupt') this.lastEscapeAtMs = 0;
@@ -265,6 +280,44 @@ export class TuiInputFlow {
         }
         this.options.onChanged();
       });
+      return { consume: true };
+    }
+    if (keyAction === 'next-tab' || keyAction === 'previous-tab') {
+      void this.options.cycleSessionTab?.(keyAction === 'next-tab' ? 1 : -1);
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'move-tab-earlier' || keyAction === 'move-tab-later') {
+      void this.options.moveSessionTab?.(keyAction === 'move-tab-later' ? 1 : -1);
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'close-tab') {
+      void this.options.closeSessionTab?.();
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'switch-tab-slot') {
+      const slot = keybindingRegistry.resolveTabSlot(data, keybindingContext);
+      // The slot number comes from the key that matched, so a release or an
+      // overridden binding that resolves to no slot stays a no-op.
+      if (slot !== undefined) void this.options.selectSessionTab?.(slot);
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'rename-tab') {
+      void this.options.renameSessionTab?.();
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'toggle-tab-grouping') {
+      void this.options.toggleSessionTabGrouping?.();
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'toggle-tab-collapse') {
+      void this.options.toggleSessionTabCollapse?.();
+      this.options.onChanged();
       return { consume: true };
     }
     if (this.options.featureFlow.isFeatureScreenActive()) {
