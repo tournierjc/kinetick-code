@@ -46,6 +46,11 @@ function render(
   );
 }
 
+/** Strip the trailing rule a group header pads its row with. */
+function trimRule(row: string): string {
+  return row.replace(/[\u2500 ]+$/u, '');
+}
+
 /** Group the given tabs by the project each one carries in its sessionId. */
 function groupTabs(
   tabs: readonly TuiSessionTabView[],
@@ -178,7 +183,7 @@ describe('TuiSessionTabs', () => {
       tab({ sessionId: 'b', label: 'Two', slot: 2 }),
     ]);
 
-    expect(row).toBe('1:[One]  2:Two');
+    expect(row).toBe(' 1 One  \u2502 2 Two');
   });
 
   it('renders busy, blocked and unread markers', () => {
@@ -189,7 +194,7 @@ describe('TuiSessionTabs', () => {
       tab({ sessionId: 'd', label: 'One', slot: 4, status: statusOf({ unread: 1 }) }),
     ]);
 
-    expect(row).toBe('1:[Busy] ●  2:Waiting !  3:Unread •2  4:One •');
+    expect(row).toBe(' 1 Busy  ● \u2502 2 Waiting ! \u2502 3 Unread •2 \u2502 4 One •');
   });
 
   it('marks a tab whose Session is gone from the catalog', () => {
@@ -198,7 +203,7 @@ describe('TuiSessionTabs', () => {
       tab({ sessionId: 'b', label: 'Gone', slot: 2, unavailable: true }),
     ]);
 
-    expect(row).toBe('1:[One]  2:Gone ~');
+    expect(row).toBe(' 1 One  \u2502 2 Gone ~');
   });
 
   it('uses a placeholder for tabs past the direct slots', () => {
@@ -207,7 +212,7 @@ describe('TuiSessionTabs', () => {
       tab({ sessionId: 'b', label: 'Two' }),
     ]);
 
-    expect(row).toBe('1:[One]  ·:Two');
+    expect(row).toBe(' 1 One  \u2502 · Two');
   });
 
   it('never renders wider than the terminal', () => {
@@ -223,11 +228,11 @@ describe('TuiSessionTabs', () => {
     for (const width of [12, 24, 40]) {
       const row = render(tabs, width);
       expect(row.length).toBeLessThanOrEqual(width);
-      expect(row).toContain('[');
+      expect(row).toContain('1');
       expect(row).toMatch(/\+\d+/u);
     }
 
-    expect(render(tabs, 61)).toContain('[A fairly long session title number 0]');
+    expect(render(tabs, 61)).toContain('A fairly long session title number 0');
   });
 
   it('shrinks the visible label instead of cutting the row', () => {
@@ -240,7 +245,7 @@ describe('TuiSessionTabs', () => {
     );
 
     expect(row.length).toBeLessThanOrEqual(24);
-    expect(row).toContain('[');
+    expect(row).toContain('1');
     expect(row).toContain('…');
     expect(row).toMatch(/\+1$/u);
   });
@@ -255,7 +260,7 @@ describe('TuiSessionTabs', () => {
       26,
     );
 
-    expect(row).toBe('3:[Active]  +2');
+    expect(row).toBe(' 3 Active  \u2502 +2');
   });
 
   it('drops the trailing tabs in order', () => {
@@ -269,7 +274,7 @@ describe('TuiSessionTabs', () => {
       24,
     );
 
-    expect(row).toBe('1:[One]  2:Two  +2');
+    expect(row).toBe(' 1 One  \u2502 2 Two \u2502 +2');
   });
 });
 
@@ -292,6 +297,10 @@ describe('tab keybindings', () => {
 
   it('closes the visible tab with alt+w', () => {
     expect(resolveTuiKeybinding('\u001bw', IDLE_CONTEXT)).toBe('close-tab');
+  });
+
+  it('opens a new tab with alt+n', () => {
+    expect(resolveTuiKeybinding('\u001bn', IDLE_CONTEXT)).toBe('new-tab');
   });
 
   it('resolves every direct slot, and only those', () => {
@@ -323,6 +332,7 @@ describe('tab keybindings', () => {
 
     expect(cycle?.ids).toEqual(['tabs.previous', 'tabs.next']);
     expect(cycle?.keys).toContain('/');
+    expect(rows.find((row) => row.ids.includes('tabs.new'))?.keys).toContain('Alt+N');
     expect(rows.find((row) => row.ids.includes('tabs.close'))?.description).toBe(
       'Close the visible Session tab',
     );
@@ -459,10 +469,12 @@ describe('TuiSessionTabs grouping', () => {
     const rows = render(tabs, 100, groups).split('\n');
 
     expect(rows).toHaveLength(4);
-    expect(rows[0]).toBe('▾ api · 2');
-    expect(rows[1]).toBe('1:[One]  3:Three');
-    expect(rows[2]).toBe('▾ web · 1');
-    expect(rows[3]).toBe('2:Two');
+    expect(rows.map(trimRule)).toEqual([
+      '▾ api · 2 tabs',
+      ' 1 One  \u2502 3 Three',
+      '▾ web · 1 tab',
+      '2 Two',
+    ]);
   });
 
   it('draws only the header for a folded group', () => {
@@ -479,7 +491,11 @@ describe('TuiSessionTabs grouping', () => {
     );
     const rows = render(tabs, 100, folded).split('\n');
 
-    expect(rows).toEqual(['▾ api · 2', '1:[One]  3:Three', '▸ web · 1']);
+    expect(rows.map(trimRule)).toEqual([
+      '▾ api · 2 tabs',
+      ' 1 One  \u2502 3 Three',
+      '▸ web · 1 tab',
+    ]);
   });
 
   it('shows the combined status on a folded group header', () => {
@@ -506,7 +522,7 @@ describe('TuiSessionTabs grouping', () => {
     ];
     const rows = render(statusTabs, 100, folded).split('\n');
 
-    expect(rows[2]).toBe('▸ web · 1 !•2');
+    expect(trimRule(rows[2] as string)).toBe('▸ web · 1 tab !•2');
   });
 
   it('drops trailing groups past the row budget and counts their tabs', () => {
@@ -524,7 +540,12 @@ describe('TuiSessionTabs grouping', () => {
     const rows = stripVTControlCharacters(bar.render(120).join('\n')).split('\n');
 
     // Four groups need eight rows; the budget keeps two groups and counts the rest.
-    expect(rows).toEqual(['▾ api · 1', '1:a', '▾ web · 1', '2:b  +2']);
+    expect(rows.map(trimRule)).toEqual([
+      '▾ api · 1 tab',
+      '1 a',
+      '▾ web · 1 tab',
+      '2 b \u2502 +2',
+    ]);
   });
 
   it('renders a single strip when the tabs share one project', () => {
@@ -535,7 +556,7 @@ describe('TuiSessionTabs grouping', () => {
     const groups = groupTabs(single, { a: '/work/api', b: '/work/api' });
 
     expect(groups).toBeUndefined();
-    expect(render(single, 100, groups)).toBe('1:[a]  2:b');
+    expect(render(single, 100, groups)).toBe(' 1 a  \u2502 2 b');
   });
 });
 
@@ -563,7 +584,7 @@ describe('pinned tab markers', () => {
       tab({ sessionId: 'c', label: 'Pinned too', slot: 3, pinned: true }),
     ]);
 
-    expect(row).toBe('1:* [Pinned]  2:Plain  3:* Pinned too');
+    expect(row).toBe(' 1 * Pinned  \u2502 2 Plain \u2502 3 * Pinned too');
   });
 
   it('keeps the marker when the label has to shrink', () => {
@@ -590,6 +611,6 @@ describe('pinned tab markers', () => {
 
     expect(groups?.[0]?.pinned).toBe(true);
     expect(groups?.[1]?.pinned).toBeUndefined();
-    expect(render(tabs, 100, groups).split('\n')[0]).toBe('▾ api · 2 *');
+    expect(trimRule(render(tabs, 100, groups).split('\n')[0] as string)).toBe('▾ api · 2 tabs *');
   });
 });

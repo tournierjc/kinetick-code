@@ -792,6 +792,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     moveSessionTab: (delta) => sessionFlow.moveTab(delta),
     selectSessionTab: (slot) => sessionFlow.activateTabSlot(slot),
     closeSessionTab: () => sessionFlow.closeTab(),
+    openNewSessionTab: () => sessionFlow.openNewSessionTab({ workspaceDir: options.workspaceDir }),
     renameSessionTab: () => sessionFlow.renameTab(),
     toggleSessionTabGrouping: () =>
       sessionFlow.setTabGrouping(!stateStore.snapshot().tabs.grouped),

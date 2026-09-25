@@ -27,6 +27,7 @@ export type TuiShellKeyAction =
   | 'previous-tab'
   | 'next-tab'
   | 'close-tab'
+  | 'new-tab'
   | 'move-tab-earlier'
   | 'move-tab-later'
   | 'switch-tab-slot'
@@ -343,6 +344,14 @@ const TAB_KEYBINDINGS: readonly TuiKeybindingDefinition[] = [
     description: 'Move the visible Session tab one slot later',
     helpOrder: 125,
     helpGroup: 'tabs.order',
+  },
+  {
+    id: 'tabs.new',
+    key: 'alt+n',
+    action: 'new-tab',
+    when: 'application',
+    description: 'Open a new Session tab',
+    helpOrder: 126,
   },
   {
     id: 'tabs.close',

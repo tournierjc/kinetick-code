@@ -207,13 +207,14 @@ this does not establish native-terminal or live-model acceptance.
 
 Every Session that has been opened in this run stays in a tab bar above the
 Composer. A tab shows its slot, its title and one live status: `working` for a
-turn on that Session, `waiting` while it holds a permission or question request,
-and `unread` when a turn settled while the tab was in the background. The bar
-appears from the second tab on and is hidden while a feature panel owns the
-screen.
+turn on that Session, `waiting` while it holds a permission or question request
+— a waiting tab is highlighted in the bar so it stands out — and `unread` when
+a turn settled while the tab was in the background. The bar
+appears from the second tab on and stays visible while a panel is open, so a
+Session waiting for an answer can always be reached from the bar.
 
 Switch tabs with `Ctrl+Shift+Left` / `Ctrl+Shift+Right`, or jump straight to a
-slot with `Alt+1`…`Alt+9`. `Alt+W` closes the visible tab and shows its
+slot with `Alt+1`…`Alt+9`. `Alt+N` opens a new tab, `Alt+W` closes the visible tab and shows its
 neighbour; closing the last tab starts a new Session. `Alt+R` renames the visible
 tab, `Alt+G` turns project grouping on or off and `Alt+H` folds every other
 project group or unfolds them all again. The equivalent commands are `/tabs next`,
@@ -229,7 +230,7 @@ wrapped, and it is not a switch: the Session on screen stays, and a running turn
 untouched. The order lives in the running TUI and is not persisted, so a restart
 reopens tabs in insertion order.
 
-A new tab is created by `/new`, or by choosing "new" in `/sessions`: the Session is
+A new tab is created with `Alt+N`, by `/new`, or by choosing "new" in `/sessions`: the Session is
 created there and then, in the workspace of the Session you were on, so the tab appears
 before you type anything — a fresh Session with an empty Composer is what a new tab is.
 It is navigation rather than a clear, so it works while a turn is running: the Session
