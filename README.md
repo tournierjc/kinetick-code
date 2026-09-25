@@ -21,6 +21,11 @@
 > URLs, but the current command is **`kcode`** and release archives are named `kinetick-code-<version>.tar.gz`.
 > An `mcode` launcher from an earlier install keeps working until you install a current archive; see
 > [installation](docs/installation.md#renamed-from-minimax-code-fork).
+>
+> **What this fork adds:** Session tabs with background multitasking (turns keep running and streaming when you switch away),
+> provider setup for OpenRouter, DeepSeek, GitHub Copilot, and keyless local endpoints, session-wide cost tracking in the
+> status line and `/usage`, an independent fork update channel, and no telemetry — see [Session tabs](#session-tabs-and-multitasking)
+> and [Network egress](#network-egress).
 <p align="center">
   <a href="#quick-start">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -36,7 +41,7 @@
 
 Understand a project, make changes, and run tests from your terminal. Use your MiniMax account or bring your own model, with search, plugins, and multimodal tools in the same workflow.
 
-[![Real Kinetick Code TUI output: fixing clamp, inspecting the diff, and running tests](docs/assets/tui-demo.png)](docs/demo.md)
+[![Kinetick Code TUI: a live session with the Session tab bar, Plan Mode, and a running task](docs/assets/tui-demo.png)](docs/demo.md)
 
 <p align="center"><a href="docs/demo.md">Watch the 20-second demo →</a> · Real terminal output, with pauses shortened</p>
 
@@ -81,7 +86,7 @@ kcode --version
 kcode --help
 ```
 
-See the official [quick start](https://agent.minimax.io/docs/cli/quick-start), [features](https://agent.minimax.io/docs/cli/features), and [troubleshooting](https://agent.minimax.io/docs/cli/faq).
+See [installation](docs/installation.md), [examples](docs/examples.md), and [TUI capabilities](docs/tui-capabilities.md) for this fork's documentation.
 
 ### 2. Sign in or bring your own API key
 
@@ -166,7 +171,23 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 | Reference a workspace file or directory | `@` |
 | Toggle Plan Mode | `Shift+Tab` |
 | Switch permission modes | `Alt+M` |
+| Switch Session tabs | `Ctrl+Shift+Left` / `Ctrl+Shift+Right` |
+| Jump to a Session tab by slot | `Alt+1`…`Alt+9` |
+| Close the visible Session tab | `Alt+W` |
+| Rename the visible Session tab | `Alt+R` |
 | Close a panel or interrupt a running task; interrupting before the model replies returns the message to the composer | `Esc` |
+
+### Session tabs and multitasking
+
+Kinetick Code runs several Sessions side by side in a tab bar above the composer:
+
+- **Every open Session is a tab** with a live status (`working`, `waiting`, `unread`). `/new` opens a fresh tab, `/clear` starts a new conversation in the current tab, and `/clone` copies a Session into a new one.
+- **Turns keep running in the background.** Switch away and the running turn keeps streaming into its own tab; come back to the exact pane you left. An `unread` marker shows when a turn finished while you were away.
+- **Organize the bar your way:** `Alt+R` renames a tab, `Shift+Alt+Left` / `Shift+Alt+Right` move it to the slot you want, and tabs from several projects group automatically by project.
+- **Pin the Sessions you return to** with `/pin`; pinned Sessions lead the `/sessions` list and are marked on the tab bar.
+- **Find any conversation:** `/sessions` groups by project, searches by what was said in the session, and can archive Sessions on delete.
+
+See [Open Session tabs](docs/tui-capabilities.md#open-session-tabs) for the full bindings and semantics.
 
 ## Uninstall
 
@@ -236,9 +257,10 @@ reach only loopback, your providers, and `MCODE_ALLOWED_ORIGINS`. See
 | Task | Capabilities |
 | --- | --- |
 | **Edit and verify code** | Read files, inspect diffs, run shell commands and tests, and control tool execution with permissions and sandboxing. |
-| **Choose your model** | Use a MiniMax account / Token Plan, or custom providers with OpenAI- or Anthropic-compatible API formats. |
+| **Choose your model** | Use a MiniMax account / Token Plan, or custom providers with OpenAI- or Anthropic-compatible API formats — including OpenRouter, DeepSeek, GitHub Copilot, and local keyless endpoints, all set up from `/provider`. |
 | **Search and work with media** | Use built-in search, `mcode-tools` media tools, MCP, and managed connectors, subject to account access and service credits. |
-| **Keep work moving** | Resume sessions, plan tasks, use subagents, and extend the agent with official, local, or GitHub plugins and built-in skills. |
+| **Run many Sessions at once** | Session tabs with live status, background turns that keep streaming while you switch away, pinned Sessions, project grouping, and `/clone`. |
+| **Keep work moving** | Resume sessions, plan tasks, use subagents, track session-wide cost in the status line and `/usage`, and extend the agent with plugins and built-in skills. |
 | **Connect your workflow** | Run scripted tasks with the headless CLI, or connect compatible editors and clients through ACP. |
 
 Account features, updates, feedback, and diagnostics are also included. Managed tools require network access and the relevant authorization. See [capabilities and service boundaries](docs/tui-capabilities.md) for details.
@@ -276,23 +298,17 @@ This repository targets the **0.4.12 source preview**. Installing the published 
 ## Documentation and contributing
 
 - [Installation and updates](docs/installation.md) · [Examples](docs/examples.md) · [TUI status line](packages/tui/docs/status-line-config.md)
-- [Contributor guide](CONTRIBUTING.md) · [Report a bug or propose an idea](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) · [Report a security issue](SECURITY.md)
+- [Contributor guide](CONTRIBUTING.md) · [Report a bug or propose an idea](https://github.com/tournierjc/kinetick-code/issues/new/choose) · [Report a security issue](SECURITY.md)
 - [All documentation](docs/README.md): architecture, capability coverage, verification records, source synchronization, and release preparation.
 
 English is the primary documentation language. The [Chinese README](README_ZH.md) mirrors this page.
 
-For now, code and documentation pull requests are accepted only from repository collaborators. If you are not a collaborator but have an idea or proposal, please [open an issue](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) so we can discuss it. Remove secrets, account details, and private project content from reports.
+If you have an idea or proposal, please [open an issue](https://github.com/tournierjc/kinetick-code/issues/new/choose) so we can discuss it. Remove secrets, account details, and private project content from reports.
 
-## Desktop app and support
+## Support
 
-<a href="https://agent.minimax.io/download" title="Download Kinetick Code">
-  <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="Kinetick Code desktop app — click to download" width="100%" />
-</a>
-
-[Download for macOS or Windows](https://agent.minimax.io/download) · [Report a problem or ask a question](https://github.com/MiniMax-AI/minimax-code/issues/new/choose)
-
-This repository also hosts issue reporting for the Kinetick Code desktop app. The published source covers the terminal TUI, headless CLI, and ACP; it does not include the desktop application's source. Select the affected product when filing an issue. For a desktop bug, include the app version, operating system, and a log upload ID if available from **Settings → General → Upload logs**. For a CLI bug, include `kcode --version`, your interface, and a minimal reproduction. Remove credentials and private project content from reports.
+This repository covers the Kinetick Code terminal CLI: the TUI, the headless CLI, and ACP. To report a problem or ask a question, [open an issue](https://github.com/tournierjc/kinetick-code/issues/new/choose) on this repository. For a bug, include `kcode --version`, your interface, and a minimal reproduction. Remove credentials and private project content from reports.
 
 ## License
 
-First-party code defaults to [MIT](LICENSE). Existing file-level and package-level licenses remain in place. See [third-party notices](THIRD_PARTY_NOTICES.md) and [license status](LICENSE-STATUS.md) for dependencies, assets, and `mcode-tools`.
+Kinetick Code is a fork of [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) (`MiniMax-AI/minimax-code`), Copyright (c) 2026 MiniMax Code. Upstream is released under the MIT license, and **this fork keeps the same [MIT license](LICENSE)** for the entire codebase — upstream code and Kinetick Code's changes alike. All credit for the original project belongs to MiniMax Code. Existing file-level and package-level licenses remain in place. See [third-party notices](THIRD_PARTY_NOTICES.md) and [license status](LICENSE-STATUS.md) for dependencies, assets, and `mcode-tools`.
