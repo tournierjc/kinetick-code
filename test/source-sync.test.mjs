@@ -542,6 +542,12 @@ function fakeReleaseGh(routes) {
       error.stderr = 'gh: Not Found (HTTP 404)';
       throw error;
     }
+    if (route.unprocessable) {
+      const error = new Error('unprocessable');
+      error.status = 1;
+      error.stderr = `gh: No commit found for SHA: ${route.unprocessable} (HTTP 422)`;
+      throw error;
+    }
     if (route.fail) throw route.fail;
     return JSON.stringify(route.body ?? {});
   };
@@ -590,6 +596,13 @@ test('main release gate publishes only a version with no GitHub release', t => {
     { match: '/commits/v1.2.4', notFound: true },
   ]);
   assert.equal(decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: stdout404.gh }).publish, true);
+  const missingTag422 = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', unprocessable: 'v1.2.4' },
+  ]);
+  const publish422 = decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: missingTag422.gh });
+  assert.equal(publish422.publish, true);
+  assert.match(publish422.reason, /will tag HEAD and publish/);
   assert.equal(mainReleaseDecision({ tag: 'v1.2.4-rc.1', head, release: { draft: false }, tagCommit: null }).publish, false);
   assert.throws(() => cliBuildVersion(releaseGateRoot(t, '1.2.4', '1.2.5'), null), /Root and TUI/);
 });
