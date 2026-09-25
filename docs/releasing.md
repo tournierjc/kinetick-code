@@ -41,11 +41,13 @@ A fork release is a normal upstream-style CLI release (below) plus fork rules:
    break in this product's own behaviour. A genuinely newer *prerelease* tag
    (`v0.6.0-rc.1`) is still allowed: it publishes as a GitHub prerelease and the
    `stable` channel ignores it, while `preview` offers it.
-5. **CI and publication.** The tag triggers the `CLI release` workflow: full
-   `pnpm verify` + gitleaks scans, one `kinetick-code-X.Y.Z.tar.gz` archive, then
-   install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26). Only if
-   every install passes, a GitHub Release with the archive and `.sha256` is
-   created on this fork. Windows validation remains paused upstream-wide.
+5. **CI and publication.** A version-tag push, or a push to `main` whose
+   package version has no GitHub release yet, runs the `CLI release` workflow:
+   full `pnpm verify` + gitleaks scans, one `kinetick-code-X.Y.Z.tar.gz` archive,
+   then install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26).
+   Only if every install passes, a GitHub Release with the archive and `.sha256`
+   is created on this fork. A `main` push whose version already has a published
+   release stops before that build. Windows validation remains paused upstream-wide.
 6. **Post-release read-back.** After CI publishes, record: tag, commit SHA,
    upstream `sourceRevision` carried, archive SHA-256, which live-service checks
    were NOT RUN, and the release URL. Merge the version PR so `main` carries the
@@ -90,17 +92,53 @@ files, creating commits or pushing. The release command then:
 4. Atomically pushes the release branch and tag, without pushing `main`.
 5. Opens a version PR back to `main`; merge it through the normal review process.
 
-CI requires the tag, both committed source versions and `kcode --version` to agree.
-It does not override the source version during a build. An existing tag or release
-branch, a non-increasing version, uncommitted files, or a starting commit other
-than the latest `origin/main` stops the command before version changes.
+CI requires the release tag and both committed source versions to agree with
+`kcode --version`. It does not override the source version during a build. On a
+tag push, that tag must already point at the workflow commit. On a `main` push,
+the tag is created only after validation, and only when it does not already exist.
+An existing tag or release branch, a non-increasing version, uncommitted files,
+or a starting commit other than the latest `origin/main` stops the release
+command before version changes.
 
 The tag starts the release workflow independently of the version PR. If a network
 or PR-creation failure occurs, inspect the local and remote branch/tag before
 retrying: the version commit and tag are retained for recovery. If both refs were
 pushed but opening the PR failed, open that version PR manually. Never delete and
 recreate an already distributed tag. Merge the version PR before starting the
-next release so `main` carries the released version.
+next release so `main` carries the released version. That merge does not publish
+a second time: the `main` push sees the release created from the tag and stops.
+
+A push to `main` can also publish without a separate tag push. The workflow reads
+the root and TUI versions (they must match) and checks the GitHub release for
+`v` plus that version:
+
+| State of `v<version>` | Result |
+| --- | --- |
+| A published GitHub release already exists | The workflow succeeds without building, tagging, or publishing. Upstream-sync merges that leave the version unchanged take this path. |
+| No release and no tag | After the install matrix passes, the workflow creates an annotated `v<version>` tag on that `main` commit and publishes the release. |
+| No release, and the tag already points at that commit | The tag is kept. The release is published. |
+| No release, and the tag points at a different commit | The workflow fails. The tag is not moved. |
+| A draft release exists | The workflow fails and leaves the draft in place. Finish it by hand or remove the draft; this workflow never deletes a release. |
+
+The automated tag is created with the Actions token after validation, so that tag
+push does not start a second CLI release run. Tag pushes and manual dispatches
+still work. A dispatch only builds and validates, even when the requested tag
+already exists. Pull requests that change release tooling still run the build
+and install matrix using the committed source version, without creating a tag
+or publishing a release.
+
+To see the gate decision locally, without creating a tag or a release, authenticate
+`gh` and run:
+
+```bash
+GH_REPO=tournierjc/kinetick-code node scripts/gate-cli-release.mjs
+```
+
+`GitHub release vX.Y.Z is already published` means a merge of that version will
+not publish again. To exercise the full workflow without publication, dispatch
+`CLI release` on the selected branch. An optional tag input must match the
+committed source version. To publish once, merge a commit on `main` whose root
+and TUI versions have no GitHub release yet, or push the matching `v*` tag.
 
 The workflow runs the full verification profile and secret scans, builds one
 `kinetick-code-X.Y.Z.tar.gz` npm installation package, and authenticates and installs
@@ -115,12 +153,6 @@ Existing releases are never overwritten. If publication fails after draft
 creation, inspect the draft and workflow artifacts before deciding whether to
 finish publication manually or delete only the incomplete draft and rerun.
 Never move an already distributed tag to different code.
-
-To exercise this workflow without publication, dispatch `CLI release` on a
-selected branch. An optional tag input must match the committed source version. A manual dispatch only builds and
-validates Actions artifacts, even when the requested tag already exists.
-PRs that change release tooling also run the build/install matrix using the
-committed source version, without creating a tag or publishing a release.
 
 To reproduce the packaging and installation checks locally, use a clean reviewed
 commit and keep output outside the repository:

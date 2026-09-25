@@ -3348,6 +3348,7 @@
     "scripts/check-windows-source-location.mjs",
     "scripts/ci-changes.mjs",
     "scripts/export-source-preview.mjs",
+    "scripts/gate-cli-release.mjs",
     "scripts/gen-tsconfig-paths.mjs",
     "scripts/lib/builtin-skills.mjs",
     "scripts/lib/cli-release.mjs",

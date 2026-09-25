@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { prepareCliReleasePublication } from './gate-cli-release.mjs';
 import { versionFromTag, cliReleaseTargets } from './lib/cli-release.mjs';
 
 export function validateReleaseReports({ archive, reports, version, revision }) {
@@ -35,6 +36,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const archive = path.join(process.env.MCODE_RELEASE_DIRECTORY, `kinetick-code-${version}.tar.gz`);
   const sha256 = validateReleaseReports({ archive, reports: process.env.MCODE_RELEASE_REPORTS, version, revision });
   const notes = path.join(process.env.MCODE_RELEASE_DIRECTORY, 'release-notes.md');
+  const repo = process.env.GH_REPO;
+  if (!repo) throw new Error('GH_REPO is required to publish a CLI release.');
+  const ghApi = (args, options = {}) => execFileSync('gh', args, { encoding: 'utf8', input: options.input, stdio: ['pipe', 'pipe', 'pipe'] });
+  const prepared = prepareCliReleasePublication({ tag, version, commit: revision, repo, gh: ghApi });
+  if (prepared.action === 'skip') {
+    console.log(prepared.reason);
+    process.exit(0);
+  }
   writeFileSync(notes, `Built from public source commit ${revision}. SHA-256: \`${sha256}\`.
 
 Download the tar.gz and its checksum, verify the checksum, then install:
@@ -48,8 +57,9 @@ Requires Node.js 22.19+ (22.x), 24.2+ (24.x), 25 or 26 and network access to pub
 
 The same archive passed npm installation and offline CLI/BYOK tests on Linux and macOS across the supported Node lines. Windows and live-service acceptance were not run. This package shares the official npm CLI's package name and user data. Install future GitHub archives explicitly; the built-in updater follows the npm registry channel.
 `);
-  // An existing release is never overwritten. Upload to a draft so failures
-  // cannot expose a release with missing assets; maintainers can inspect/retry.
+  // prepareCliReleasePublication already refused an existing release. Upload
+  // to a draft so failures cannot expose a release with missing assets;
+  // maintainers can inspect or retry. This script never deletes a release.
   const gh = (...args) => execFileSync('gh', args, { stdio: 'inherit' });
   gh('release', 'create', tag, '--verify-tag', '--draft', '--title', `Kinetick Code ${version}`, '--notes-file', notes, ...(version.includes('-') ? ['--prerelease'] : []));
   gh('release', 'upload', tag, archive, `${archive}.sha256`);
