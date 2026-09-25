@@ -7,7 +7,7 @@
 </p>
 
 <h1 align="center">Kinetick Code (fork)</h1>
-<p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
+<p align="center">A terminal coding agent based on MiniMax Code, running your own models, and tools beyond code.</p>
 
 > [!IMPORTANT]
 > **Kinetick Code** is a community fork of [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code),
@@ -31,14 +31,13 @@
   <a href="docs/examples.md">Examples</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
-<p align="center"><strong>English</strong> · <a href="README_ZH.md">简体中文</a></p>
 <p align="center">
   <img src="docs/assets/source-preview.svg" alt="Source preview">
   <img src="docs/assets/node.svg" alt="Compatibility: Node.js 22.19+, 24.2+, 25, and 26">
   <a href="LICENSE-STATUS.md"><img src="docs/assets/license.svg" alt="First-party default license: MIT"></a>
 </p>
 
-Understand a project, make changes, and run tests from your terminal. Use your MiniMax account or bring your own model, with search, plugins, and multimodal tools in the same workflow.
+Understand a project, make changes, and run tests from your terminal. Use your MiniMax account or bring your own model or provider, with search, plugins, and multimodal tools in the same workflow.
 
 <p align="center">
   <img src="docs/assets/tui-demo.png" alt="Kinetick Code TUI: a live session with the Session tab bar, Plan Mode, and a running task" width="784">
@@ -324,8 +323,6 @@ Installing a [release archive](#1-install-kcode) and building this checkout are 
 - [Installation and updates](docs/installation.md) · [Examples](docs/examples.md) · [TUI status line](packages/tui/docs/status-line-config.md)
 - [Contributor guide](CONTRIBUTING.md) · [Report a bug or propose an idea](https://github.com/tournierjc/kinetick-code/issues/new/choose) · [Report a security issue](SECURITY.md)
 - [All documentation](docs/README.md): architecture, capability coverage, verification records, source synchronization, and release preparation.
-
-English is the primary documentation language. The [Chinese README](README_ZH.md) mirrors this page.
 
 If you have an idea or proposal, please [open an issue](https://github.com/tournierjc/kinetick-code/issues/new/choose) so we can discuss it. Remove secrets, account details, and private project content from reports.
 
