@@ -10,21 +10,20 @@
 <p align="center">A terminal coding agent with MiniMax, your own models, and tools beyond code.</p>
 
 > [!IMPORTANT]
-> **This is a community fork of [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code)** maintained at
-> [`tournierjc/kinetick-code`](https://github.com/tournierjc/kinetick-code). It merges upstream regularly and enforces
-> fork-specific boundaries (no telemetry, no managed-service clients — see [Network egress](#network-egress)).
-> The official `filecdn.minimax.chat` one-command installer and the public `@minimax-ai/code` npm package deliver
-> **upstream** builds — they do not contain this fork's changes. To run this fork, install the verified archive from
-> [fork Releases](https://github.com/tournierjc/kinetick-code/releases) or build from this source. See
-> [docs/releasing.md#fork-release-process-tournierjckinetick-code](docs/releasing.md#fork-release-process-tournierjckinetick-code) for how releases are produced.
-> **Renamed:** this fork was `tournierjc/minimax-code-fork` and its command was `mcode`. GitHub redirects the old
-> URLs, but the current command is **`kcode`** and release archives are named `kinetick-code-<version>.tar.gz`.
-> An `mcode` launcher from an earlier install keeps working until you install a current archive; see
-> [installation](docs/installation.md#renamed-from-minimax-code-fork).
+> **Kinetick Code** is a community fork of [`MiniMax-AI/minimax-code`](https://github.com/MiniMax-AI/minimax-code),
+> maintained at [`tournierjc/kinetick-code`](https://github.com/tournierjc/kinetick-code). It merges upstream regularly
+> and enforces fork-specific boundaries (no telemetry, no managed-service clients — see [Network egress](#network-egress)).
 >
-> **What this fork adds:** Session tabs with background multitasking (turns keep running and streaming when you switch away),
+> **Install this product** from verified archives on
+> [this repository's GitHub Releases](https://github.com/tournierjc/kinetick-code/releases)
+> (`kinetick-code-<version>.tar.gz` + `.sha256`), or [build from this source](#build-from-source).
+> Upstream MiniMax installers and the public npm package `@minimax-ai/code` deliver **upstream** builds without
+> these changes — do not use them for Kinetick Code. Release process:
+> [docs/releasing.md](docs/releasing.md#fork-release-process-tournierjckinetick-code).
+>
+> **What Kinetick Code adds:** Session tabs with background multitasking (turns keep running and streaming when you switch away),
 > provider setup for OpenRouter, DeepSeek, GitHub Copilot, and keyless local endpoints, session-wide cost tracking in the
-> status line and `/usage`, an independent fork update channel, and no telemetry — see [Session tabs](#session-tabs-and-multitasking)
+> status line and `/usage`, an independent update channel, and no telemetry — see [Session tabs](#session-tabs-and-multitasking)
 > and [Network egress](#network-egress).
 <p align="center">
   <a href="#quick-start">Get started</a> ·
@@ -41,16 +40,16 @@
 
 Understand a project, make changes, and run tests from your terminal. Use your MiniMax account or bring your own model, with search, plugins, and multimodal tools in the same workflow.
 
-[![Kinetick Code TUI: a live session with the Session tab bar, Plan Mode, and a running task](docs/assets/tui-demo.png)](docs/demo.md)
-
-<p align="center"><a href="docs/demo.md">Watch the 20-second demo →</a> · Real terminal output, with pauses shortened</p>
+<p align="center">
+  <img src="docs/assets/tui-demo.png" alt="Kinetick Code TUI: a live session with the Session tab bar, Plan Mode, and a running task" width="784">
+</p>
 
 ## Quick start
 
 ### 1. Install KCode
 
-**This fork — GitHub Release archive (recommended).** Download the archive and checksum from the
-[latest fork release](https://github.com/tournierjc/kinetick-code/releases/latest), verify the checksum, and install
+**GitHub Release archive (recommended).** Download the archive and checksum from
+[this repository's latest release](https://github.com/tournierjc/kinetick-code/releases/latest), verify the checksum, and install
 with npm. Node.js **22.19+ (22.x), 24.2+ (24.x), 25, or 26** is required; npm still needs network access to public
 npm for runtime dependencies. For a `vX.Y.Z` release:
 
@@ -63,21 +62,10 @@ kcode --version
 
 The archive passed the full CI verification and npm-install checks on Linux and macOS across the supported Node
 lines before publication, and its release notes carry the source commit and SHA-256. See
-[install a fork release archive](docs/installation.md#install-a-github-release-archive) and
+[install a release archive](docs/installation.md#install-a-github-release-archive) and
 [fork release process](docs/releasing.md#fork-release-process-tournierjckinetick-code).
 
 **Alternative — build from this source.** See [Build from source](#build-from-source) below.
-
-**Upstream channels (not this fork).** The official installer and public npm package track upstream only:
-
-- macOS / Linux / WSL: `curl -fsSL https://filecdn.minimax.chat/public/install.sh | bash`
-- Windows (PowerShell): `irm https://filecdn.minimax.chat/public/install.ps1 | iex`
-- npm: `npm install -g @minimax-ai/code@latest --registry=https://registry.npmjs.org/ --ignore-scripts=false --include=optional --allow-scripts=@minimax-ai/code,better-sqlite3`
-
-These install into `~/.minimax-code` (POSIX) or `%USERPROFILE%\.minimax-code` (Windows) with launchers `bin/kcode` /
-`bin/mcode-tools`. Use them only when you explicitly want an upstream build without this fork's changes; installing
-through them replaces a fork installation. The built-in updater installs this fork's releases only, see
-[Updating](docs/installation.md#updating). See [Uninstall](#uninstall) to remove the CLI.
 
 Reopen your terminal and check the installation:
 
@@ -86,30 +74,20 @@ kcode --version
 kcode --help
 ```
 
-See [installation](docs/installation.md), [examples](docs/examples.md), and [TUI capabilities](docs/tui-capabilities.md) for this fork's documentation.
+See [installation](docs/installation.md), [examples](docs/examples.md), and [TUI capabilities](docs/tui-capabilities.md).
+`kcode update` installs only releases published by this repository; see [Updating](docs/installation.md#updating).
 
-### 2. Sign in or bring your own API key
+### 2. Choose a provider or sign in
 
-For a mainland China account:
-
-```bash
-kcode login
-```
-
-For a Global account:
-
-```bash
-kcode login --region global
-```
-
-Complete sign-in in your browser, then open `kcode` and use `/status` to check your account and `/provider` to choose a model. Run `kcode logout` to sign out.
-
-Token Plan requires an account with available credits. Builds from this repository and the published npm CLI `@minimax-ai/code@0.4.12` default to `~/.minimax` for user data (or `~/.minimax-<profile>` when a profile is selected). `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can override the data directory. The installer's `~/.minimax-code` installation directory is separate from this choice. See [Accounts and data](docs/installation.md#accounts-and-data) before locating or removing configuration and sessions.
+Start with **`/provider`** (or `kcode provider` from a shell). It works for any connection the runtime supports:
+OpenRouter, DeepSeek, GitHub Copilot, local keyless endpoints, custom OpenAI-/Anthropic-compatible APIs, and MiniMax
+when available. Use `/model` to pick a model once a provider is connected, and `/status` to inspect the active setup.
 
 <details>
-<summary>Use your own API key (BYOK)</summary>
+<summary>Bring your own API key (BYOK)</summary>
 
-BYOK does not require a MiniMax login. Set `MCODE_PROVIDER_API_KEY` in your current shell, then add a provider. Replace the example URL and model name with your provider's values:
+BYOK does not require a MiniMax login. Set `MCODE_PROVIDER_API_KEY` in your current shell, then add a provider.
+Replace the example URL and model name with your provider's values:
 
 ```bash
 kcode provider add --name my-provider --base-url https://example.com/v1 \
@@ -123,6 +101,20 @@ kcode
 Supported API formats: `openai-completions`, `openai-responses`, and `anthropic-messages`. An endpoint that needs no authentication — a server you run locally, typically — is a provider without a key: omit `--api-key-env`, leave `MCODE_PROVIDER_API_KEY` unset, and the connection is stored with no credential, so no request to it carries one. See the [model examples](docs/examples.md#2-choose-your-own-model) for environment variable setup, connection checks, and model overrides for a single run.
 
 </details>
+
+<details>
+<summary>Optional: MiniMax account / Token Plan</summary>
+
+If you use MiniMax OAuth or Token Plan, run `kcode login` (optional `--region cn|global` when your account needs it),
+complete sign-in in the browser, then use `/status` and `/provider`. Sign out with `kcode logout`. Token Plan needs
+an account with available credits.
+
+</details>
+
+User data for builds from this repository defaults to `~/.minimax` (or `~/.minimax-<profile>` when a profile is
+selected). `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can override the data directory. That path is separate from where
+npm installs the `kinetick-code` package. See [Accounts and data](docs/installation.md#accounts-and-data) before
+locating or removing configuration and sessions.
 
 ### 3. Run your first task
 
@@ -192,42 +184,46 @@ See [Open Session tabs](docs/tui-capabilities.md#open-session-tabs) for the full
 
 ## Uninstall
 
-Close running KCode sessions, including editor integrations, before uninstalling. First locate the command with `command -v kcode` (macOS / Linux / WSL) or `Get-Command kcode -All` (PowerShell), then follow the matching installation method below. The current official install scripts do **not** provide an uninstall flag.
+Close running KCode sessions, including editor integrations, before uninstalling. Locate the command with
+`command -v kcode` (macOS / Linux / WSL) or `Get-Command kcode -All` (PowerShell), then use the matching method.
 
-### Installed with the script
+### Installed from a release tarball (npm global) or from source
 
-The commands below remove the default installation directory, including both launchers, downloaded releases, and any installer-managed Node.js runtime. If you used `MCODE_INSTALL_DIR`, substitute the actual installation directory. Inspect it first: earlier source builds used `~/.minimax-code` for user data, and a custom data directory can overlap the installation. Back up any configuration or sessions you want to keep before deleting it.
-
-**macOS / Linux / WSL**
-
-```bash
-rm -rf -- "$HOME/.minimax-code"
-```
-
-Remove the `# Kinetick Code CLI` comment and its following PATH line from the shell file the installer updated: `~/.zshrc` for zsh; the first existing file among `~/.bashrc`, `~/.bash_profile`, and `~/.profile` for bash (or a newly created `~/.bashrc`); `~/.config/fish/config.fish` for fish; or `~/.profile` for other shells. The line is `export PATH="/absolute/install/path/bin:$PATH"`, or `fish_add_path -g "/absolute/install/path/bin"` for fish. Remove only the KCode entry, preserving other PATH settings. The installer skips this edit when `MCODE_NO_MODIFY_PATH` is set or the path is already present.
-
-**Windows (PowerShell)**
-
-```powershell
-Remove-Item -LiteralPath "$env:USERPROFILE\.minimax-code" -Recurse -Force
-```
-
-Open **Edit environment variables for your account**, edit the user **Path**, and remove only the installation directory entry (by default `%USERPROFILE%\.minimax-code`, which may appear as an expanded absolute path). The Windows installer updates the user Path, not the PowerShell profile; `MCODE_NO_MODIFY_PATH` skips that persistent update.
-
-### Installed with npm or from source
-
-For a global npm installation, use the same npm installation/prefix you used to install KCode:
+For a global npm install of this repository's release archive, use the same npm prefix you used to install:
 
 ```bash
 npm uninstall -g kinetick-code
 ```
 
-An installation made before this product took its own name is `@minimax-ai/code`; uninstall that one the
-same way if it is still on disk.
+For a source build, save any work and remove only the checkout you created; see
+[Update or remove](docs/installation.md#update-or-remove).
 
-For a source build, save any work and remove only the checkout you created; see [Update or remove](docs/installation.md#update-or-remove).
+After uninstalling, reopen your terminal (fully restart the editor for integrated terminals) and run
+`command -v kcode` or `Get-Command kcode -All` again. No result means the command is no longer on PATH. If another
+copy appears, identify its installation method before removing it.
 
-After uninstalling, reopen your terminal (fully restart the editor for integrated terminals) and run `command -v kcode` or `Get-Command kcode -All` again. No result means the command is no longer on PATH. If another copy appears, identify its installation method before removing it.
+<details>
+<summary>Optional note: leftover upstream MiniMax installer installs</summary>
+
+Upstream MiniMax one-command installers (not this fork) place files under `~/.minimax-code` (POSIX) or
+`%USERPROFILE%\.minimax-code` (Windows) and may edit PATH. Those scripts do **not** install Kinetick Code.
+If you previously used them and want that tree gone:
+
+```bash
+# macOS / Linux / WSL
+rm -rf -- "$HOME/.minimax-code"
+# Also remove any PATH line the installer added for that directory from your shell profile.
+```
+
+```powershell
+Remove-Item -LiteralPath "$env:USERPROFILE\.minimax-code" -Recurse -Force
+# Remove the matching user Path entry if present.
+```
+
+An older global npm package named `@minimax-ai/code` is likewise upstream (or a pre-rename leftover); remove it with
+`npm uninstall -g @minimax-ai/code` if it is still on disk.
+
+</details>
 
 ### Optional: delete user data
 
@@ -272,14 +268,14 @@ Start the TUI in a copy of the example project and enter:
 
 > Read clamp.mjs and clamp.test.mjs. Run node --test to reproduce the failure, fix clamp without changing the tests, then run the tests again.
 
-The [small, reproducible project](examples/clamp) is the same task used in the demo above. [More examples](docs/examples.md) cover switching models, calling real search, and using your own image inputs.
+The [small, reproducible project](examples/clamp) is a good first task. [More examples](docs/examples.md) cover switching models, calling real search, and using your own image inputs.
 
 ## Build from source
 
 To develop KCode or run this fork's source, clone **this** repository (not upstream) and use Git, **Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26**, and **pnpm 9.12.0**. On Windows, keep the checkout on a local NTFS volume and outside cloud-synced folders; the preflight command below checks the volume before pnpm creates workspace links.
 ```bash
 git clone https://github.com/tournierjc/kinetick-code.git
-cd minimax-code
+cd kinetick-code
 node scripts/check-windows-source-location.mjs
 pnpm install --frozen-lockfile
 pnpm build
@@ -294,7 +290,7 @@ From the source directory, use `pnpm kcode` in place of `kcode` in the examples 
 node /absolute/path/to/kinetick-code/dist/cli.js
 ```
 
-This repository targets the **0.4.12 source preview**. Installing the published package and building this checkout are separate paths. Matching versions do not prove identical build provenance; see the [version and evidence baseline](docs/open-source-status.md#version-and-evidence-baseline).
+Installing a [release archive](#1-install-kcode) and building this checkout are separate paths. See the [version and evidence baseline](docs/open-source-status.md#version-and-evidence-baseline) for how versions relate to upstream snapshots.
 
 ## Documentation and contributing
 

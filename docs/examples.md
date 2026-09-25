@@ -14,7 +14,7 @@ Enter:
 
 > Read clamp.mjs and clamp.test.mjs. Run node --test to reproduce the failure, fix clamp without changing the tests, then run the tests again.
 
-In the [real demo](demo.md), two tests initially failed. After correcting the bounds, all three passed. Use `Ctrl+O` to inspect tool details. Choose permissions appropriate for your project; the demo ran in a temporary directory containing only synthetic files.
+Two tests initially fail on the broken exercise; after correcting the bounds, all three should pass. Use `Ctrl+O` to inspect tool details. Choose permissions appropriate for your project; prefer a temporary directory containing only these synthetic files for a first run.
 
 Resume the most recent session in the current directory:
 

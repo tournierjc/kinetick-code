@@ -1,23 +1,11 @@
 # Installation packages and source builds
 
 > [!IMPORTANT]
-> This repository is the fork [`tournierjc/kinetick-code`](https://github.com/tournierjc/kinetick-code).
-> The `filecdn.minimax.chat` installer scripts and the public `@minimax-ai/code` npm package deliver **upstream**
-> builds without this fork's changes. Install the fork from its own [GitHub Releases](https://github.com/tournierjc/kinetick-code/releases)
-> or build it from this source. See [Fork release process](releasing.md#fork-release-process-tournierjckinetick-code).
-
-## Renamed from minimax-code-fork
-
-This project was renamed: the repository is now `tournierjc/kinetick-code`, the CLI command is `kcode`
-(previously `mcode`), and release archives are `kinetick-code-<version>.tar.gz` (previously
-`minimax-code-<version>.tar.gz`). GitHub redirects the previous repository URLs, and this source tree's
-directory name follows the repository name.
-
-An installation made from an earlier fork archive keeps its `mcode` launcher and keeps working; that
-launcher is only replaced when you install a current archive, which provides `kcode`. User data is
-unchanged, because the rename left the data directories and configuration files alone; the installed
-package name did change, see [Install a GitHub release archive](#install-a-github-release-archive). The
-built-in updater installs releases published by this fork, see [Updating](#updating).
+> This repository is [`tournierjc/kinetick-code`](https://github.com/tournierjc/kinetick-code) (Kinetick Code).
+> Install from its [GitHub Releases](https://github.com/tournierjc/kinetick-code/releases) or build from this
+> source. Upstream MiniMax installers and the public `@minimax-ai/code` npm package deliver **upstream** builds
+> without these changes — they are not the install path for Kinetick Code. See
+> [Release process](releasing.md#fork-release-process-tournierjckinetick-code).
 
 ## Install a GitHub release archive
 
@@ -28,12 +16,12 @@ Install Node.js 22.19+ (22.x), 24.2+ (24.x), 25 or 26 first. npm still needs net
 access to public npm for runtime dependencies. Native dependencies can require
 Python and C/C++ build tools when no matching prebuilt binary is available.
 
-For example, for an available `v0.4.13` release:
+For example, for an available `vX.Y.Z` release:
 
 ```bash
-# Linux; on macOS use: shasum -a 256 -c kinetick-code-0.4.13.tar.gz.sha256
-sha256sum -c kinetick-code-0.4.13.tar.gz.sha256
-npm install --global ./kinetick-code-0.4.13.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
+# Linux; on macOS use: shasum -a 256 -c kinetick-code-X.Y.Z.tar.gz.sha256
+sha256sum -c kinetick-code-X.Y.Z.tar.gz.sha256
+npm install --global ./kinetick-code-X.Y.Z.tar.gz --registry=https://registry.npmjs.org/ --include=optional --ignore-scripts=false --allow-scripts=better-sqlite3
 kcode --version
 ```
 
@@ -48,18 +36,13 @@ or by running `kcode update`, which selects this fork's releases (see
 [Updating](#updating)). To remove the package, use
 `npm uninstall --global kinetick-code`. User data remains in place.
 
-An installation made before this product took its own name is installed as
-`@minimax-ai/code`. Installing a newer archive adds `kinetick-code` beside it, and
-the `kcode` command resolves to the newly installed package; remove the old one with
-`npm uninstall --global @minimax-ai/code`, then confirm with `command -v kcode`. The
-updater recognizes both names, so such an installation keeps updating from this
-repository either way.
-
 Fork release archives are named `kinetick-code-X.Y.Z.tar.gz` (the version matches
-the tag, see [Fork release process](releasing.md#fork-release-process-tournierjckinetick-code)); verify and
-install them the same way as the example above. Releases published before this
-product took its own identity keep their `-fork.N` names, so an archive from that
-period installs the same way.
+the tag, see [Release process](releasing.md#fork-release-process-tournierjckinetick-code)); verify and
+install them the same way as the example above.
+
+If an older global package named `@minimax-ai/code` is still on the same npm prefix, remove it with
+`npm uninstall --global @minimax-ai/code` after installing `kinetick-code`, then confirm with
+`command -v kcode`. The updater recognizes both package names.
 
 ## Updating
 
@@ -101,9 +84,14 @@ the installed version.
 
 ## Install from source
 
-The fork is not published to npm. The upstream CLI is available as [`@minimax-ai/code`](https://www.npmjs.com/package/@minimax-ai/code) — installing it gets you the **upstream** build, not this fork. The upstream `filecdn.minimax.chat` installer scripts likewise track upstream. For fork behavior, build from this repository's source (below) or install a [fork release archive](#install-a-github-release-archive).
+Kinetick Code is not published as a public npm package under its own name for day-to-day installs; use a
+[GitHub release archive](#install-a-github-release-archive) or build from this source. Upstream MiniMax
+channels (`@minimax-ai/code`, one-command installers) are not this product.
 
-This guide builds the 0.4.12 source preview. Workspace/local build manifests remain `private: true` to prevent accidental publishing. A source checkout may contain additional reviewed distribution changes; matching version strings alone do not establish byte-for-byte or build-provenance equivalence with the official npm tarball. Use the committed source revision and release receipt to identify a source build.
+Workspace/local build manifests remain `private: true` to prevent accidental publishing. A source
+checkout may contain additional reviewed distribution changes; matching version strings alone do not
+establish byte-for-byte equivalence with any published tarball. Use the committed source revision and
+release receipt to identify a source build.
 
 For a source build, you need Git, Node.js 22.19+ (22.x), 24.2+ (24.x), 25, or 26, and pnpm 9.12.0. Regular CI uses Node.js 24 across Linux and macOS. The weekly and manual compatibility matrix covers Node.js 22.19.0, 24.2.0, 25, and 26 on both platforms. Windows CI and source-candidate validation are temporarily paused while their checks are made reliable. Initial installation and build require access to public npm.
 
@@ -113,7 +101,7 @@ Node 24.0 and 24.1 are unsupported: their bundled libuv can return inconsistent 
 
 ```bash
 git clone https://github.com/tournierjc/kinetick-code.git
-cd minimax-code
+cd kinetick-code
 corepack enable
 corepack prepare pnpm@9.12.0 --activate
 node scripts/check-windows-source-location.mjs
@@ -137,28 +125,37 @@ On Windows, also use `node` with the appropriate local absolute path. Do not ove
 
 ## Accounts and data
 
-Run `/login minimax` in the TUI or `pnpm kcode login`, choosing the region for your account; `/provider` connects every other provider. Token Plan requires an account and available credits. See the root README for BYOK configuration and testing.
+Prefer **`/provider`** (or `kcode provider` / `pnpm kcode provider`) for OpenRouter, DeepSeek, GitHub Copilot,
+local endpoints, custom APIs, and other connections. MiniMax OAuth / Token Plan remains available via
+`kcode login` (optional `--region cn|global` when needed) or `/login` in the TUI. Token Plan requires an
+account and available credits. See the root README for BYOK configuration and testing.
 
-Source builds and the published npm CLI use the same default user data directory:
+Builds from this repository and installs of this repository's release archives use the same default user
+data directory:
 
 | CLI artifact | Default user data directory |
 | --- | --- |
-| Published npm `@minimax-ai/code@0.4.12` | `~/.minimax` |
+| GitHub release archive (`kinetick-code`) | `~/.minimax` |
 | Build from this repository | `~/.minimax` |
 
-The npm 0.4.12 default was checked against the [public registry artifact](https://registry.npmjs.org/@minimax-ai/code/0.4.12) on 2026-09-19, with its SHA-512 integrity verified. This applies to that published version, including local npm dependencies; do not infer the default of another release from its version label alone. A selected profile uses `~/.minimax-<profile>`. The source default is defined in [`data-dir.ts`](../packages/tui/src/runtime/data-dir.ts). Login state, provider configuration such as `config.yaml`, caches, and sessions belong to the selected data directory.
+A selected profile uses `~/.minimax-<profile>`. The default is defined in
+[`data-dir.ts`](../packages/tui/src/runtime/data-dir.ts). Login state, provider configuration such as
+`config.yaml`, caches, and sessions belong to the selected data directory.
 
-Both accept a non-empty `MINIMAX_DATA_DIR`, falling back to a non-empty `MAVIS_DATA_DIR`, before the default. The [macOS / Linux / WSL installer](https://filecdn.minimax.chat/public/install.sh) installs the npm package under `~/.minimax-code` by default (`MCODE_INSTALL_DIR` changes the installation location). It does not set either data-directory override. Installation files and user data are separate concerns, even when their directories have the same name.
+Both accept a non-empty `MINIMAX_DATA_DIR`, falling back to a non-empty `MAVIS_DATA_DIR`, before the default.
+The npm install location for the `kinetick-code` package is separate from this data directory.
 
-Earlier source builds used `~/.minimax-code` for user data. The new default does not move or merge that data. To keep using an existing source-build data directory, explicitly set `MINIMAX_DATA_DIR` to its path.
+Earlier source builds used `~/.minimax-code` for user data. The current default does not move or merge that
+data. To keep using an existing source-build data directory, explicitly set `MINIMAX_DATA_DIR` to its path.
 
 To locate data safely:
 
-1. Identify the launcher you actually use with `command -v kcode` (POSIX) or `Get-Command kcode -All` (PowerShell), and run that launcher's `--version`. For a local npm dependency, use `node_modules/.bin/kcode --version`; a global npm listing does not identify it. A source build may report the same version as the npm release.
-2. Check whether either data-directory override is set in that launcher's environment. Otherwise use the artifact-specific default above. Inspect directory and file names/permissions locally, without printing `config.yaml`, authentication files, or session contents. For builds from this repository, `kcode telemetry status` also reports the selected `configFile` path without printing credentials; npm 0.4.12 does not provide that command.
-3. If both directories exist, their presence alone does not identify the active one. Keep both protected, and include the launcher, version, installation method, and whether overrides are set when requesting help. Redact personal path components; do not attach configuration or authentication files. Changing an override does not migrate existing data, so do not move or delete either directory merely to match these docs.
+1. Identify the launcher you actually use with `command -v kcode` (POSIX) or `Get-Command kcode -All` (PowerShell), and run that launcher's `--version`. For a local npm dependency, use `node_modules/.bin/kcode --version`; a global npm listing does not identify it.
+2. Check whether either data-directory override is set in that launcher's environment. Otherwise use `~/.minimax` (or `~/.minimax-<profile>`). Inspect directory and file names/permissions locally, without printing `config.yaml`, authentication files, or session contents. For builds from this repository, `kcode telemetry status` also reports the selected `configFile` path without printing credentials.
+3. If more than one candidate directory exists, their presence alone does not identify the active one. Keep them protected, and include the launcher, version, installation method, and whether overrides are set when requesting help. Redact personal path components; do not attach configuration or authentication files. Changing an override does not migrate existing data, so do not move or delete directories merely to match these docs.
 
 For tests, explicitly set `MINIMAX_DATA_DIR` to a temporary directory to keep normal sessions separate. Use `$env:MINIMAX_DATA_DIR = 'C:\path\to\test-profile'` in PowerShell or `export MINIMAX_DATA_DIR=/path/to/test-profile` in a POSIX shell.
+
 
 ## macOS terminal shortcuts: Ghostty Option+M
 
@@ -212,4 +209,11 @@ A source checkout is not updated by the built-in updater, which prints the relea
 instead (see [Updating](#updating)). Save your changes, fetch a reviewed revision with Git, then repeat
 the frozen install and build. A source installation does not automatically become an official npm installation.
 
-To uninstall a source build, save any work and remove the source directory you created. Separately stored user data remains in place. See [Uninstall](../README.md#uninstall) for official installer and npm removal, shell PATH cleanup, and optional user-data deletion.
+To uninstall a source build, save any work and remove the source directory you created. Separately stored user data remains in place. See [Uninstall](../README.md#uninstall) for npm / source removal, optional leftover-upstream cleanup, and optional user-data deletion.
+
+## Historical rename note
+
+Earlier public names for this fork included the repository `tournierjc/minimax-code-fork`, the command
+`mcode`, and archives named `minimax-code-<version>.tar.gz`. GitHub redirects the old repository URLs.
+Current installs use **`kcode`** and `kinetick-code-<version>.tar.gz`. An older `mcode` launcher keeps
+working until a current archive is installed. User data paths were not renamed with the product.
