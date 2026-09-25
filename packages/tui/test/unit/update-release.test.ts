@@ -8,7 +8,9 @@ import {
   KcodeReleaseService,
   buildKcodeInstallCommand,
   compareKcodeVersions,
+  isKcodeGitHubReleaseAssetApiUrl,
   kcodeReleaseArchiveNames,
+  kcodeReleaseFetchHeaders,
   parseKcodeChecksum,
   parseKcodeReleaseChannel,
   parseKcodeVersion,
@@ -420,6 +422,25 @@ describe('KcodeReleaseService', () => {
       service([entry], { runInstall }, { platform: 'win32' }).apply({}),
     ).rejects.toThrow(/validated on Linux and macOS only/u);
     expect(runInstall).not.toHaveBeenCalled();
+  });
+
+  it('asks GitHub for raw bytes on release asset API URLs', () => {
+    const assetUrl =
+      'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/588290420';
+    expect(isKcodeGitHubReleaseAssetApiUrl(assetUrl)).toBe(true);
+    expect(isKcodeGitHubReleaseAssetApiUrl('https://api.github.com/repos/o/r/releases?per_page=30')).toBe(
+      false,
+    );
+    expect(kcodeReleaseFetchHeaders(assetUrl)).toEqual({ accept: 'application/octet-stream' });
+    expect(
+      kcodeReleaseFetchHeaders(assetUrl, {
+        accept: 'application/vnd.github+json',
+        'x-github-api-version': '2022-11-28',
+      }),
+    ).toEqual({
+      accept: 'application/vnd.github+json',
+      'x-github-api-version': '2022-11-28',
+    });
   });
 
   it('reports the public archive URL in the install command for a source checkout', async () => {
