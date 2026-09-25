@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { KcodeProviderModel, KcodeProviderView } from '../../src/provider/contract.js';
+import { defaultProviderApiFormatForBaseUrl } from '../../src/provider/contract.js';
 import { KcodeProviderApplication } from '../../src/provider/application.js';
 
 function createPort() {
@@ -214,6 +215,7 @@ describe('McodeProviderApplication', () => {
       'minimax_oauth',
       'minimax_api',
       'openrouter',
+      'deepseek',
       'local',
       'custom_provider:openai',
     ]);
@@ -402,7 +404,7 @@ describe('McodeProviderApplication', () => {
     ).toMatchObject({ enabled: true, active: true });
   });
 
-  it('offers OpenRouter and Local setup until a matching connection exists', async () => {
+  it('offers OpenRouter, DeepSeek, and Local setup until a matching connection exists', async () => {
     const application = new KcodeProviderApplication(createPort());
 
     const snapshot = await application.snapshot();
@@ -411,6 +413,15 @@ describe('McodeProviderApplication', () => {
       providerId: 'openrouter',
       name: 'OpenRouter',
       baseUrl: 'https://openrouter.ai/api/v1',
+      apiFormat: 'openai-completions',
+      hasApiKey: false,
+      readOnly: false,
+      models: [],
+    });
+    expect(snapshot.providers.find((provider) => provider.kind === 'deepseek-setup')).toMatchObject({
+      providerId: 'deepseek',
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
       apiFormat: 'openai-completions',
       hasApiKey: false,
       readOnly: false,
@@ -451,6 +462,34 @@ describe('McodeProviderApplication', () => {
       snapshot.providers.find((provider) => provider.providerId === 'custom_provider:openrouter'),
     ).toMatchObject({ kind: 'custom', hasApiKey: true });
     expect(snapshot.providers.some((provider) => provider.kind === 'local-setup')).toBe(true);
+    expect(snapshot.providers.some((provider) => provider.kind === 'deepseek-setup')).toBe(true);
+  });
+
+  it('hides the DeepSeek setup row once a connection targets DeepSeek', async () => {
+    const port = createPort();
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:deepseek',
+        name: 'DeepSeek',
+        kind: 'custom' as const,
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'https://api.deepseek.com/v1',
+        hasApiKey: true,
+        configRevision: 'rev-ds',
+        models: [{ modelId: 'deepseek-chat' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.filter((provider) => provider.kind === 'deepseek-setup')).toHaveLength(0);
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:deepseek'),
+    ).toMatchObject({ kind: 'custom', hasApiKey: true });
+    expect(snapshot.providers.some((provider) => provider.kind === 'openrouter-setup')).toBe(true);
+    expect(snapshot.providers.some((provider) => provider.kind === 'local-setup')).toBe(true);
   });
 
   it('hides the Local setup row once a loopback connection exists', async () => {
@@ -474,6 +513,7 @@ describe('McodeProviderApplication', () => {
 
     expect(snapshot.providers.filter((provider) => provider.kind === 'local-setup')).toHaveLength(0);
     expect(snapshot.providers.some((provider) => provider.kind === 'openrouter-setup')).toBe(true);
+    expect(snapshot.providers.some((provider) => provider.kind === 'deepseek-setup')).toBe(true);
   });
 });
 
@@ -531,5 +571,27 @@ describe('saved provider model refresh', () => {
     const port = createPort();
     await expect(new KcodeProviderApplication(port).refreshModels({ ...provider, configRevision: undefined })).rejects.toThrow('Reopen /provider');
     expect(port.discoverUserModelsCandidate).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('defaultProviderApiFormatForBaseUrl', () => {
+  it('defaults OpenRouter and DeepSeek hosts to openai-completions', () => {
+    expect(defaultProviderApiFormatForBaseUrl('https://openrouter.ai/api/v1')).toBe(
+      'openai-completions',
+    );
+    expect(defaultProviderApiFormatForBaseUrl('https://api.deepseek.com/v1')).toBe(
+      'openai-completions',
+    );
+    expect(defaultProviderApiFormatForBaseUrl('https://api.deepseek.com')).toBe(
+      'openai-completions',
+    );
+  });
+
+  it('keeps the Anthropic default for other hosts', () => {
+    expect(defaultProviderApiFormatForBaseUrl('https://api.anthropic.com')).toBe(
+      'anthropic-messages',
+    );
+    expect(defaultProviderApiFormatForBaseUrl('not-a-url')).toBe('anthropic-messages');
   });
 });

@@ -252,6 +252,7 @@ describe("TuiFeatureFlow", () => {
     };
     const listed = stripAnsi(manager.render(120).join("\n"));
     expect(listed).toContain("OpenRouter");
+    expect(listed).toContain("DeepSeek");
     expect(listed).toContain("Local");
     expect(listed).toContain("Not configured");
 

@@ -12,6 +12,7 @@ import {
 } from './contract.js';
 import type { KcodeProviderCliRequest } from './provider-command.js';
 import {
+  defaultProviderApiFormatForBaseUrl,
   isModelProviderApiFormat,
   KCODE_PROVIDER_API_FORMATS,
   type KcodeProviderApiFormat,
@@ -149,7 +150,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   const provider = program
     .command('provider')
-    .description('Manage model providers, including OpenRouter and Local')
+    .description('Manage model providers, including OpenRouter, DeepSeek, and Local')
     .allowExcessArguments(false)
     .action(() => options.launchTui(withLane({ initialPrompt: '/provider' })));
 
@@ -170,7 +171,6 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
       '--api-format <format>',
       KCODE_PROVIDER_API_FORMATS.join(', '),
       parseApiFormat,
-      'anthropic-messages',
     )
     .option('--model <id>', 'model ID (repeatable)', collectOptionValue, [])
     .option('--api-key-env <name>', 'environment variable containing the API key')
@@ -182,7 +182,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
       (commandOptions: {
         name: string;
         baseUrl: string;
-        apiFormat: KcodeProviderApiFormat;
+        apiFormat?: KcodeProviderApiFormat;
         model: string[];
         contextLimit?: number;
         outputLimit?: number;
@@ -197,7 +197,9 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
           action: 'add',
           name: commandOptions.name,
           baseUrl: commandOptions.baseUrl,
-          apiFormat: commandOptions.apiFormat,
+          apiFormat:
+            commandOptions.apiFormat ??
+            defaultProviderApiFormatForBaseUrl(commandOptions.baseUrl),
           models: commandOptions.model,
           contextLimit: commandOptions.contextLimit,
           outputLimit: commandOptions.outputLimit,

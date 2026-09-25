@@ -63,10 +63,13 @@ export class ModelConnectionTester {
       const response = await this.fetchImpl(url, { ...init, signal: controller.signal });
       if (response.ok) return await validateSuccessResponse(response, target.api, target);
       if (response.status === 401 || response.status === 403) {
+        const upstreamReason = await readUpstreamErrorReason(response, target);
         return {
           ok: false,
           errorCode: 'unauthorized',
-          errorMessage: `Authentication failed (HTTP ${response.status})`,
+          errorMessage: `Authentication failed (HTTP ${response.status})${
+            upstreamReason ? `: ${upstreamReason}` : ''
+          }`,
         };
       }
       const upstreamReason = await readUpstreamErrorReason(response, target);

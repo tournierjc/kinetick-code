@@ -19,6 +19,7 @@ export type KcodeProviderKind =
   | 'minimax-oauth'
   | 'minimax-api-key'
   | 'openrouter-setup'
+  | 'deepseek-setup'
   | 'local-setup'
   | 'builtin'
   | 'custom';
@@ -32,6 +33,23 @@ export const KCODE_OPENROUTER_SETUP = {
   providerId: 'openrouter',
   name: 'OpenRouter',
   baseUrl: 'https://openrouter.ai/api/v1',
+  apiFormat: 'openai-completions',
+} as const satisfies {
+  readonly providerId: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiFormat: KcodeProviderApiFormat;
+};
+
+/**
+ * DeepSeek as `/provider` offers it before any connection exists. The row
+ * collects an API key and stores it on DeepSeek's OpenAI-compatible endpoint
+ * through the same custom-provider save as every other connection.
+ */
+export const KCODE_DEEPSEEK_SETUP = {
+  providerId: 'deepseek',
+  name: 'DeepSeek',
+  baseUrl: 'https://api.deepseek.com/v1',
   apiFormat: 'openai-completions',
 } as const satisfies {
   readonly providerId: string;
@@ -56,6 +74,27 @@ export const KCODE_LOCAL_SETUP = {
   readonly baseUrl: string;
   readonly apiFormat: KcodeProviderApiFormat;
 };
+
+
+/**
+ * CLI `provider add` defaults to Anthropic Messages unless the base URL host is
+ * a known OpenAI-compatible gateway where that default is a common footgun.
+ */
+export function defaultProviderApiFormatForBaseUrl(baseUrl: string): KcodeProviderApiFormat {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    if (
+      host === 'openrouter.ai' ||
+      host.endsWith('.openrouter.ai') ||
+      host === 'api.deepseek.com'
+    ) {
+      return 'openai-completions';
+    }
+  } catch {
+    // Invalid URLs keep the historical Anthropic default.
+  }
+  return 'anthropic-messages';
+}
 
 /** Provider key the GitHub Copilot connector writes into `custom_provider`. */
 export const KCODE_COPILOT_PROVIDER_ID = 'github-copilot';
