@@ -132,7 +132,7 @@ does not infer image support from its name. `--use` and `provider test` check
 connectivity with a text request; they do not verify vision support.
 
 For an existing provider, close KCode and add the capability to the matching model
-in the active profile's `config.yaml` (normally `~/.minimax/config.yaml`; see
+in the active profile's `config.yaml` (normally `~/.kinetick/config.yaml`; see
 [Accounts and data](installation.md#accounts-and-data) for profiles and overrides).
 Merge this fragment into the existing provider and keep its other settings:
 

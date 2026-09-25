@@ -111,10 +111,11 @@ an account with available credits.
 
 </details>
 
-User data for builds from this repository defaults to `~/.minimax` (or `~/.minimax-<profile>` when a profile is
-selected). `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can override the data directory. That path is separate from where
-npm installs the `kinetick-code` package. See [Accounts and data](docs/installation.md#accounts-and-data) before
-locating or removing configuration and sessions.
+User data for builds from this repository defaults to `~/.kinetick` (or `~/.kinetick-<profile>` when a profile is
+selected). Older installs may still use `~/.minimax`; on upgrade the runtime migrates that directory or leaves a
+compatibility link. `KINETICK_DATA_DIR`, `MINIMAX_DATA_DIR`, or `MAVIS_DATA_DIR` can override the data directory.
+That path is separate from where npm installs the `kinetick-code` package. See
+[Accounts and data](docs/installation.md#accounts-and-data) before locating or removing configuration and sessions.
 
 ### 3. Run your first task
 
@@ -227,19 +228,19 @@ An older global npm package named `@minimax-ai/code` is likewise upstream (or a 
 
 ### Optional: delete user data
 
-Removing the program leaves separately stored user data in place. To also delete local login state, provider configuration, caches, and sessions, first confirm the selected directory using [Accounts and data](docs/installation.md#accounts-and-data) and back up anything you need. Other KCode installations can share this directory. For the default `~/.minimax` directory only:
+Removing the program leaves separately stored user data in place. To also delete local login state, provider configuration, caches, and sessions, first confirm the selected directory using [Accounts and data](docs/installation.md#accounts-and-data) and back up anything you need. Other KCode installations can share this directory. For the default `~/.kinetick` directory only:
 
 ```bash
 # macOS / Linux / WSL — permanently deletes the default user data
-rm -rf -- "$HOME/.minimax"
+rm -rf -- "$HOME/.kinetick"
 ```
 
 ```powershell
 # Windows — permanently deletes the default user data
-Remove-Item -LiteralPath "$env:USERPROFILE\.minimax" -Recurse -Force
+Remove-Item -LiteralPath "$env:USERPROFILE\.kinetick" -Recurse -Force
 ```
 
-A profile uses `~/.minimax-<profile>`; `MINIMAX_DATA_DIR` or `MAVIS_DATA_DIR` can select a different location. Remove only the specific directories you intend to discard, without wildcard deletion. Remove any KCode-specific environment variable assignments you added to shell profiles or user environment settings if you no longer need them.
+A profile uses `~/.kinetick-<profile>`; older installs may still have `~/.minimax` / `~/.minimax-<profile>`. `KINETICK_DATA_DIR`, `MINIMAX_DATA_DIR`, or `MAVIS_DATA_DIR` can select a different location. Remove only the specific directories you intend to discard, without wildcard deletion. Remove any KCode-specific environment variable assignments you added to shell profiles or user environment settings if you no longer need them.
 
 ## Network egress
 

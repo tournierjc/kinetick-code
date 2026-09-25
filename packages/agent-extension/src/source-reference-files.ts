@@ -215,7 +215,7 @@ export function isTemporaryOrInternalFilePath(value: string): boolean {
     return false;
   }
   return (
-    /(?:^|\/)\.(?:minimax|mavis)(?:-[^/]*)?(?:\/|$)/iu.test(path) ||
+    /(?:^|\/)\.(?:kinetick|minimax|mavis)(?:-[^/]*)?(?:\/|$)/iu.test(path) ||
     /(?:^|\/)reports\/tool-outputs(?:\/|$)/iu.test(path) ||
     /(?:^|\/)(?:\.tmp|tmp|temp)(?:\/|$)/iu.test(path) ||
     /^\/?(?:private\/)?var\/folders\/[^/]+\/[^/]+\/T(?:\/|$)/iu.test(path) ||

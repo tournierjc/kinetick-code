@@ -135,26 +135,30 @@ data directory:
 
 | CLI artifact | Default user data directory |
 | --- | --- |
-| GitHub release archive (`kinetick-code`) | `~/.minimax` |
-| Build from this repository | `~/.minimax` |
+| GitHub release archive (`kinetick-code`) | `~/.kinetick` |
+| Build from this repository | `~/.kinetick` |
 
-A selected profile uses `~/.minimax-<profile>`. The default is defined in
-[`data-dir.ts`](../packages/tui/src/runtime/data-dir.ts). Login state, provider configuration such as
-`config.yaml`, caches, and sessions belong to the selected data directory.
+A selected profile uses `~/.kinetick-<profile>`. The default is defined in
+[`data-dir.ts`](../packages/config/src/data-dir.ts) (TUI overrides in
+[`packages/tui/src/runtime/data-dir.ts`](../packages/tui/src/runtime/data-dir.ts)). Login state, provider
+configuration such as `config.yaml`, caches, and sessions belong to the selected data directory.
 
-Both accept a non-empty `MINIMAX_DATA_DIR`, falling back to a non-empty `MAVIS_DATA_DIR`, before the default.
-The npm install location for the `kinetick-code` package is separate from this data directory.
+Overrides are checked in order: non-empty `KINETICK_DATA_DIR`, then `MINIMAX_DATA_DIR`, then `MAVIS_DATA_DIR`,
+before the default. The npm install location for the `kinetick-code` package is separate from this data directory.
 
-Earlier source builds used `~/.minimax-code` for user data. The current default does not move or merge that
-data. To keep using an existing source-build data directory, explicitly set `MINIMAX_DATA_DIR` to its path.
+Older Kinetick / MiniMax-named installs may still have `~/.minimax` (or `~/.mavis`). On upgrade the runtime
+migrates that directory into `~/.kinetick` when possible, or leaves a compatibility link so existing paths keep
+working. Earlier source builds used `~/.minimax-code` for user data; the current default does not move or merge
+that data. To keep using an existing source-build data directory, explicitly set `KINETICK_DATA_DIR` (or
+`MINIMAX_DATA_DIR`) to its path.
 
 To locate data safely:
 
 1. Identify the launcher you actually use with `command -v kcode` (POSIX) or `Get-Command kcode -All` (PowerShell), and run that launcher's `--version`. For a local npm dependency, use `node_modules/.bin/kcode --version`; a global npm listing does not identify it.
-2. Check whether either data-directory override is set in that launcher's environment. Otherwise use `~/.minimax` (or `~/.minimax-<profile>`). Inspect directory and file names/permissions locally, without printing `config.yaml`, authentication files, or session contents. For builds from this repository, `kcode telemetry status` also reports the selected `configFile` path without printing credentials.
+2. Check whether a data-directory override (`KINETICK_DATA_DIR`, `MINIMAX_DATA_DIR`, or `MAVIS_DATA_DIR`) is set in that launcher's environment. Otherwise use `~/.kinetick` (or `~/.kinetick-<profile>`); older installs may still have `~/.minimax`. Inspect directory and file names/permissions locally, without printing `config.yaml`, authentication files, or session contents. For builds from this repository, `kcode telemetry status` also reports the selected `configFile` path without printing credentials.
 3. If more than one candidate directory exists, their presence alone does not identify the active one. Keep them protected, and include the launcher, version, installation method, and whether overrides are set when requesting help. Redact personal path components; do not attach configuration or authentication files. Changing an override does not migrate existing data, so do not move or delete directories merely to match these docs.
 
-For tests, explicitly set `MINIMAX_DATA_DIR` to a temporary directory to keep normal sessions separate. Use `$env:MINIMAX_DATA_DIR = 'C:\path\to\test-profile'` in PowerShell or `export MINIMAX_DATA_DIR=/path/to/test-profile` in a POSIX shell.
+For tests, explicitly set `KINETICK_DATA_DIR` (or `MINIMAX_DATA_DIR`) to a temporary directory to keep normal sessions separate. Use `$env:KINETICK_DATA_DIR = 'C:\path\to\test-profile'` in PowerShell or `export KINETICK_DATA_DIR=/path/to/test-profile` in a POSIX shell.
 
 
 ## macOS terminal shortcuts: Ghostty Option+M
@@ -195,7 +199,7 @@ Alternatively, merge this entry into `<data-dir>/tui/keybindings.json`, preservi
 }
 ```
 
-For the default profile this is `~/.minimax/tui/keybindings.json`; [profiles and data-directory overrides](#accounts-and-data) change the path. Create the `tui` directory if needed. After editing the file, run `/reload` while idle with no pending interaction or queued message, or restart KCode. This replaces `Alt+M`; use `["alt+m", "ctrl+x"]` as the value to retain both bindings. `/hotkeys` shows the effective binding.
+For the default profile this is `~/.kinetick/tui/keybindings.json`; [profiles and data-directory overrides](#accounts-and-data) change the path. Create the `tui` directory if needed. After editing the file, run `/reload` while idle with no pending interaction or queued message, or restart KCode. This replaces `Alt+M`; use `["alt+m", "ctrl+x"]` as the value to retain both bindings. `/hotkeys` shows the effective binding.
 
 ### Verify the result
 

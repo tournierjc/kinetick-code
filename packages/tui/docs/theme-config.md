@@ -31,7 +31,7 @@ mcode TUI 的配色由**具名主题**决定，每个主题同时提供深色和
 
 ## 配置落点
 
-- 文件：`~/.minimax/tui/tui-settings.json`（即运行时数据目录下的 `tui/tui-settings.json`）。
+- 文件：`~/.kinetick/tui/tui-settings.json`（即运行时数据目录下的 `tui/tui-settings.json`）。
 - 键：`theme`，值是主题 ID，或 `主题ID/light`、`主题ID/dark` 锁定外观。
 
 ```json

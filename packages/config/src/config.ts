@@ -1196,8 +1196,8 @@ export interface NexusConfig {
 // Brand constants — single source of truth for all brand-related strings.
 // ---------------------------------------------------------------------------
 export const BRAND = {
-  /** Data directory basename (e.g. '.minimax'). */
-  APP_DIR: ".minimax",
+  /** Data directory basename (e.g. '.kinetick'). */
+  APP_DIR: ".kinetick",
   /** Environment variable prefix (e.g. 'minimax'). */
   ENV_PREFIX: "minimax",
   /** CLI binary name. */
@@ -1316,7 +1316,9 @@ function parseRepoName(remoteUrl: string): string | null {
 
 function getExplicitPublicDataDirEnv(): string | undefined {
   return (
-    process.env.MINIMAX_DATA_DIR?.trim() || process.env.MAVIS_DATA_DIR?.trim()
+    process.env.KINETICK_DATA_DIR?.trim() ||
+    process.env.MINIMAX_DATA_DIR?.trim() ||
+    process.env.MAVIS_DATA_DIR?.trim()
   );
 }
 

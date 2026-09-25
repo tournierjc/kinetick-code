@@ -107,8 +107,9 @@ kcode
 
 </details>
 
-从本仓库构建的版本默认将用户数据保存在 `~/.minimax`（选择 profile 时为 `~/.minimax-<profile>`）。
-`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以覆盖数据目录。该路径与 npm 安装 `kinetick-code` 包的位置无关。
+从本仓库构建的版本默认将用户数据保存在 `~/.kinetick`（选择 profile 时为 `~/.kinetick-<profile>`）。
+旧安装可能仍使用 `~/.minimax`；升级时运行时会迁移该目录或保留兼容链接。
+`KINETICK_DATA_DIR`、`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以覆盖数据目录。该路径与 npm 安装 `kinetick-code` 包的位置无关。
 查找或删除配置和会话前，请参阅[账号与数据](docs/installation.md#accounts-and-data)。
 
 ### 3. 完成第一个任务
@@ -211,19 +212,19 @@ Remove-Item -LiteralPath "$env:USERPROFILE\.minimax-code" -Recurse -Force
 
 ### 可选：删除用户数据
 
-移除程序会保留单独存储的用户数据。如果还要删除本地登录状态、提供方配置、缓存和会话，请先按[账号与数据](docs/installation.md#accounts-and-data)确认实际数据目录，并备份需要保留的内容。其他 KCode 安装可能共用该目录。以下命令仅适用于默认的 `~/.minimax`：
+移除程序会保留单独存储的用户数据。如果还要删除本地登录状态、提供方配置、缓存和会话，请先按[账号与数据](docs/installation.md#accounts-and-data)确认实际数据目录，并备份需要保留的内容。其他 KCode 安装可能共用该目录。以下命令仅适用于默认的 `~/.kinetick`：
 
 ```bash
 # macOS / Linux / WSL — 永久删除默认用户数据
-rm -rf -- "$HOME/.minimax"
+rm -rf -- "$HOME/.kinetick"
 ```
 
 ```powershell
 # Windows — 永久删除默认用户数据
-Remove-Item -LiteralPath "$env:USERPROFILE\.minimax" -Recurse -Force
+Remove-Item -LiteralPath "$env:USERPROFILE\.kinetick" -Recurse -Force
 ```
 
-profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以指定其他位置。只删除确定不再需要的具体目录，不要使用通配符批量删除。如果不再需要自行添加的 KCode 环境变量，也请从 shell 配置或用户环境变量设置中移除对应赋值。
+profile 使用 `~/.kinetick-<profile>`；旧安装可能仍有 `~/.minimax` / `~/.minimax-<profile>`。`KINETICK_DATA_DIR`、`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以指定其他位置。只删除确定不再需要的具体目录，不要使用通配符批量删除。如果不再需要自行添加的 KCode 环境变量，也请从 shell 配置或用户环境变量设置中移除对应赋值。
 
 ## 通过脚本安装
 
@@ -261,19 +262,19 @@ npm uninstall -g kinetick-code
 
 ### 可选：删除用户数据
 
-移除程序会保留单独存储的用户数据。如果还要删除本地登录状态、提供方配置、缓存和会话，请先按[账号与数据](docs/installation.md#accounts-and-data)确认实际数据目录，并备份需要保留的内容。其他 KCode 安装可能共用该目录。以下命令仅适用于默认的 `~/.minimax`：
+移除程序会保留单独存储的用户数据。如果还要删除本地登录状态、提供方配置、缓存和会话，请先按[账号与数据](docs/installation.md#accounts-and-data)确认实际数据目录，并备份需要保留的内容。其他 KCode 安装可能共用该目录。以下命令仅适用于默认的 `~/.kinetick`：
 
 ```bash
 # macOS / Linux / WSL — 永久删除默认用户数据
-rm -rf -- "$HOME/.minimax"
+rm -rf -- "$HOME/.kinetick"
 ```
 
 ```powershell
 # Windows — 永久删除默认用户数据
-Remove-Item -LiteralPath "$env:USERPROFILE\.minimax" -Recurse -Force
+Remove-Item -LiteralPath "$env:USERPROFILE\.kinetick" -Recurse -Force
 ```
 
-profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以指定其他位置。只删除确定不再需要的具体目录，不要使用通配符批量删除。如果不再需要自行添加的 KCode 环境变量，也请从 shell 配置或用户环境变量设置中移除对应赋值。
+profile 使用 `~/.kinetick-<profile>`；旧安装可能仍有 `~/.minimax` / `~/.minimax-<profile>`。`KINETICK_DATA_DIR`、`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 可以指定其他位置。只删除确定不再需要的具体目录，不要使用通配符批量删除。如果不再需要自行添加的 KCode 环境变量，也请从 shell 配置或用户环境变量设置中移除对应赋值。
 
 ## 可以做什么
 

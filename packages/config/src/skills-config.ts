@@ -24,6 +24,7 @@ const EXTERNAL_SOURCE_KINDS = [
   'user-cc',
   'user-codex',
   'user-agents',
+  'workspace-kinetick',
   'workspace-minimax',
   'workspace-cc',
   'workspace-agents',
@@ -65,6 +66,7 @@ export const DEFAULT_SKILLS_CONFIG: SkillsConfig = {
     walkUp: true,
     duplicateWarn: true,
     sources: {
+      'workspace-kinetick': { enabled: true, priority: 66 },
       'workspace-minimax': { enabled: true, priority: 65 },
       'workspace-cc': { enabled: true, priority: 60 },
       'workspace-agents': { enabled: true, priority: 55 },

@@ -69,8 +69,10 @@ export type {
 } from './model-availability.js';
 export {
   LEGACY_DATA_DIR_BASENAME,
+  LEGACY_DATA_DIR_BASENAMES,
   NEW_DATA_DIR_BASENAME,
   getLegacyDataDirPath,
+  getLegacyDataDirPaths,
   getPrimaryDataDirPath,
   migrateDefaultDataDir,
   migrateProfileDataDir,

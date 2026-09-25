@@ -156,6 +156,7 @@
       "packages/tui/test/unit/tui/controller/product/feature-flow.test.ts",
       "packages/tui/test/unit/tui/controller/run/turn-submission-retainer.test.ts",
       "packages/tui/test/unit/tui/features/settings/hotkeys-picker.test.ts",
+      "packages/config/test/data-dir.test.ts",
       "packages/config/test/config-file-permissions.test.ts",
       "packages/config/test/private-config-file.test.ts",
       "packages/config/test/managed-preset-sync.test.ts",
