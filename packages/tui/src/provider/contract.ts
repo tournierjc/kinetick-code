@@ -18,8 +18,44 @@ export type KcodeProviderKind =
   | 'copilot-oauth'
   | 'minimax-oauth'
   | 'minimax-api-key'
+  | 'openrouter-setup'
+  | 'local-setup'
   | 'builtin'
   | 'custom';
+
+/**
+ * OpenRouter as `/provider` offers it before any connection exists. The row
+ * collects an API key and stores it on this OpenAI-compatible endpoint through
+ * the same custom-provider save as every other connection.
+ */
+export const KCODE_OPENROUTER_SETUP = {
+  providerId: 'openrouter',
+  name: 'OpenRouter',
+  baseUrl: 'https://openrouter.ai/api/v1',
+  apiFormat: 'openai-completions',
+} as const satisfies {
+  readonly providerId: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiFormat: KcodeProviderApiFormat;
+};
+
+/**
+ * Local as `/provider` offers it before any connection exists: an
+ * OpenAI-compatible base URL, defaulting to the address Ollama exposes. The
+ * API key on that flow is optional, matching a server that checks no credential.
+ */
+export const KCODE_LOCAL_SETUP = {
+  providerId: 'local',
+  name: 'Local',
+  baseUrl: 'http://localhost:11434/v1',
+  apiFormat: 'openai-completions',
+} as const satisfies {
+  readonly providerId: string;
+  readonly name: string;
+  readonly baseUrl: string;
+  readonly apiFormat: KcodeProviderApiFormat;
+};
 
 /** Provider key the GitHub Copilot connector writes into `custom_provider`. */
 export const KCODE_COPILOT_PROVIDER_ID = 'github-copilot';

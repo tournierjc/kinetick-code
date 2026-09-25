@@ -435,7 +435,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     name: 'provider',
-    description: 'View, connect, and edit model providers',
+    description: 'Connect OpenRouter, Local, and other model providers',
     category: 'Runtime',
   },
   {

@@ -9,12 +9,15 @@ import {
   tuiChalk as chalk,
   tuiColors as colors,
 } from '../../theme/runtime.js';
-import type {
-  KcodeProviderSnapshot,
-  KcodeProviderTestResult,
-  KcodeProviderView,
-  KcodeSaveProviderCandidateInput,
-  KcodeSaveProviderCandidateResult,
+import {
+  KCODE_LOCAL_SETUP,
+  KCODE_OPENROUTER_SETUP,
+  type KcodeProviderModelInput,
+  type KcodeProviderSnapshot,
+  type KcodeProviderTestResult,
+  type KcodeProviderView,
+  type KcodeSaveProviderCandidateInput,
+  type KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { TuiProviderEditor } from './editor.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -22,14 +25,23 @@ import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 /**
  * `/provider` owns the independent Codex connect action and MiniMax credential
  * source. The MiniMax API Key can be replaced and OAuth can start a fresh
- * sign-in. Every other connection the runtime resolves is listed: the user's
- * `custom_provider` entries are edited through revision-checked candidate saves,
- * and entries from the builtin `provider` tree are shown and testable but
- * owned by config.yaml. `a` connects a new provider without leaving the panel.
+ * sign-in. OpenRouter and Local are listed before they are saved: OpenRouter
+ * collects an API key, Local collects an OpenAI-compatible base URL and an
+ * optional key, and both persist through the same candidate save as every
+ * other custom connection. Every other connection the runtime resolves is
+ * listed: the user's `custom_provider` entries are edited through
+ * revision-checked candidate saves, and entries from the builtin `provider`
+ * tree are shown and testable but owned by config.yaml. `a` connects a new
+ * provider without leaving the panel.
  */
 type ProviderManagerMode =
   | { readonly kind: 'list' }
-  | { readonly kind: 'minimax-key'; readonly replacing: boolean };
+  | { readonly kind: 'minimax-key'; readonly replacing: boolean }
+  | { readonly kind: 'openrouter-key'; readonly apiKey?: string }
+  | { readonly kind: 'openrouter-model'; readonly apiKey: string }
+  | { readonly kind: 'local-url' }
+  | { readonly kind: 'local-model'; readonly baseUrl: string }
+  | { readonly kind: 'local-key'; readonly baseUrl: string; readonly modelId: string };
 
 export interface TuiProviderManagerOptions {
   snapshot: KcodeProviderSnapshot;
@@ -55,6 +67,9 @@ export class TuiProviderManager implements Component, Focusable {
   private selectedIndex = 0;
   private mode: ProviderManagerMode = { kind: 'list' };
   private readonly secretInput = new Input({ mask: '•' });
+  private readonly textInput = new Input({ prompt: '' });
+  /** Held only while a setup wizard can echo a failure that includes the secret. */
+  private secretToRedact?: string;
   private busy = false;
   private status?: { readonly tone: 'info' | 'error'; readonly text: string };
   private _focused = false;
@@ -64,8 +79,14 @@ export class TuiProviderManager implements Component, Focusable {
     this.snapshotValue = options.snapshot;
     const activeIndex = this.providers().findIndex((provider) => provider.active);
     this.selectedIndex = Math.max(0, activeIndex);
-    this.secretInput.onSubmit = (value) => this.submitMiniMaxKey(value);
-    this.secretInput.onEscape = () => this.exitMode();
+    this.secretInput.onSubmit = (value) => {
+      if (this.mode.kind === 'openrouter-key') this.submitOpenRouterKey(value);
+      else if (this.mode.kind === 'local-key') this.submitLocalKey(value);
+      else this.submitMiniMaxKey(value);
+    };
+    this.secretInput.onEscape = () => this.exitSetupStep();
+    this.textInput.onSubmit = (value) => this.submitSetupText(value);
+    this.textInput.onEscape = () => this.exitSetupStep();
   }
 
   get focused(): boolean {
@@ -83,8 +104,21 @@ export class TuiProviderManager implements Component, Focusable {
       this.editor.handleInput(data);
       return;
     }
-    if (this.mode.kind === 'minimax-key') {
+    if (
+      this.mode.kind === 'minimax-key' ||
+      this.mode.kind === 'openrouter-key' ||
+      this.mode.kind === 'local-key'
+    ) {
       this.secretInput.handleInput(data);
+      this.requestRender();
+      return;
+    }
+    if (
+      this.mode.kind === 'openrouter-model' ||
+      this.mode.kind === 'local-url' ||
+      this.mode.kind === 'local-model'
+    ) {
+      this.textInput.handleInput(data);
       this.requestRender();
       return;
     }
@@ -114,14 +148,19 @@ export class TuiProviderManager implements Component, Focusable {
 
   invalidate(): void {
     this.secretInput.invalidate();
+    this.textInput.invalidate();
     this.editor?.invalidate();
   }
 
   dispose(): void {
     this.disposed = true;
+    this.mode = { kind: 'list' };
+    this.secretToRedact = undefined;
     this.editor?.dispose();
     this.secretInput.focused = false;
     this.secretInput.setValue('');
+    this.textInput.focused = false;
+    this.textInput.setValue('');
   }
 
   render(width: number): string[] {
@@ -131,7 +170,9 @@ export class TuiProviderManager implements Component, Focusable {
     const lines =
       this.mode.kind === 'minimax-key'
         ? this.renderMiniMaxKey(safeWidth)
-        : this.renderList(safeWidth);
+        : this.mode.kind === 'list'
+          ? this.renderList(safeWidth)
+          : this.renderSetup(safeWidth);
     return lines.map((line) => truncateToWidth(line, safeWidth, chalk.hex(colors.dim)('…')));
   }
 
@@ -148,7 +189,9 @@ export class TuiProviderManager implements Component, Focusable {
         width,
       ),
       frameRow(
-        chalk.hex(colors.dim)('Choose a source or edit a connection; keys stay masked.'),
+        chalk.hex(colors.dim)(
+          'OpenRouter takes an API key. Local takes a server address. Keys stay masked.',
+        ),
         width,
       ),
       frameDivider(width),
@@ -197,7 +240,7 @@ export class TuiProviderManager implements Component, Focusable {
       frameRow(
         chalk.hex(colors.dim)(
           this.options.onAddProvider
-            ? 'a connects a provider: OpenRouter, OpenAI, Anthropic, and the models.dev catalog.'
+            ? 'OpenRouter and Local are in this list. a adds another provider from the catalog.'
             : 'Select a custom connection and press r to fetch its latest models.',
         ),
         width,
@@ -238,6 +281,69 @@ export class TuiProviderManager implements Component, Focusable {
       frameRow(renderTuiActionHint('Enter save and use · Esc cancel'), width),
       frameBottom(width),
     ];
+  }
+
+  private renderSetup(width: number): string[] {
+    const copy = this.setupCopy();
+    const input =
+      this.mode.kind === 'openrouter-key' || this.mode.kind === 'local-key'
+        ? this.secretInput
+        : this.textInput;
+    return [
+      frameTop(width),
+      frameRow(chalk.bold.hex(colors.signal)(copy.title), width),
+      frameRow(chalk.hex(colors.muted)(copy.subtitle), width),
+      frameDivider(width),
+      frameRow(chalk.hex(colors.text)(copy.label), width),
+      frameRow(input.render(Math.max(1, width - 8))[0] ?? '', width),
+      ...(this.status ? [frameRow(chalk.hex(colors.error)(`! ${this.status.text}`), width)] : []),
+      frameDivider(width),
+      frameRow(renderTuiActionHint(this.busy ? 'Testing and saving…' : copy.footer), width),
+      frameBottom(width),
+    ];
+  }
+
+  private setupCopy(): { readonly title: string; readonly subtitle: string; readonly label: string; readonly footer: string } {
+    if (this.mode.kind === 'openrouter-key') {
+      return {
+        title: 'Configure OpenRouter API Key',
+        subtitle: this.mode.apiKey
+          ? 'An API key is already entered. Submit empty to keep it, or type a replacement.'
+          : `Saved locally and sent to ${KCODE_OPENROUTER_SETUP.baseUrl}.`,
+        label: 'API Key',
+        footer: 'Enter continue · Esc cancel',
+      };
+    }
+    if (this.mode.kind === 'openrouter-model') {
+      return {
+        title: 'Choose an OpenRouter model',
+        subtitle: 'Model id from the OpenRouter catalog, for example openai/gpt-4.1-mini.',
+        label: 'Model ID',
+        footer: 'Enter test, save, and use · Esc back',
+      };
+    }
+    if (this.mode.kind === 'local-url') {
+      return {
+        title: 'Configure Local API address',
+        subtitle: 'OpenAI-compatible base URL. The default is the address Ollama exposes.',
+        label: 'Base URL',
+        footer: 'Enter continue · Esc cancel',
+      };
+    }
+    if (this.mode.kind === 'local-model') {
+      return {
+        title: 'Choose a Local model',
+        subtitle: 'The id your server lists, for example qwen3.',
+        label: 'Model ID',
+        footer: 'Enter continue · Esc back',
+      };
+    }
+    return {
+      title: 'Local API Key (optional)',
+      subtitle: 'Leave empty when the server does not check a credential.',
+      label: 'API Key (optional)',
+      footer: 'Enter connect · type a key for a guarded server · Esc back',
+    };
   }
 
   private providers(): readonly KcodeProviderView[] {
@@ -306,6 +412,14 @@ export class TuiProviderManager implements Component, Focusable {
       await this.setMiniMaxSource('minimax_api_key');
       return;
     }
+    if (provider.kind === 'openrouter-setup') {
+      this.startOpenRouterSetup();
+      return;
+    }
+    if (provider.kind === 'local-setup') {
+      this.startLocalSetup();
+      return;
+    }
     if (provider.kind === 'builtin') {
       this.setStatus(
         `${provider.name} comes from config.yaml. Press t to test it, or choose one of its models in /model.`,
@@ -342,6 +456,14 @@ export class TuiProviderManager implements Component, Focusable {
     }
     if (provider.kind === 'copilot-oauth') {
       this.setStatus('Use Enter or Space on the GitHub Copilot row to start sign-in.', 'info');
+      return;
+    }
+    if (provider.kind === 'openrouter-setup') {
+      this.startOpenRouterSetup();
+      return;
+    }
+    if (provider.kind === 'local-setup') {
+      this.startLocalSetup();
       return;
     }
     if (provider.kind === 'builtin') {
@@ -432,6 +554,137 @@ export class TuiProviderManager implements Component, Focusable {
     this.options.onConnectCopilot();
   }
 
+  private startOpenRouterSetup(): void {
+    this.mode = { kind: 'openrouter-key' };
+    this.status = undefined;
+    this.secretToRedact = undefined;
+    this.secretInput.setValue('');
+    this.secretInput.moveCursorToEnd();
+    this.syncFocus();
+    this.requestRender();
+  }
+
+  private startLocalSetup(): void {
+    this.mode = { kind: 'local-url' };
+    this.status = undefined;
+    this.secretToRedact = undefined;
+    this.textInput.setValue(KCODE_LOCAL_SETUP.baseUrl);
+    this.textInput.moveCursorToEnd();
+    this.syncFocus();
+    this.requestRender();
+  }
+
+  private submitOpenRouterKey(value: string): void {
+    if (this.mode.kind !== 'openrouter-key') return;
+    const apiKey = value.trim() || this.mode.apiKey;
+    if (!apiKey) {
+      this.setStatus('API key is required.', 'error');
+      return;
+    }
+    this.secretToRedact = apiKey;
+    this.mode = { kind: 'openrouter-model', apiKey };
+    this.status = undefined;
+    this.secretInput.setValue('');
+    this.textInput.setValue('');
+    this.textInput.moveCursorToEnd();
+    this.syncFocus();
+    this.requestRender();
+  }
+
+  private submitSetupText(value: string): void {
+    const trimmed = value.trim();
+    if (this.mode.kind === 'openrouter-model') {
+      if (!trimmed) {
+        this.setStatus('Model ID is required.', 'error');
+        return;
+      }
+      void this.saveSetup(openRouterSaveInput(this.mode.apiKey, trimmed), this.mode.apiKey);
+      return;
+    }
+    if (this.mode.kind === 'local-url') {
+      if (!isHttpUrl(trimmed)) {
+        this.setStatus('Base URL must use http or https.', 'error');
+        return;
+      }
+      this.mode = { kind: 'local-model', baseUrl: trimmed };
+      this.status = undefined;
+      this.textInput.setValue('');
+      this.textInput.moveCursorToEnd();
+      this.syncFocus();
+      this.requestRender();
+      return;
+    }
+    if (this.mode.kind === 'local-model') {
+      if (!trimmed) {
+        this.setStatus('Model ID is required.', 'error');
+        return;
+      }
+      this.mode = { kind: 'local-key', baseUrl: this.mode.baseUrl, modelId: trimmed };
+      this.status = undefined;
+      this.secretInput.setValue('');
+      this.secretInput.moveCursorToEnd();
+      this.syncFocus();
+      this.requestRender();
+    }
+  }
+
+  private submitLocalKey(value: string): void {
+    if (this.mode.kind !== 'local-key') return;
+    const apiKey = value.trim();
+    if (apiKey) this.secretToRedact = apiKey;
+    void this.saveSetup(
+      localSaveInput(this.mode.baseUrl, this.mode.modelId, apiKey || undefined),
+      apiKey || undefined,
+    );
+  }
+
+  private async saveSetup(input: KcodeSaveProviderCandidateInput, secret?: string): Promise<void> {
+    const save = this.options.onSaveCustom;
+    if (!save) {
+      this.setStatus('Saving a provider is unavailable in this host.', 'error');
+      return;
+    }
+    if (secret) this.secretToRedact = secret;
+    const name = input.name ?? 'Provider';
+    await this.perform(
+      async () => {
+        let result: KcodeSaveProviderCandidateResult;
+        try {
+          result = await save(input);
+        } catch (error) {
+          if (this.disposed) return;
+          this.setStatus(
+            formatTuiActionFailure(error, {
+              summary: `${name} was not saved.`,
+              nextStep: 'Check the connection and retry.',
+            }),
+            'error',
+          );
+          return;
+        }
+        if (this.disposed) return;
+        if (!result.success) {
+          this.setStatus(
+            formatTuiActionFailure(result.status?.lastErrorMessage ?? 'Connection test failed.', {
+              summary: `${name} was not saved.`,
+              nextStep: 'Check the URL, API key, and model ID, then retry.',
+            }),
+            'error',
+          );
+          return;
+        }
+        this.exitMode();
+        await this.refresh(`${name} saved and selected.`);
+        const index = this.providers().findIndex((provider) => provider.name === name);
+        if (index >= 0) this.selectedIndex = index;
+      },
+      {
+        summary: `${name} was saved, but the list could not refresh.`,
+        nextStep: 'Reopen /provider.',
+      },
+    );
+  }
+
   private startMiniMaxKey(replacing = false): void {
     this.mode = { kind: 'minimax-key', replacing };
     this.status = undefined;
@@ -474,6 +727,14 @@ export class TuiProviderManager implements Component, Focusable {
     }
     if (provider.kind === 'minimax-oauth') {
       this.setStatus('MiniMax OAuth sign-in and connectivity are managed by /login.', 'info');
+      return;
+    }
+    if (provider.kind === 'openrouter-setup') {
+      this.setStatus('Enter an OpenRouter API key before testing.', 'info');
+      return;
+    }
+    if (provider.kind === 'local-setup') {
+      this.setStatus('Enter a Local base URL before testing.', 'info');
       return;
     }
     await this.perform(async () => {
@@ -539,20 +800,67 @@ export class TuiProviderManager implements Component, Focusable {
     }
   }
 
+  private exitSetupStep(): void {
+    if (this.mode.kind === 'openrouter-model') {
+      const apiKey = this.mode.apiKey;
+      this.mode = { kind: 'openrouter-key', apiKey };
+      this.status = undefined;
+      this.secretInput.setValue('');
+      this.syncFocus();
+      this.requestRender();
+      return;
+    }
+    if (this.mode.kind === 'local-model') {
+      const baseUrl = this.mode.baseUrl;
+      this.mode = { kind: 'local-url' };
+      this.status = undefined;
+      this.textInput.setValue(baseUrl);
+      this.textInput.moveCursorToEnd();
+      this.syncFocus();
+      this.requestRender();
+      return;
+    }
+    if (this.mode.kind === 'local-key') {
+      const { baseUrl, modelId } = this.mode;
+      this.mode = { kind: 'local-model', baseUrl };
+      this.status = undefined;
+      this.secretInput.setValue('');
+      this.textInput.setValue(modelId);
+      this.textInput.moveCursorToEnd();
+      this.syncFocus();
+      this.requestRender();
+      return;
+    }
+    this.exitMode();
+  }
+
   private exitMode(): void {
     this.mode = { kind: 'list' };
     this.status = undefined;
+    this.secretToRedact = undefined;
+    this.secretInput.setValue('');
+    this.textInput.setValue('');
     this.syncFocus();
     this.requestRender();
   }
 
   private setStatus(text: string, tone: 'info' | 'error'): void {
-    this.status = { text: sanitizeTerminalText(text), tone };
+    const redacted = this.secretToRedact ? text.split(this.secretToRedact).join('[redacted]') : text;
+    this.status = { text: sanitizeTerminalText(redacted), tone };
     this.requestRender();
   }
 
   private syncFocus(): void {
-    this.secretInput.focused = this._focused && this.mode.kind === 'minimax-key' && !this.editor;
+    const secret =
+      this.mode.kind === 'minimax-key' ||
+      this.mode.kind === 'openrouter-key' ||
+      this.mode.kind === 'local-key';
+    const text =
+      this.mode.kind === 'openrouter-model' ||
+      this.mode.kind === 'local-url' ||
+      this.mode.kind === 'local-model';
+    this.secretInput.focused = this._focused && secret && !this.editor;
+    this.textInput.focused = this._focused && text && !this.editor;
     if (this.editor) this.editor.focused = this._focused;
   }
 
@@ -592,7 +900,11 @@ function markerFor(provider: KcodeProviderView): string {
  */
 function showsConnectionDetails(provider: KcodeProviderView): boolean {
   return (
-    provider.kind === 'custom' || provider.kind === 'builtin' || provider.kind === 'copilot-oauth'
+    provider.kind === 'custom' ||
+    provider.kind === 'builtin' ||
+    provider.kind === 'copilot-oauth' ||
+    provider.kind === 'openrouter-setup' ||
+    provider.kind === 'local-setup'
   );
 }
 
@@ -636,6 +948,12 @@ function providerDetail(provider: KcodeProviderView): string {
       ? `${provider.maskedApiKey ?? 'key saved'} · Space to use · e to replace`
       : 'No API key saved · Space or e to add one';
   }
+  if (provider.kind === 'openrouter-setup') {
+    return 'Not configured · Enter to set an API key';
+  }
+  if (provider.kind === 'local-setup') {
+    return 'Not configured · Enter to set a base URL';
+  }
   return [
     provider.enabled ? 'Enabled' : 'Disabled',
     provider.apiFormat ?? 'anthropic-messages',
@@ -667,7 +985,56 @@ function providerSummary(provider: KcodeProviderView): string {
         : 'Key saved'
       : 'Not configured';
   }
+  if (provider.kind === 'openrouter-setup' || provider.kind === 'local-setup') {
+    return 'Not configured';
+  }
   return `${provider.enabled ? 'Enabled' : 'Disabled'} · ${provider.models.length} model${provider.models.length === 1 ? '' : 's'}`;
+}
+
+function openRouterSaveInput(apiKey: string, modelId: string): KcodeSaveProviderCandidateInput {
+  return {
+    name: KCODE_OPENROUTER_SETUP.name,
+    baseUrl: KCODE_OPENROUTER_SETUP.baseUrl,
+    apiKey,
+    apiFormat: KCODE_OPENROUTER_SETUP.apiFormat,
+    models: [manualModel(modelId)],
+    modelId,
+    saveAndUse: true,
+  };
+}
+
+function localSaveInput(
+  baseUrl: string,
+  modelId: string,
+  apiKey: string | undefined,
+): KcodeSaveProviderCandidateInput {
+  return {
+    name: KCODE_LOCAL_SETUP.name,
+    baseUrl,
+    ...(apiKey ? { apiKey } : {}),
+    apiFormat: KCODE_LOCAL_SETUP.apiFormat,
+    models: [manualModel(modelId)],
+    modelId,
+    saveAndUse: true,
+  };
+}
+
+function manualModel(modelId: string): KcodeProviderModelInput {
+  return {
+    modelId,
+    displayName: modelId,
+    configurationSource: 'manual',
+    toolCall: true,
+  };
+}
+
+function isHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function composeLine(left: string, right: string, width: number): string {

@@ -116,6 +116,32 @@ export async function runKcodeProviderCommand(
       return `Provider removed: ${request.providerId}`;
     }
     if (request.action === 'test') {
+      const listed = (await context.application.snapshot()).providers.find(
+        (provider) => provider.providerId === request.providerId,
+      );
+      if (listed?.kind === 'openrouter-setup' || listed?.kind === 'local-setup') {
+        const message =
+          listed.kind === 'openrouter-setup'
+            ? 'OpenRouter is not configured. Open /provider and enter an API key.'
+            : 'Local is not configured. Open /provider and enter a base URL.';
+        if (request.json) {
+          return JSON.stringify(
+            {
+              success: false,
+              status: { state: 'not_configured', lastErrorMessage: message },
+            },
+            null,
+            2,
+          );
+        }
+        return formatTuiActionFailure(message, {
+          summary:
+            listed.kind === 'openrouter-setup'
+              ? 'OpenRouter setup is incomplete.'
+              : 'Local setup is incomplete.',
+          nextStep: 'Run /provider and finish the prompted setup.',
+        });
+      }
       if (request.providerId === 'minimax_oauth') {
         const message = 'MiniMax OAuth sign-in and connectivity are managed by /login.';
         if (request.json) {
@@ -181,6 +207,12 @@ async function createProviderCommandContext(
 function formatSnapshot(snapshot: KcodeProviderSnapshot, json: boolean): string {
   if (json) return JSON.stringify(snapshot, null, 2);
   const lines = snapshot.providers.map((provider) => {
+    if (provider.kind === 'openrouter-setup') {
+      return `  ${provider.providerId}\tnot configured\tAPI key required`;
+    }
+    if (provider.kind === 'local-setup') {
+      return `  ${provider.providerId}\tnot configured\tbase URL required`;
+    }
     const state = provider.active ? 'active' : provider.enabled ? 'enabled' : 'disabled';
     const credential =
       provider.kind === 'minimax-oauth'

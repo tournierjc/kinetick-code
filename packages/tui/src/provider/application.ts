@@ -16,6 +16,8 @@ import type {
 } from './contract.js';
 import {
   KCODE_COPILOT_PROVIDER_ID,
+  KCODE_LOCAL_SETUP,
+  KCODE_OPENROUTER_SETUP,
   isModelProviderApiFormat,
   kcodeCustomProviderKey,
 } from './contract.js';
@@ -80,6 +82,11 @@ export class KcodeProviderApplication {
           ...(minimaxStatus.cachedStatus ? { status: minimaxStatus.cachedStatus } : {}),
           models: [],
         },
+        // These rows exist so the two connections the panel sets up itself are
+        // visible before anything is saved. A matching connection replaces the
+        // row: the saved entry carries the key, URL, revision, and models.
+        ...(!providers.some(isOpenRouterConnection) ? [openRouterSetupRow()] : []),
+        ...(!providers.some(isLocalConnection) ? [localSetupRow()] : []),
         ...providers.map((provider) => normalizeConfiguredProvider(provider, copilotOAuthStatus)),
       ],
     };
@@ -181,6 +188,75 @@ export class KcodeProviderApplication {
     return modelId
       ? this.port.testUserModel(providerId, modelId)
       : this.port.testUserModelProvider(providerId);
+  }
+}
+
+function openRouterSetupRow(): KcodeProviderView {
+  return {
+    providerId: KCODE_OPENROUTER_SETUP.providerId,
+    name: KCODE_OPENROUTER_SETUP.name,
+    kind: 'openrouter-setup',
+    active: false,
+    enabled: true,
+    readOnly: false,
+    apiFormat: KCODE_OPENROUTER_SETUP.apiFormat,
+    baseUrl: KCODE_OPENROUTER_SETUP.baseUrl,
+    hasApiKey: false,
+    models: [],
+  };
+}
+
+function localSetupRow(): KcodeProviderView {
+  return {
+    providerId: KCODE_LOCAL_SETUP.providerId,
+    name: KCODE_LOCAL_SETUP.name,
+    kind: 'local-setup',
+    active: false,
+    enabled: true,
+    readOnly: false,
+    apiFormat: KCODE_LOCAL_SETUP.apiFormat,
+    baseUrl: KCODE_LOCAL_SETUP.baseUrl,
+    hasApiKey: false,
+    models: [],
+  };
+}
+
+/** A saved or builtin connection that already is OpenRouter, so the setup row would duplicate it. */
+function isOpenRouterConnection(provider: KcodeRuntimeProviderView): boolean {
+  const key = kcodeCustomProviderKey(provider.providerId).trim().toLowerCase();
+  if (
+    key === KCODE_OPENROUTER_SETUP.providerId ||
+    key.startsWith(`${KCODE_OPENROUTER_SETUP.providerId}-`)
+  ) {
+    return true;
+  }
+  if (provider.name?.trim().toLowerCase() === KCODE_OPENROUTER_SETUP.name.toLowerCase()) return true;
+  const host = providerHostname(provider.baseUrl);
+  return host === 'openrouter.ai' || Boolean(host?.endsWith('.openrouter.ai'));
+}
+
+/**
+ * A saved connection that already is the local OpenAI-compatible server: the
+ * catalogue's "Local model" name, a provider key derived from "Local", or any
+ * loopback base URL.
+ */
+function isLocalConnection(provider: KcodeRuntimeProviderView): boolean {
+  const key = kcodeCustomProviderKey(provider.providerId).trim().toLowerCase();
+  if (key === KCODE_LOCAL_SETUP.providerId || key === 'local-model' || key.startsWith('local-')) {
+    return true;
+  }
+  const name = provider.name?.trim().toLowerCase();
+  if (name === 'local' || name === 'local model') return true;
+  const host = providerHostname(provider.baseUrl);
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+}
+
+function providerHostname(baseUrl: string | undefined): string | undefined {
+  if (!baseUrl) return undefined;
+  try {
+    return new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return undefined;
   }
 }
 

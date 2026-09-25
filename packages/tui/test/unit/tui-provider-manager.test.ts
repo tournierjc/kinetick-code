@@ -701,3 +701,246 @@ it("keeps the add-provider action out of hosts that cannot save one", () => {
   expect(rendered).not.toContain("a add provider");
   expect(rendered).toContain("Select a custom connection and press r");
 });
+
+const snapshotWithSetupRows: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    ...snapshot.providers.slice(0, 2),
+    {
+      providerId: "openrouter",
+      name: "OpenRouter",
+      kind: "openrouter-setup",
+      active: false,
+      enabled: true,
+      readOnly: false,
+      apiFormat: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      hasApiKey: false,
+      models: [],
+    },
+    {
+      providerId: "local",
+      name: "Local",
+      kind: "local-setup",
+      active: false,
+      enabled: true,
+      readOnly: false,
+      apiFormat: "openai-completions",
+      baseUrl: "http://localhost:11434/v1",
+      hasApiKey: false,
+      models: [],
+    },
+    ...snapshot.providers.slice(2),
+  ],
+};
+
+describe("OpenRouter and Local setup", () => {
+  function setupManager(
+    overrides: Partial<ConstructorParameters<typeof TuiProviderManager>[0]> = {},
+  ) {
+    return createManager({ snapshot: snapshotWithSetupRows, ...overrides });
+  }
+
+  it("lists OpenRouter and Local as setup choices before they are saved", () => {
+    const manager = setupManager();
+    const rendered = stripAnsi(manager.render(120).join("\n"));
+
+    expect(rendered).toContain("OpenRouter");
+    expect(rendered).toContain("Local");
+    expect(rendered).toContain("Not configured");
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "https://openrouter.ai/api/v1",
+    );
+  });
+
+  it("saves an OpenRouter API key through the custom-provider candidate", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:openrouter" },
+    }));
+    const saved: KcodeProviderSnapshot = {
+      ...snapshot,
+      providers: [
+        ...snapshot.providers,
+        {
+          providerId: "custom_provider:openrouter",
+          name: "OpenRouter",
+          kind: "custom",
+          active: true,
+          enabled: true,
+          readOnly: false,
+          configRevision: "rev-2",
+          apiFormat: "openai-completions",
+          baseUrl: "https://openrouter.ai/api/v1",
+          hasApiKey: true,
+          maskedApiKey: "sk-o****cret",
+          models: [{ modelId: "openai/gpt-4.1-mini" }],
+        },
+      ],
+    };
+    const onRefresh = vi.fn(async () => saved);
+    const manager = setupManager({ onSaveCustom, onRefresh });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    const row = stripAnsi(manager.render(120).join("\n"));
+    expect(row).toContain("Enter to set an API key");
+
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(100).join("\n"))).toContain(
+      "Configure OpenRouter API Key",
+    );
+    manager.handleInput("sk-openrouter-secret");
+    expect(stripAnsi(manager.render(100).join("\n"))).not.toContain(
+      "sk-openrouter-secret",
+    );
+    manager.handleInput("\r");
+    manager.handleInput("openai/gpt-4.1-mini");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith({
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "sk-openrouter-secret",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "openai/gpt-4.1-mini",
+          displayName: "openai/gpt-4.1-mini",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "openai/gpt-4.1-mini",
+      saveAndUse: true,
+    });
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(110).join("\n"))).toContain(
+        "OpenRouter saved and selected.",
+      ),
+    );
+  });
+
+  it("keeps the OpenRouter form open when the connection test fails and redacts the key", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: false,
+      status: { state: "failed", lastErrorMessage: "401 sk-openrouter-secret" },
+    }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    manager.handleInput("sk-openrouter-secret");
+    manager.handleInput("\r");
+    manager.handleInput("openai/gpt-4.1-mini");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(120).join("\n"))).toContain("401"),
+    );
+    const failed = stripAnsi(manager.render(140).join("\n"));
+    expect(failed).toContain("OpenRouter was not saved");
+    expect(failed).not.toContain("sk-openrouter-secret");
+    expect(failed).toContain("sk-[redacted]");
+    expect(onSaveCustom).toHaveBeenCalledOnce();
+  });
+
+  it("saves a Local base URL without a key", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:local" },
+    }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "Enter to set a base URL",
+    );
+    manager.handleInput("\r");
+    const urlStep = stripAnsi(manager.render(110).join("\n"));
+    expect(urlStep).toContain("Configure Local API address");
+    expect(urlStep).toContain("http://localhost:11434/v1");
+
+    manager.handleInput("\r");
+    manager.handleInput("qwen3");
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(110).join("\n"))).toContain(
+      "API Key (optional)",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith({
+      name: "Local",
+      baseUrl: "http://localhost:11434/v1",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "qwen3",
+          displayName: "qwen3",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "qwen3",
+      saveAndUse: true,
+    });
+  });
+
+  it("saves a custom Local base URL together with a key", async () => {
+    const onSaveCustom = vi.fn(async () => ({ success: true }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    for (let index = 0; index < "http://localhost:11434/v1".length; index += 1) {
+      manager.handleInput("\u007f");
+    }
+    manager.handleInput("http://127.0.0.1:8080/v1");
+    manager.handleInput("\r");
+    manager.handleInput("llama");
+    manager.handleInput("\r");
+    manager.handleInput("local-secret");
+    expect(stripAnsi(manager.render(100).join("\n"))).not.toContain("local-secret");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Local",
+        baseUrl: "http://127.0.0.1:8080/v1",
+        apiKey: "local-secret",
+        modelId: "llama",
+      }),
+    );
+  });
+
+  it("rejects a Local base URL that is not http or https", () => {
+    const onSaveCustom = vi.fn();
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    for (let index = 0; index < "http://localhost:11434/v1".length; index += 1) {
+      manager.handleInput("\u007f");
+    }
+    manager.handleInput("ftp://files.example/v1");
+    manager.handleInput("\r");
+
+    expect(stripAnsi(manager.render(100).join("\n"))).toContain(
+      "Base URL must use http or https.",
+    );
+    expect(onSaveCustom).not.toHaveBeenCalled();
+  });
+});

@@ -1,9 +1,10 @@
-import type {
-  KcodeProviderApiFormat,
-  KcodeProviderView,
-  KcodeProviderTemplate,
-  KcodeSaveProviderCandidateInput,
-  KcodeSaveProviderCandidateResult,
+import {
+  KCODE_LOCAL_SETUP,
+  type KcodeProviderApiFormat,
+  type KcodeProviderView,
+  type KcodeProviderTemplate,
+  type KcodeSaveProviderCandidateInput,
+  type KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { additiveProviderModels, matchesProviderTemplate } from './connections.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -21,7 +22,7 @@ const LOCAL_PROVIDER_VALUE = '\u0000local-provider';
  * common local servers expose (Ollama's default port). Editable, since the base
  * URL step is the next one and nothing is contacted before the connection test.
  */
-const LOCAL_PROVIDER_BASE_URL = 'http://localhost:11434/v1';
+const LOCAL_PROVIDER_BASE_URL = KCODE_LOCAL_SETUP.baseUrl;
 const LOCAL_PROVIDER_NAME = 'Local model';
 const CUSTOM_FORMATS: readonly {
   readonly value: KcodeProviderApiFormat;

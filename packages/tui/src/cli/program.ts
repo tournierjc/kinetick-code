@@ -149,7 +149,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   const provider = program
     .command('provider')
-    .description('Manage model providers and API keys')
+    .description('Manage model providers, including OpenRouter and Local')
     .allowExcessArguments(false)
     .action(() => options.launchTui(withLane({ initialPrompt: '/provider' })));
 

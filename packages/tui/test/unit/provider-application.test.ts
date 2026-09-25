@@ -213,6 +213,8 @@ describe('McodeProviderApplication', () => {
     expect(snapshot.providers.map((provider) => provider.providerId)).toEqual([
       'minimax_oauth',
       'minimax_api',
+      'openrouter',
+      'local',
       'custom_provider:openai',
     ]);
     expect(snapshot.providers[0]).toMatchObject({
@@ -231,8 +233,11 @@ describe('McodeProviderApplication', () => {
     });
     expect(JSON.stringify(snapshot)).toContain('MiniMax OAuth');
     expect(JSON.stringify(snapshot)).not.toContain('must-never-cross-the-cli-boundary');
-    expect(snapshot.providers[2]).not.toHaveProperty('rawApiKey');
-    expect(snapshot.providers[2]?.models[0]).toMatchObject({
+    const openai = snapshot.providers.find(
+      (provider) => provider.providerId === 'custom_provider:openai',
+    );
+    expect(openai).not.toHaveProperty('rawApiKey');
+    expect(openai?.models[0]).toMatchObject({
       contextLimit: 32768,
       maxOutputTokens: 4096,
     });
@@ -365,7 +370,9 @@ describe('McodeProviderApplication', () => {
 
     // Runtime drops disabled providers from the roster, so rendering the row
     // as active would contradict the "Disabled" label on the same line.
-    expect(snapshot.providers[2]).toMatchObject({
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:byok'),
+    ).toMatchObject({
       providerId: 'custom_provider:byok',
       enabled: false,
       active: false,
@@ -390,7 +397,83 @@ describe('McodeProviderApplication', () => {
 
     const snapshot = await application.snapshot();
 
-    expect(snapshot.providers[2]).toMatchObject({ enabled: true, active: true });
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:byok'),
+    ).toMatchObject({ enabled: true, active: true });
+  });
+
+  it('offers OpenRouter and Local setup until a matching connection exists', async () => {
+    const application = new KcodeProviderApplication(createPort());
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.find((provider) => provider.kind === 'openrouter-setup')).toMatchObject({
+      providerId: 'openrouter',
+      name: 'OpenRouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiFormat: 'openai-completions',
+      hasApiKey: false,
+      readOnly: false,
+      models: [],
+    });
+    expect(snapshot.providers.find((provider) => provider.kind === 'local-setup')).toMatchObject({
+      providerId: 'local',
+      name: 'Local',
+      baseUrl: 'http://localhost:11434/v1',
+      apiFormat: 'openai-completions',
+      hasApiKey: false,
+      readOnly: false,
+      models: [],
+    });
+  });
+
+  it('hides the OpenRouter setup row once a connection targets OpenRouter', async () => {
+    const port = createPort();
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:openrouter',
+        name: 'OpenRouter',
+        kind: 'custom' as const,
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        hasApiKey: true,
+        configRevision: 'rev-9',
+        models: [{ modelId: 'openai/gpt-5-mini' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.filter((provider) => provider.kind === 'openrouter-setup')).toHaveLength(0);
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:openrouter'),
+    ).toMatchObject({ kind: 'custom', hasApiKey: true });
+    expect(snapshot.providers.some((provider) => provider.kind === 'local-setup')).toBe(true);
+  });
+
+  it('hides the Local setup row once a loopback connection exists', async () => {
+    const port = createPort();
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:ollama',
+        name: 'Ollama',
+        kind: 'custom' as const,
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        hasApiKey: false,
+        configRevision: 'rev-3',
+        models: [{ modelId: 'qwen3' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.filter((provider) => provider.kind === 'local-setup')).toHaveLength(0);
+    expect(snapshot.providers.some((provider) => provider.kind === 'openrouter-setup')).toBe(true);
   });
 });
 
