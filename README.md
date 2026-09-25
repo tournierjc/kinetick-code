@@ -139,10 +139,36 @@ Use `kcode init .` to generate or update project guidance in `AGENTS.md`. Descri
 | Interactive TUI | `kcode [prompt]` | Explore code, continue a conversation, and review changes or permissions. |
 | Headless | `kcode exec [prompt]` | Shell scripts, CI, batch work, and evaluations. |
 | ACP | `kcode acp` | Editors and clients supporting Agent Client Protocol. |
+| Session server | `kcode --server` | Serve Sessions over HTTP to a webapp, mobile client, or other remote tooling. |
 
 See [harness integration](docs/harness-integration.md) for the `exec` and ACP
 contracts a script, CI job, or client depends on: output formats, exit codes,
 session continuation, and how approvals are answered.
+
+### Read Sessions from an external application
+
+`kcode --server` runs the Runtime as an HTTP session server instead of the TUI.
+Start it on the machine that owns the data directory, then point any client at
+it — the server answers JSON, so a webapp, a mobile app, or a dashboard can
+read what the agent has been doing:
+
+```bash
+kcode --server --host 0.0.0.0 --port 9430   # accept connections from your network
+curl http://127.0.0.1:9430/sessions
+curl "http://127.0.0.1:9430/sessions/<session-id>/messages?limit=50"
+```
+
+`GET /sessions` lists Sessions (most recently updated first) and
+`GET /sessions/<id>/messages` replays a transcript, both with `limit` and
+cursor pagination; `GET /health` is the liveness check. The server is read-only
+today: it cannot start turns or modify Sessions, and it has no authentication,
+so the default bind stays on `127.0.0.1` — binding `0.0.0.0` exposes every
+Session in the data directory to anyone who can reach the port. Defaults are
+`127.0.0.1:8788`; use `MINIMAX_DATA_DIR` to serve an isolated data directory.
+
+Section 3 of [harness integration](docs/harness-integration.md) has the full
+endpoint reference with captured request/response examples, the error
+contract, and a minimal client in JavaScript and Python.
 
 ### Continue your work
 

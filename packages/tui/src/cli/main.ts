@@ -6,6 +6,7 @@ import {
 import type { RawTuiExecOptions } from '../headless/invocation.js';
 import type { MavisRegion } from '@mavis/config';
 import { createTuiProgram, type TuiInteractiveLaunchRequest } from './program.js';
+import type { TuiServerLaunchRequest } from './contract.js';
 import type { KcodeProviderCliRequest } from './provider-command.js';
 import type { KcodePluginCliRequest } from '../plugin/contract.js';
 import { tuiErrorDiagnostic } from '../user-facing-failure.js';
@@ -50,6 +51,7 @@ export interface RunTuiCliDependencies {
     version: string,
   ) => Promise<void>;
   readonly runAcp?: (version: string, lane?: string) => Promise<void>;
+  readonly runServer?: (request: TuiServerLaunchRequest, lane?: string) => Promise<void>;
   readonly runLogin?: (
     region?: MavisRegion,
     openBrowser?: boolean,
@@ -132,6 +134,11 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
       runAcp: async (lane) => {
         const runAcp = dependencies.runAcp ?? defaultRunAcp;
         await runAcp(KCODE_VERSION, lane);
+        completedCommandExitMode = 'natural';
+      },
+      runServer: async (request, lane) => {
+        const runServer = dependencies.runServer ?? defaultRunServer;
+        await runServer(request, lane);
         completedCommandExitMode = 'natural';
       },
       runLogin: async (region, openBrowser, lane) => {
@@ -251,6 +258,14 @@ async function defaultRunExec(
 async function defaultRunAcp(version: string, lane?: string): Promise<void> {
   const { runTuiAcpCommand } = await import('./run-acp-command.js');
   await runTuiAcpCommand(version, {}, lane);
+}
+
+async function defaultRunServer(
+  request: TuiServerLaunchRequest,
+  lane?: string,
+): Promise<void> {
+  const { runTuiServerCommand } = await import('./run-server-command.js');
+  await runTuiServerCommand(request, KCODE_VERSION, {}, lane);
 }
 
 async function defaultRunLogin(

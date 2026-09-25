@@ -1,5 +1,9 @@
 import { InvalidArgumentError, Option, type Command } from 'commander';
 import { parseHeadlessModelOverride } from '../headless/model-selection.js';
+import {
+  DEFAULT_TUI_SERVER_HOST,
+  DEFAULT_TUI_SERVER_PORT,
+} from '../server/http.js';
 import type { TuiMode } from '../tui/engine/public.js';
 import { parseTuiStartupEnvironment } from './environment.js';
 import type { TuiBuildEnvironment } from '../auth/environment.js';
@@ -26,6 +30,14 @@ export interface RawTuiInteractiveOptions {
   readonly tuiMode?: TuiMode;
   readonly lane?: string;
   readonly env?: TuiBuildEnvironment;
+  readonly server?: boolean;
+  readonly host?: string;
+  readonly port?: number;
+}
+
+export interface TuiServerLaunchRequest {
+  readonly host: string;
+  readonly port: number;
 }
 
 export function applyInteractiveCliContract(
@@ -46,6 +58,23 @@ export function applyInteractiveCliContract(
       ),
     )
     .addOption(new Option('--resume <id>').hideHelp())
+    .addOption(
+      new Option(
+        '--server',
+        'serve Sessions over HTTP instead of starting the TUI',
+      ),
+    )
+    .addOption(
+      new Option(
+        '--host <address>',
+        'bind address for --server (0.0.0.0 accepts external connections)',
+      ).default(DEFAULT_TUI_SERVER_HOST),
+    )
+    .addOption(
+      new Option('--port <port>', 'listen port for --server')
+        .argParser(parseServerPort)
+        .default(DEFAULT_TUI_SERVER_PORT),
+    )
     .allowExcessArguments(false)
     .showHelpAfterError();
   if (options.allowStartupEnvironmentSelection) {
@@ -96,6 +125,28 @@ export function resolveInteractiveLaunchRequest(
     ...(commandOptions.continue ? { continueLatestSession: true } : {}),
     ...(commandOptions.tuiMode ? { tuiMode: commandOptions.tuiMode } : {}),
     ...(commandOptions.lane ? { lane: commandOptions.lane } : {}),
+  };
+}
+
+export function resolveServerLaunchRequest(
+  prompt: string | undefined,
+  commandOptions: RawTuiInteractiveOptions,
+): TuiServerLaunchRequest | undefined {
+  if (commandOptions.server !== true) return undefined;
+  const conflicts = [
+    ...(prompt ? ['a prompt argument'] : []),
+    ...(commandOptions.model ? ['--model'] : []),
+    ...(commandOptions.session ? ['--session'] : []),
+    ...(commandOptions.continue ? ['--continue'] : []),
+    ...(commandOptions.resume ? ['--resume'] : []),
+    ...(commandOptions.tuiMode ? ['--tui-mode'] : []),
+  ];
+  if (conflicts.length > 0) {
+    throw new Error(`--server cannot be combined with ${conflicts.join(', ')}.`);
+  }
+  return {
+    host: commandOptions.host?.trim() || DEFAULT_TUI_SERVER_HOST,
+    port: commandOptions.port ?? DEFAULT_TUI_SERVER_PORT,
   };
 }
 
@@ -175,6 +226,14 @@ export function applyExecReviewCliContract(command: Command): Command {
 function parseTuiMode(value: string): TuiMode {
   if (value === 'regular' || value === 'fullscreen') return value;
   throw new InvalidArgumentError('TUI mode must be regular or fullscreen');
+}
+
+function parseServerPort(value: string): number {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 1 || number > 65535) {
+    throw new InvalidArgumentError('expected a port between 1 and 65535');
+  }
+  return number;
 }
 
 function parseStartupEnvironmentOption(value: string): TuiBuildEnvironment {
