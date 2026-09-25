@@ -252,7 +252,7 @@ branch on:
 | `400` | An invalid query value (`limit=zero`, `allAgents=maybe`). | `{"error":"invalid limit: zero"}` |
 | `404` | Unknown Session id, or unknown path. | `{"error":"Session not found: mvs_missing"}` / `{"error":"not found"}` |
 | `405` | Any non-`GET` method. | `{"error":"only GET requests are supported"}` |
-| `409`, `5xx` | Runtime failures carry their transport-neutral status through (for example a queue conflict), and anything unrecognized fails closed as `500`. | |
+| `409`, `5xx` | Runtime failures carry their transport-neutral status through (for example a queue conflict), and anything unrecognized fails closed as `500`. | `{"error":"<runtime message>"}` |
 
 ### Writing a client
 
