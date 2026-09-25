@@ -190,6 +190,7 @@ kcode --session
 | 切换权限模式 | `Alt+M` |
 | 切换 Session 标签 | `Ctrl+Shift+Left` / `Ctrl+Shift+Right` |
 | 按槽位直达 Session 标签 | `Alt+1`…`Alt+9` |
+| 新建 Session 标签 | `Alt+N` |
 | 关闭当前 Session 标签 | `Alt+W` |
 | 重命名当前 Session 标签 | `Alt+R` |
 | 关闭面板或中断正在运行的任务；在模型回复之前中断会把消息放回输入框 | `Esc` |
@@ -198,7 +199,7 @@ kcode --session
 
 Kinetick Code 可以在 Composer 上方的标签栏中并行运行多个 Session：
 
-- **每个打开的 Session 都是一个标签**，带实时状态（`working`、`waiting`、`unread`）。`/new` 新开标签，`/clear` 在当前标签内开始新会话，`/clone` 把 Session 复制为新会话。
+- **每个打开的 Session 都是一个标签**，带实时状态（`working`、`waiting`、`unread`）。等待你输入的回答的 Session 会在标签栏中高亮显示，即使画面很繁忙也能一眼看到。`/new`（或 `Alt+N`）新开标签，`/clear` 在当前标签内开始新会话，`/clone` 把 Session 复制为新会话。
 - **后台任务持续运行。** 切换走之后，运行中的任务继续在自己的标签里流式输出；切回来即回到离开时的画面。任务在你离开期间完成时会出现 `unread` 标记。
 - **按你的方式整理标签栏：** `Alt+R` 重命名标签，`Shift+Alt+Left` / `Shift+Alt+Right` 把标签移动到指定槽位；来自多个项目的标签会自动按项目分组。
 - **用 `/pin` 固定常用 Session**：被固定的 Session 在 `/sessions` 列表中置顶，并在标签栏上标记。

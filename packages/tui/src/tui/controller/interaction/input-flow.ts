@@ -68,6 +68,7 @@ export interface TuiInputFlowOptions {
   readonly selectSessionTab?: (slot: number) => Promise<unknown>;
   /** Closes the visible Session tab and shows its neighbour. */
   readonly closeSessionTab?: () => Promise<unknown>;
+  readonly openNewSessionTab?: () => Promise<unknown>;
   /** Renames the visible Session tab; without a title the rename field opens. */
   readonly renameSessionTab?: () => Promise<unknown>;
   /** Switches project grouping of the tab bar on or off. */
@@ -294,6 +295,11 @@ export class TuiInputFlow {
     }
     if (keyAction === 'close-tab') {
       void this.options.closeSessionTab?.();
+      this.options.onChanged();
+      return { consume: true };
+    }
+    if (keyAction === 'new-tab') {
+      void this.options.openNewSessionTab?.();
       this.options.onChanged();
       return { consume: true };
     }

@@ -287,6 +287,7 @@ function renderStrip(tabs: readonly TuiSessionTabView[], width: number): string[
   const hidden = kept.length - keptIndexes.length;
   const overflow = hidden > 0 ? `+${String(hidden)}` : undefined;
   const activeIndex = keptIndexes.find((index) => tabs[index]?.active);
+  const separator = ` ${renderTabSeparator()} `;
   const compose = (indexes: readonly number[], active?: string): string =>
     [
       ...indexes.map((index) =>
@@ -295,7 +296,7 @@ function renderStrip(tabs: readonly TuiSessionTabView[], width: number): string[
           : (segments[index] as string),
       ),
       ...(overflow ? [chalk.hex(colors.dim)(overflow)] : []),
-    ].join('  ');
+    ].join(separator);
   let row = compose(keptIndexes);
   if (activeIndex !== undefined && visibleWidth(row) > width) {
     // The visible tab must stay recognisable, so its own label shrinks before
@@ -305,8 +306,8 @@ function renderStrip(tabs: readonly TuiSessionTabView[], width: number): string[
       visibleWidth(renderTabSegment(activeTab, '')) +
       keptIndexes
         .filter((index) => index !== activeIndex)
-        .reduce((total, index) => total + visibleWidth(segments[index] as string) + 2, 0) +
-      (overflow ? visibleWidth(overflow) + 2 : 0);
+        .reduce((total, index) => total + visibleWidth(segments[index] as string) + 3, 0) +
+      (overflow ? visibleWidth(overflow) + 3 : 0);
     const labelBudget = width - fixedWidth;
     if (labelBudget >= 1) {
       row = compose(
@@ -318,20 +319,23 @@ function renderStrip(tabs: readonly TuiSessionTabView[], width: number): string[
   return [truncateToWidth(row, width, chalk.hex(colors.dim)('…'))];
 }
 
-/** Header row of a project group: fold marker, label, tab count, status. */
+/**
+ * Header row of a project group: fold marker, label, tab count, status, then a
+ * rule filling the row so the section reads as a header at a glance.
+ */
 function renderGroupHeader(group: TuiSessionTabGroup, width: number): string {
   const held = group.tabs.some((tab) => tab.active);
   const marker = group.collapsed ? '▸' : '▾';
   const paint = held ? chalk.hex(colors.accent) : chalk.hex(colors.dim);
   const head = `${paint(`${marker} ${group.label}`)}${chalk.hex(colors.dim)(
-    ` · ${String(group.tabs.length)}`,
+    ` · ${String(group.tabs.length)} tab${group.tabs.length === 1 ? '' : 's'}`,
   )}`;
   const pin = group.pinned ? chalk.hex(colors.accent)(' *') : '';
-  return truncateToWidth(
-    `${head}${pin}${renderTabMarkers(group.status)}`,
-    width,
-    chalk.hex(colors.dim)('…'),
-  );
+  const label = `${head}${pin}${renderTabMarkers(group.status)}`;
+  const ruleWidth = width - visibleWidth(label) - 1;
+  return ruleWidth >= 3
+    ? truncateToWidth(`${label} ${chalk.hex(colors.dim)('─'.repeat(ruleWidth))}`, width)
+    : truncateToWidth(label, width, chalk.hex(colors.dim)('…'));
 }
 
 /**
@@ -367,12 +371,13 @@ function findDroppableGroup(
 
 /** Append the hidden-tab counter to a row that is already fitted. */
 function appendCounter(row: string, hidden: number, width: number): string {
+  const separator = ` ${renderTabSeparator()} `;
   const counter = chalk.hex(colors.dim)(`+${String(hidden)}`);
-  const joined = `${row}  ${counter}`;
+  const joined = `${row}${separator}${counter}`;
   if (visibleWidth(joined) <= width) return joined;
-  const budget = width - visibleWidth(counter) - 2;
+  const budget = width - visibleWidth(counter) - visibleWidth(separator);
   if (budget < 1) return truncateToWidth(row, width, chalk.hex(colors.dim)('…'));
-  return `${truncateToWidth(row, budget, chalk.hex(colors.dim)('…'))}  ${counter}`;
+  return `${truncateToWidth(row, budget, chalk.hex(colors.dim)('…'))}${separator}${counter}`;
 }
 
 /**
@@ -385,7 +390,8 @@ function fitSegments(
   width: number,
 ): readonly boolean[] {
   const kept = tabs.map(() => true);
-  const separatorWidth = 2;
+  // Tabs join with ' │ ', three visible cells wide.
+  const separatorWidth = 3;
   // The joined row adds one separator per kept segment, so the budget carries
   // one separator of slack; the overflow counter adds its own separator.
   const measure = (): number =>
@@ -416,26 +422,38 @@ function findDroppableTab(
 }
 
 /**
- * Render one tab. `labelOverride` carries an already-fitted label for the
- * visible tab, or an empty string when only the fixed parts are being measured.
+ * Render one tab. The visible tab is drawn as a filled block so it reads as a
+ * physical tab even at a glance; the others sit beside it as dim labels.
+ * `labelOverride` carries an already-fitted label for the visible tab, or an
+ * empty string when only the fixed parts are being measured.
  */
 function renderTabSegment(tab: TuiSessionTabView, labelOverride?: string): string {
   const slot = tab.slot === undefined ? '·' : String(tab.slot);
-  const slotLabel = chalk.hex(tab.active ? colors.accent : colors.dim)(`${slot}:`);
   const label = labelOverride ?? tab.label;
   const title = tab.unavailable ? `${label} ~` : label;
-  const body = tab.active
-    ? chalk.bold.hex(colors.text)(`[${title}]`)
-    : chalk.hex(tab.unavailable ? colors.dim : colors.muted)(title);
   // The pin marker belongs to the fixed part of the segment, so the label budget
   // shrinks around it instead of the marker being cut off.
   const pin = tab.pinned ? chalk.hex(colors.accent)('* ') : '';
-  return `${slotLabel}${pin}${body}${renderTabMarkers(tab.status)}`;
+  // A tab waiting for the user is highlighted whole, so it stands out from the
+  // dim tabs at a glance, not only through the `!` chip.
+  const slotTone = tab.status.blocked ? colors.warning : colors.dim;
+  const labelTone = tab.unavailable ? colors.dim : tab.status.blocked ? colors.warning : colors.muted;
+  const body = tab.active
+    ? chalk.bold.inverse(` ${slot} ${pin}${title} `)
+    : `${chalk.hex(slotTone)(slot)} ${pin}${chalk.hex(labelTone)(title)}`;
+  return `${body}${renderTabMarkers(tab.status)}`;
+}
+
+/** Separator drawn between tabs in a strip. */
+function renderTabSeparator(): string {
+  return chalk.hex(colors.dim)('│');
 }
 
 function renderTabMarkers(status: TuiSessionTabStatus): string {
   const markers: string[] = [];
-  if (status.blocked) markers.push(chalk.hex(colors.warning)('!'));
+  // The blocked chip is a filled badge: a tab that needs an answer must call
+  // attention even beside an inverse (visible) tab.
+  if (status.blocked) markers.push(chalk.bold.black.bgHex(colors.warning)('!'));
   if (status.running) markers.push(chalk.hex(colors.accent)('●'));
   if (status.unread > 0) {
     markers.push(chalk.hex(colors.success)(status.unread > 1 ? `•${status.unread}` : '•'));

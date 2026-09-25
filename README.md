@@ -173,6 +173,7 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 | Switch permission modes | `Alt+M` |
 | Switch Session tabs | `Ctrl+Shift+Left` / `Ctrl+Shift+Right` |
 | Jump to a Session tab by slot | `Alt+1`…`Alt+9` |
+| Open a new Session tab | `Alt+N` |
 | Close the visible Session tab | `Alt+W` |
 | Rename the visible Session tab | `Alt+R` |
 | Close a panel or interrupt a running task; interrupting before the model replies returns the message to the composer | `Esc` |
@@ -181,7 +182,7 @@ Inside the TUI, use `/sessions` to find previous sessions and `/help` to see all
 
 Kinetick Code runs several Sessions side by side in a tab bar above the composer:
 
-- **Every open Session is a tab** with a live status (`working`, `waiting`, `unread`). `/new` opens a fresh tab, `/clear` starts a new conversation in the current tab, and `/clone` copies a Session into a new one.
+- **Every open Session is a tab** with a live status (`working`, `waiting`, `unread`). A Session waiting for your input is highlighted in the bar, so it stands out even behind a busy screen. `/new` (or `Alt+N`) opens a fresh tab, `/clear` starts a new conversation in the current tab, and `/clone` copies a Session into a new one.
 - **Turns keep running in the background.** Switch away and the running turn keeps streaming into its own tab; come back to the exact pane you left. An `unread` marker shows when a turn finished while you were away.
 - **Organize the bar your way:** `Alt+R` renames a tab, `Shift+Alt+Left` / `Shift+Alt+Right` move it to the slot you want, and tabs from several projects group automatically by project.
 - **Pin the Sessions you return to** with `/pin`; pinned Sessions lead the `/sessions` list and are marked on the tab bar.
