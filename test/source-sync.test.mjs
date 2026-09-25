@@ -497,8 +497,9 @@ test('CLI release publishes a new main version and skips an already published on
   const versionStep = workflow.jobs.build.steps.find(step => step.id === 'release');
   assert.match(versionStep.run, /EVENT_NAME" = push \] && \[ -n "\$REQUESTED_TAG" \]/);
   assert.match(versionStep.env.REQUESTED_TAG, /startsWith\(github\.ref, 'refs\/tags\/'\)/);
+  assert.equal(workflow.jobs.install.if, "!cancelled() && needs.build.result == 'success'");
   assert.deepEqual(workflow.jobs.publish.needs, ['build', 'install']);
-  assert.equal(workflow.jobs.publish.if, "success() && github.event_name == 'push'");
+  assert.equal(workflow.jobs.publish.if, "!cancelled() && github.event_name == 'push' && needs.build.result == 'success' && needs.install.result == 'success'");
   assert.equal(workflow.jobs.publish.permissions.contents, 'write');
   assert.equal(workflow.jobs.publish.concurrency['cancel-in-progress'], false);
   assert.match(workflow.jobs.publish.concurrency.group, /needs\.build\.outputs\.tag/);
