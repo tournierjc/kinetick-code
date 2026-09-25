@@ -25,7 +25,9 @@ export function githubApi(gh, endpoint, { method = 'GET', input, allowNotFound =
     return JSON.parse(stdout);
   } catch (error) {
     if (error instanceof SyntaxError) throw new Error(`GitHub API ${method} ${endpoint} returned invalid JSON.`);
-    if (allowNotFound && /Not Found|\b404\b/.test(apiDetail(error))) return null;
+    // Missing releases are 404; unknown refs on commits/<tag> are 422
+    // ("No commit found for SHA"). Both mean the tag/release is absent.
+    if (allowNotFound && /Not Found|No commit found|\b404\b|\b422\b/.test(apiDetail(error))) return null;
     throw error;
   }
 }
