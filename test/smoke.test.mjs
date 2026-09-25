@@ -69,7 +69,7 @@ test("CLI version and command help work outside the source directory", (t) => {
 test("CLI defaults to the shared user config without migrating the old source directory", (t) => {
   const options = fixture(t);
   const home = options.cwd;
-  const config = path.join(home, ".minimax", "config.yaml");
+  const config = path.join(home, ".kinetick", "config.yaml");
   const oldConfig = path.join(home, ".minimax-code", "config.yaml");
   for (const file of [config, oldConfig]) mkdirSync(path.dirname(file));
   writeFileSync(config, "logLevel: info\n", { mode: 0o600 });
@@ -78,6 +78,7 @@ test("CLI defaults to the shared user config without migrating the old source di
   for (const name of Object.keys(options.env)) {
     if (name.startsWith("__MAVIS_RUNTIME")) delete options.env[name];
   }
+  delete options.env.KINETICK_DATA_DIR;
   delete options.env.MINIMAX_DATA_DIR;
   delete options.env.MAVIS_DATA_DIR;
   Object.assign(options.env, {
@@ -87,7 +88,7 @@ test("CLI defaults to the shared user config without migrating the old source di
   // Fork adaptation: this distribution ships no telemetry subsystem, so the
   // upstream `mcode telemetry status` probe does not exist here. Probe the
   // same shared-config resolution through `provider list --json`, which must
-  // read ~/.minimax/config.yaml and never migrate ~/.minimax-code.
+  // read ~/.kinetick/config.yaml and never migrate ~/.minimax-code.
   const result = spawnSync(process.execPath, [cli, "provider", "list", "--json"], {
     ...options,
     encoding: "utf8",

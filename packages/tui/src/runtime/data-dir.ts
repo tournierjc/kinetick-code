@@ -5,6 +5,7 @@ import { configureTuiRuntimeEnvironment } from '../cli/environment.js';
 export type TuiDefaultDataDirResolver = () => string;
 
 export interface TuiDataDirEnvironment {
+  KINETICK_DATA_DIR?: string;
   MINIMAX_DATA_DIR?: string;
   MAVIS_DATA_DIR?: string;
 }
@@ -29,6 +30,9 @@ function getDefaultTuiDataDir(): string {
 }
 
 function readDataDirOverride(environment: TuiDataDirEnvironment): string | undefined {
+  const kinetickDataDir = environment.KINETICK_DATA_DIR?.trim();
+  if (kinetickDataDir) return kinetickDataDir;
+
   const minimaxDataDir = environment.MINIMAX_DATA_DIR?.trim();
   if (minimaxDataDir) return minimaxDataDir;
 

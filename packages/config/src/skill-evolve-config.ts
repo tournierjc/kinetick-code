@@ -80,7 +80,7 @@ export interface SkillEvolveConfig {
   /**
    * Optional absolute path to the source repository used for built-in skill
    * evolution MRs. Runtime built-in skills usually live under the dataDir copy
-   * (`.minimax/.builtin-skills`), so walking up from that directory cannot find
+   * (`.kinetick/.builtin-skills`), so walking up from that directory cannot find
    * the repo in packaged/dev-profile installs. When set, the internal nightly
    * scheduler validates this path and uses it as the MR source repo.
    */

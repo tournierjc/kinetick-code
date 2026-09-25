@@ -711,8 +711,11 @@ function dataDirSource(): string {
   return source && KNOWN_DATA_DIR_SOURCES.has(source) ? source : 'unknown';
 }
 
-function agentDirectoryRootKind(root: string): '.minimax' | '.mavis' | 'other' {
+function agentDirectoryRootKind(
+  root: string,
+): '.kinetick' | '.minimax' | '.mavis' | 'other' {
   const name = basename(root).toLowerCase();
+  if (name === '.kinetick' || name.startsWith('.kinetick-')) return '.kinetick';
   if (name === '.minimax' || name.startsWith('.minimax-')) return '.minimax';
   if (name === '.mavis' || name.startsWith('.mavis-')) return '.mavis';
   return 'other';
@@ -749,20 +752,32 @@ async function isExpectedDefaultDataDirTarget(
   current: string,
   resolvedTarget: string,
 ): Promise<boolean> {
-  if (current !== root || agentDirectoryRootKind(root) !== '.mavis') return false;
-  try {
-    return samePath(
-      resolvedTarget,
-      await realpath(join(dirname(root), expectedDefaultMinimaxDataDirName(root))),
-    );
-  } catch {
-    return false;
+  if (current !== root) return false;
+  const kind = agentDirectoryRootKind(root);
+  if (kind !== '.mavis' && kind !== '.minimax') return false;
+  for (const expected of expectedDefaultPrimaryDataDirNames(root, kind)) {
+    try {
+      if (samePath(resolvedTarget, await realpath(join(dirname(root), expected)))) {
+        return true;
+      }
+    } catch {
+      // Missing candidate; try the next expected primary/legacy name.
+    }
   }
+  return false;
 }
 
-function expectedDefaultMinimaxDataDirName(root: string): string {
+function expectedDefaultPrimaryDataDirNames(
+  root: string,
+  kind: '.mavis' | '.minimax',
+): string[] {
   const name = basename(root);
-  return name.startsWith('.mavis-') ? `.minimax${name.slice('.mavis'.length)}` : '.minimax';
+  const suffix = name.startsWith(`${kind}-`) ? name.slice(kind.length) : '';
+  if (kind === '.mavis') {
+    // Prefer the current primary; keep `.minimax` as an intermediate compat target.
+    return [`.kinetick${suffix}`, `.minimax${suffix}`];
+  }
+  return [`.kinetick${suffix}`];
 }
 
 function samePath(left: string, right: string): boolean {

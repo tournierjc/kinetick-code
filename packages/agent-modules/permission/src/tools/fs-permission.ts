@@ -675,7 +675,11 @@ function isProtectedRuntimeRead(
       (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
     );
   };
-  const roots = [context.dataDir, path.join(context.homeDir ?? os.homedir(), '.minimax')];
+  const roots = [
+    context.dataDir,
+    path.join(context.homeDir ?? os.homedir(), '.kinetick'),
+    path.join(context.homeDir ?? os.homedir(), '.minimax'),
+  ];
   const canonicalPath = resolveExistingPath(filePath);
   for (const root of roots) {
     if (!root) continue;

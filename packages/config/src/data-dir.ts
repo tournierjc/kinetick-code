@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const NEW_DATA_DIR_BASENAME = '.minimax';
-export const LEGACY_DATA_DIR_BASENAME = '.mavis';
+export const NEW_DATA_DIR_BASENAME = '.kinetick';
+/** Newest-first legacy basenames that migrate into the primary data directory. */
+export const LEGACY_DATA_DIR_BASENAMES = ['.minimax', '.mavis'] as const;
+/** Newest legacy basename (compat link / getLegacyDataDirPath). */
+export const LEGACY_DATA_DIR_BASENAME = LEGACY_DATA_DIR_BASENAMES[0];
 
 export type DataDirMigrationLogger = Pick<Console, 'error' | 'info' | 'warn'>;
 
@@ -43,6 +46,11 @@ export function getPrimaryDataDirPath(homeDir?: string, profile?: string | null)
 
 export function getLegacyDataDirPath(homeDir?: string, profile?: string | null): string {
   return path.join(resolveHomeDir(homeDir), basenameForProfile(LEGACY_DATA_DIR_BASENAME, profile));
+}
+
+export function getLegacyDataDirPaths(homeDir?: string, profile?: string | null): string[] {
+  const home = resolveHomeDir(homeDir);
+  return LEGACY_DATA_DIR_BASENAMES.map((base) => path.join(home, basenameForProfile(base, profile)));
 }
 
 function pathState(targetPath: string): PathState {
@@ -384,12 +392,25 @@ function resolveDataDirPair(
 export function resolveDataDir(options: ResolveDataDirOptions = {}): string {
   const homeDir = resolveHomeDir(options.homeDir);
   const profile = options.profile ?? null;
-  return resolveDataDirPair(
-    getPrimaryDataDirPath(homeDir, profile),
-    getLegacyDataDirPath(homeDir, profile),
-    options.logger ?? noopLogger,
-    options.nowMs ?? Date.now,
-  );
+  const logger = options.logger ?? noopLogger;
+  const nowMs = options.nowMs ?? Date.now;
+  const primary = getPrimaryDataDirPath(homeDir, profile);
+  const legacies = getLegacyDataDirPaths(homeDir, profile);
+
+  // Walk newest→oldest so `.minimax` migrates before `.mavis`. Each pass uses the
+  // fixed primary path; later passes only migrate when primary is still empty.
+  let resolved = primary;
+  for (const legacyDir of legacies) {
+    resolved = resolveDataDirPair(primary, legacyDir, logger, nowMs);
+  }
+
+  if (normalizeResolvedPathForCompare(resolved) === normalizeResolvedPathForCompare(primary)) {
+    for (const legacyDir of legacies) {
+      ensureCompatLink(legacyDir, primary, logger, nowMs);
+    }
+  }
+
+  return resolved;
 }
 
 export function migrateDefaultDataDir(homeDir?: string, logger?: DataDirMigrationLogger): string {
