@@ -39,6 +39,12 @@ export interface ByokResolutionPlan {
    */
   readonly unauthenticatedEndpoint?: true;
   readonly modelCompat?: LocalModelCompatOverrides;
+  /**
+   * Token rates the provider declares for this model, in USD per million tokens.
+   * The resolver turns them into the rate Pi multiplies each turn's tokens by,
+   * so an endpoint that declares none stays unpriceable.
+   */
+  readonly modelCost?: LocalModelConfig['cost'];
 }
 
 export function planMinimaxApiResolution(input: {
@@ -107,6 +113,7 @@ export function planCustomProviderResolution(input: {
     api: resolvePerModelApi(modelConfig.provider) ?? resolveCustomProviderApi(config.api),
     ...credentials,
     ...customProviderLimits(modelConfig),
+    ...(modelConfig.cost ? { modelCost: modelConfig.cost } : {}),
     ...(configHeaders ? { configHeaders } : {}),
     ...(modelCompat ? { modelCompat } : {}),
   };

@@ -18,6 +18,7 @@ import { withOpenCodeGoHeaders, withOpenRouterAttributionHeaders } from '@mavis/
 
 import type {
   LocalModelCompatOverrides,
+  LocalModelConfig,
   LocalModelResolveInput,
   LocalModelResolverLike,
   LocalModelResolverLogger,
@@ -111,6 +112,12 @@ interface FinishResolveInput extends ModelIdentity {
    */
   readonly unauthenticatedEndpoint?: true;
   readonly modelCompat?: LocalModelCompatOverrides;
+  /**
+   * Token rates the provider declares for this model, in USD per million tokens.
+   * The config subtree it comes from is persisted as opaque JSON, so the rate is
+   * validated where it is read rather than where it is written.
+   */
+  readonly modelCost?: LocalModelConfig['cost'];
   readonly catalogModel?: Model<Api>;
   readonly authContext?: LocalRuntimeAuthContext;
   readonly routingContext?: ManagedBackendRoutingContext;
@@ -650,7 +657,7 @@ function buildResolvedModel(scope: {
     reasoning: thinking.enabled,
     ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
     input: deriveModelInput(input.modelRef),
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: resolvedModelCost(input),
     contextWindow,
     maxTokens,
     ...(compat ? { compat } : {}),
@@ -660,6 +667,60 @@ function buildResolvedModel(scope: {
 function resolvedThinkingLevelMap(thinking: ResolvedThinking): ThinkingLevelMap | undefined {
   if (thinking.thinkingLevelMap) return thinking.thinkingLevelMap;
   return thinking.maxLevel ? { max: thinking.maxLevel } : undefined;
+}
+
+const ZERO_MODEL_COST: Model<Api>['cost'] = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
+/**
+ * Token rates for the resolved model, in USD per million tokens.
+ *
+ * Pi multiplies these rates by the turn's token counts and the Runtime persists
+ * the result with every assistant message; that persisted total is what the
+ * status line reports as the session cost. A zero rate therefore does not read
+ * as "free", it reads as "never priced": the total stays $0 and the item that
+ * shows it stays hidden. So a rate the provider declares wins, and a route the
+ * account already pays for by plan or by sign-in keeps the zero rate — the Pi
+ * catalog lists a per-token price for those models too, and reporting it would
+ * invent a charge the account is not billed.
+ */
+function resolvedModelCost(input: FinishResolveInput): Model<Api>['cost'] {
+  const declared = declaredModelCost(input.modelCost);
+  if (declared) return declared;
+  if (input.managedProvider || (input.byokProvider && !input.customProvider)) {
+    return ZERO_MODEL_COST;
+  }
+  return input.catalogModel?.cost ?? ZERO_MODEL_COST;
+}
+
+/**
+ * Reads the declared rate out of opaque provider config into Pi's rate shape.
+ *
+ * Both directions must be a real, finite, non-negative price: a half-declared or
+ * negative rate would price a turn at a number nobody published, so it is
+ * dropped and the model left unpriceable instead. An explicit zero is honoured
+ * as "this endpoint is not billed by the token", which also keeps the Pi
+ * catalog's list price for whatever model the endpoint fronts out of the total.
+ */
+function declaredModelCost(declared: LocalModelConfig['cost']): Model<Api>['cost'] | undefined {
+  if (!declared) return undefined;
+  const input = tokenRate(declared.input);
+  const output = tokenRate(declared.output);
+  if (input === undefined || output === undefined) return undefined;
+  return {
+    input,
+    output,
+    cacheRead: tokenRate(declared.cache_read) ?? 0,
+    cacheWrite: tokenRate(declared.cache_write) ?? 0,
+  };
+}
+
+function tokenRate(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function resolvedModelCompatibility(

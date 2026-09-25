@@ -419,6 +419,12 @@ export interface UserModelInputView {
   capabilities?: LocalModelConfig['capabilities'];
   modalities?: { input?: string[]; output?: string[] };
   limit?: { context?: number; output?: number };
+  /**
+   * Token rates in USD per million tokens, as the provider catalog publishes
+   * them. The Runtime prices a turn from these, so a model saved without them
+   * reports no cost at all.
+   */
+  cost?: NonNullable<LocalModelConfig['cost']>;
   thinkingConfig?: { mode?: string; defaultValue?: string };
   effortOptions?: string[];
 }

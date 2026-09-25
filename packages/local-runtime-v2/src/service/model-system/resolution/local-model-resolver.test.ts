@@ -6,7 +6,7 @@ import {
 } from '@mavis/protocol';
 import { describe, expect, it, vi } from 'vitest';
 
-import { streamSimple } from '@earendil-works/pi-ai';
+import { calculateCost, streamSimple } from '@earendil-works/pi-ai';
 
 import { LocalModelResolver, lookupLocalModelLimits } from './local-model-resolver.js';
 import { UNAUTHENTICATED_PROVIDER_API_KEY } from '../connectivity/provider-request.js';
@@ -609,6 +609,132 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
     });
     expect(resolved.headers).not.toHaveProperty('http-referer');
     expect(resolved.headers).not.toHaveProperty('x-openrouter-title');
+  });
+});
+
+describe('LocalModelResolver session cost pricing', () => {
+  const customProvider = (models: Record<string, LocalModelConfig>) =>
+    new LocalModelResolver({
+      byokConfigGetter: () => ({
+        custom_provider: {
+          work: {
+            api: 'openai-completions',
+            options: { apiKey: 'custom-user-key', baseURL: 'https://custom.example/v1' },
+            models,
+          },
+        },
+      }),
+    });
+  const resolveWorkModel = (resolver: LocalModelResolver) =>
+    resolver.resolveModel({
+      sessionId: 'session-cost',
+      turnId: 'turn-cost',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'custom_provider:work', model_id: 'model' },
+      },
+    });
+  const usageOf = (tokens: { input: number; output: number; cacheRead?: number }) => ({
+    input: tokens.input,
+    output: tokens.output,
+    cacheRead: tokens.cacheRead ?? 0,
+    cacheWrite: 0,
+    totalTokens: tokens.input + tokens.output,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  });
+
+  it('prices turns with the rate the provider declares', async () => {
+    const resolved = await resolveWorkModel(
+      customProvider({
+        model: { cost: { input: 0.14, output: 0.28, cache_read: 0.0028 } },
+      }),
+    );
+
+    expect(resolved.model.cost).toEqual({
+      input: 0.14,
+      output: 0.28,
+      cacheRead: 0.0028,
+      cacheWrite: 0,
+    });
+    // The status line reports the sum of what Pi prices per turn, so the rate is
+    // what decides whether a session has a cost to report at all: it is charged
+    // here in USD per million tokens, not per token.
+    expect(
+      calculateCost(resolved.model, usageOf({ input: 1_000_000, output: 100_000 })).total,
+    ).toBeCloseTo(0.168, 6);
+  });
+
+  it('leaves an endpoint that declares no rate unpriceable', async () => {
+    const resolved = await resolveWorkModel(customProvider({ model: {} }));
+
+    expect(resolved.model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    expect(
+      calculateCost(resolved.model, usageOf({ input: 1_000_000, output: 100_000 })).total,
+    ).toBe(0);
+  });
+
+  it('drops a declared rate that is not a price', async () => {
+    const resolved = await resolveWorkModel(
+      customProvider({ model: { cost: { input: -0.14, output: 0.28 } } }),
+    );
+
+    expect(resolved.model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+  });
+
+  it('takes the catalog rate for a known provider and model', async () => {
+    const resolver = new LocalModelResolver({
+      providerConfig: {
+        deepseek: {
+          options: { apiKey: 'deepseek-user-key', baseURL: 'https://api.deepseek.com' },
+          models: { 'deepseek-v4-flash': {} },
+        },
+      },
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-catalog',
+      turnId: 'turn-catalog',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'deepseek', model_id: 'deepseek-v4-flash' },
+      },
+    });
+
+    expect(resolved.model.cost).toEqual({
+      input: 0.14,
+      output: 0.28,
+      cacheRead: 0.0028,
+      cacheWrite: 0,
+    });
+  });
+
+  it('keeps the zero rate on a route the plan already bills', async () => {
+    const resolver = new LocalModelResolver({
+      authContextGetter: () => ({ accessToken: 'managed-token', realUserID: 'user-managed' }),
+      providerConfig: {
+        minimax: {
+          options: {
+            authMode: 'managed-login',
+            apiKey: 'sk-xxx',
+            baseURL: 'https://agent.minimax.io/mavis/api/v1/llm/v1',
+          },
+        },
+      },
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-managed-cost',
+      turnId: 'turn-managed-cost',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'minimax', model_id: 'MiniMax-M2.7' },
+      },
+    });
+
+    // Pi lists the model's per-token price, but a subscription turn is not billed
+    // by the token: reporting the list price would invent a charge.
+    expect(resolved.managedProvider).toBe(true);
+    expect(resolved.model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   });
 });
 
