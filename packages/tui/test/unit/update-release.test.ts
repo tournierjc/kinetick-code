@@ -8,6 +8,8 @@ import {
   KcodeReleaseService,
   buildKcodeInstallCommand,
   compareKcodeVersions,
+  fetchKcodeReleaseAssetBytes,
+  isKcodeGitHubAssetMetadataBody,
   isKcodeGitHubReleaseAssetApiUrl,
   kcodeReleaseArchiveNames,
   kcodeReleaseFetchHeaders,
@@ -44,11 +46,14 @@ function archiveName(version: string, prefix = 'kinetick-code'): string {
   return `${prefix}-${version}.tar.gz`;
 }
 
+let nextAssetId = 1000;
+
 function asset(name: string, size: number, tag = 'v0.0.0') {
+  nextAssetId += 1;
   return {
     name,
     size,
-    url: `https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/${name}`,
+    url: `https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/${nextAssetId}`,
     browser_download_url:
       `https://github.com/tournierjc/kinetick-code/releases/download/${tag}/${name}`,
   };
@@ -117,8 +122,18 @@ function dependenciesFor(
       if (url.includes('/releases?')) return Buffer.from(JSON.stringify(entries));
       for (const entry of entries) {
         const name = archiveNameOf(entry);
-        if (url === assetUrlOf(entry, name)) return entry.archiveBytes;
-        if (url === assetUrlOf(entry, `${name}.sha256`)) return Buffer.from(entry.checksumText);
+        if (
+          url === browserUrlOf(entry, name) ||
+          url === assetUrlOf(entry, name)
+        ) {
+          return entry.archiveBytes;
+        }
+        if (
+          url === browserUrlOf(entry, `${name}.sha256`) ||
+          url === assetUrlOf(entry, `${name}.sha256`)
+        ) {
+          return Buffer.from(entry.checksumText);
+        }
       }
       throw new Error(`unexpected fetch: ${url}`);
     }),
@@ -161,6 +176,19 @@ describe('KCode release channel', () => {
     expect(release.version).toBe('0.5.3-rc.1');
     expect(release.prerelease).toBe(true);
     expect(release.artifact.name).toBe('kinetick-code-0.5.3-rc.1.tar.gz');
+  });
+
+  it('prefers browser_download_url for archive and checksum, keeping API URLs as fallback', () => {
+    const entry = releaseEntry('0.6.1', { prerelease: true });
+    const release = selectKcodeRelease([entry], { channel: 'preview' });
+    const name = archiveName('0.6.1');
+    expect(release.artifact.url).toBe(browserUrlOf(entry, name));
+    expect(release.artifact.downloadUrl).toBe(browserUrlOf(entry, name));
+    expect(release.artifact.apiUrl).toBe(assetUrlOf(entry, name));
+    expect(release.artifact.checksumUrl).toBe(browserUrlOf(entry, `${name}.sha256`));
+    expect(release.artifact.checksumApiUrl).toBe(assetUrlOf(entry, `${name}.sha256`));
+    expect(release.artifact.url).not.toContain('api.github.com');
+    expect(release.artifact.checksumUrl).not.toContain('api.github.com');
   });
 
   it('keeps the stable channel on published releases and ignores drafts', () => {
@@ -236,6 +264,26 @@ describe('KCode release channel', () => {
     );
   });
 
+  it('detects accidental GitHub asset metadata JSON instead of a digest list', () => {
+    const metadata = JSON.stringify({
+      url: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/1',
+      browser_download_url:
+        'https://github.com/tournierjc/kinetick-code/releases/download/v0.6.1/kinetick-code-0.6.1.tar.gz.sha256',
+      id: 1,
+      node_id: 'RA_kwDOUgip9M4',
+      name: 'kinetick-code-0.6.1.tar.gz.sha256',
+      size: 98,
+    });
+    expect(isKcodeGitHubAssetMetadataBody(metadata)).toBe(true);
+    expect(isKcodeGitHubAssetMetadataBody(`${'a'.repeat(64)}  archive.tar.gz\n`)).toBe(false);
+    expect(() => parseKcodeChecksum(metadata, 'kinetick-code-0.6.1.tar.gz')).toThrow(
+      /returned GitHub asset metadata JSON/u,
+    );
+    expect(() => parseKcodeChecksum(metadata, 'kinetick-code-0.6.1.tar.gz')).not.toThrow(
+      /not a SHA-256 digest list/u,
+    );
+  });
+
   it('verifies the archive against the published digest and size', () => {
     const name = archiveName('0.5.3');
     const release: KcodeRelease = {
@@ -245,10 +293,12 @@ describe('KCode release channel', () => {
       publishedAt: '2026-09-22T09:43:59Z',
       artifact: {
         name,
-        url: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/archive',
+        url: `https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3/${name}`,
         downloadUrl: `https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3/${name}`,
+        apiUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/1',
         size: ARCHIVE_BYTES.length,
-        checksumUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/checksum',
+        checksumUrl: `https://github.com/tournierjc/kinetick-code/releases/download/v0.5.3/${name}.sha256`,
+        checksumApiUrl: 'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/2',
       },
     };
     const digest = createHash('sha256').update(ARCHIVE_BYTES).digest('hex');
@@ -424,23 +474,81 @@ describe('KcodeReleaseService', () => {
     expect(runInstall).not.toHaveBeenCalled();
   });
 
-  it('asks GitHub for raw bytes on release asset API URLs', () => {
+  it('forces Accept: application/octet-stream on release asset API URLs', () => {
     const assetUrl =
       'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/588290420';
+    const browserUrl =
+      'https://github.com/tournierjc/kinetick-code/releases/download/v0.6.1/kinetick-code-0.6.1.tar.gz';
     expect(isKcodeGitHubReleaseAssetApiUrl(assetUrl)).toBe(true);
+    expect(isKcodeGitHubReleaseAssetApiUrl(browserUrl)).toBe(false);
     expect(isKcodeGitHubReleaseAssetApiUrl('https://api.github.com/repos/o/r/releases?per_page=30')).toBe(
       false,
     );
     expect(kcodeReleaseFetchHeaders(assetUrl)).toEqual({ accept: 'application/octet-stream' });
+    expect(kcodeReleaseFetchHeaders(browserUrl, { accept: 'application/vnd.github+json' })).toEqual({
+      accept: 'application/vnd.github+json',
+    });
+    // A stale Accept from a release-list caller must not win on asset API URLs.
     expect(
       kcodeReleaseFetchHeaders(assetUrl, {
-        accept: 'application/vnd.github+json',
+        Accept: 'application/vnd.github+json',
         'x-github-api-version': '2022-11-28',
       }),
     ).toEqual({
-      accept: 'application/vnd.github+json',
+      accept: 'application/octet-stream',
       'x-github-api-version': '2022-11-28',
     });
+  });
+
+  it('falls back to the API asset URL when the browser download URL fails', async () => {
+    const preferred =
+      'https://github.com/tournierjc/kinetick-code/releases/download/v0.6.1/kinetick-code-0.6.1.tar.gz';
+    const apiUrl =
+      'https://api.github.com/repos/tournierjc/kinetick-code/releases/assets/588290420';
+    const body = Buffer.from('archive-bytes');
+    const fetchBytes = vi.fn(async (url: string) => {
+      if (url === preferred) throw new Error('browser URL failed');
+      if (url === apiUrl) return body;
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    await expect(
+      fetchKcodeReleaseAssetBytes(fetchBytes, preferred, apiUrl, { environment: {} }),
+    ).resolves.toEqual(body);
+    expect(fetchBytes).toHaveBeenCalledWith(preferred, expect.any(Object));
+    expect(fetchBytes).toHaveBeenCalledWith(apiUrl, expect.any(Object));
+  });
+
+  it('downloads via browser_download_url during apply (not the API asset URL)', async () => {
+    const entry = releaseEntry('0.6.1', { prerelease: true });
+    const name = archiveName('0.6.1');
+    const fetched: string[] = [];
+    const runInstall = vi.fn(async () => undefined);
+    const result = await service(
+      [entry],
+      {
+        fetchBytes: vi.fn(async (url: string) => {
+          fetched.push(url);
+          if (url.includes('/releases?') || url.includes('/releases/tags/')) {
+            return Buffer.from(JSON.stringify([entry]));
+          }
+          if (url === browserUrlOf(entry, name)) return entry.archiveBytes;
+          if (url === browserUrlOf(entry, `${name}.sha256`)) {
+            return Buffer.from(entry.checksumText);
+          }
+          throw new Error(`unexpected fetch: ${url}`);
+        }),
+        runInstall,
+        readInstalledPackageVersion: () => '0.6.1',
+      },
+      { currentVersion: '0.6.0' },
+    ).apply({});
+    expect(result.applied).toBe(true);
+    expect(fetched.filter((url) => url.includes('api.github.com/repos') && url.includes('/assets/'))).toEqual(
+      [],
+    );
+    expect(fetched).toContain(browserUrlOf(entry, name));
+    expect(fetched).toContain(browserUrlOf(entry, `${name}.sha256`));
+    expect(runInstall).toHaveBeenCalledTimes(1);
   });
 
   it('reports the public archive URL in the install command for a source checkout', async () => {

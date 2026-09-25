@@ -57,12 +57,23 @@ export type KcodeReleaseInstallSource = Exclude<KcodePackageManagerInstallSource
 
 export interface KcodeReleaseArtifact {
   readonly name: string;
-  /** API asset URL: what the updater fetches, with a token when one is available. */
+  /**
+   * Preferred download URL (`browser_download_url`). Public releases need no
+   * Accept dance and match a hand install from the releases page.
+   */
   readonly url: string;
-  /** Public download URL: what a person can install from by hand. */
+  /** Public download URL: what a person can install from by hand (same as `url`). */
   readonly downloadUrl: string;
+  /**
+   * API asset URL (`/releases/assets/<id>`). Used only when the preferred URL
+   * fails — then fetched with a forced `Accept: application/octet-stream`.
+   */
+  readonly apiUrl: string;
   readonly size: number;
+  /** Preferred checksum URL (`browser_download_url` of the `.sha256` asset). */
   readonly checksumUrl: string;
+  /** API checksum asset URL — fallback with forced octet-stream Accept. */
+  readonly checksumApiUrl: string;
 }
 
 export interface KcodeRelease {
@@ -241,10 +252,12 @@ function readKcodeArtifact(assets: unknown, version: string): KcodeReleaseArtifa
     }
     return {
       name,
-      url: archive.apiUrl,
+      url: archive.downloadUrl,
       downloadUrl: archive.downloadUrl,
+      apiUrl: archive.apiUrl,
       size: archive.size,
-      checksumUrl: checksum.apiUrl,
+      checksumUrl: checksum.downloadUrl,
+      checksumApiUrl: checksum.apiUrl,
     };
   }
   throw new Error(
@@ -252,8 +265,36 @@ function readKcodeArtifact(assets: unknown, version: string): KcodeReleaseArtifa
   );
 }
 
+/**
+ * True when `text` is GitHub release-asset metadata (or an API error envelope)
+ * rather than a `.sha256` digest file. Fetching `/releases/assets/<id>` without
+ * `Accept: application/octet-stream` yields this body.
+ */
+export function isKcodeGitHubAssetMetadataBody(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{')) return false;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+    const body = parsed as Record<string, unknown>;
+    if (typeof body.browser_download_url === 'string') return true;
+    if (typeof body.url === 'string' && typeof body.node_id === 'string') return true;
+    if (typeof body.message === 'string' && typeof body.documentation_url === 'string') return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 /** Read `<sha256>  <archive name>` as published beside the archive. */
 export function parseKcodeChecksum(text: string, archiveName: string): string {
+  if (isKcodeGitHubAssetMetadataBody(text)) {
+    throw new Error(
+      `KCode checksum fetch for ${archiveName} returned GitHub asset metadata JSON instead of ` +
+        'the .sha256 digest file. Use the public browser_download_url, or fetch the asset API ' +
+        'URL with Accept: application/octet-stream.',
+    );
+  }
   const lines = text
     .split(/\r?\n/u)
     .map((line) => line.trim())
@@ -423,15 +464,23 @@ export class KcodeReleaseService {
     try {
       reportKcodeUpdatePhase(request, 'downloading', true);
       const archivePath = path.join(stagingDirectory, check.release.artifact.name);
+      const fetchOptions = {
+        signal: controller.signal,
+        environment: this.environment,
+      };
       const [archiveBytes, checksumBytes] = await Promise.all([
-        this.dependencies.fetchBytes(check.release.artifact.url, {
-          signal: controller.signal,
-          environment: this.environment,
-        }),
-        this.dependencies.fetchBytes(check.release.artifact.checksumUrl, {
-          signal: controller.signal,
-          environment: this.environment,
-        }),
+        fetchKcodeReleaseAssetBytes(
+          this.dependencies.fetchBytes,
+          check.release.artifact.url,
+          check.release.artifact.apiUrl,
+          fetchOptions,
+        ),
+        fetchKcodeReleaseAssetBytes(
+          this.dependencies.fetchBytes,
+          check.release.artifact.checksumUrl,
+          check.release.artifact.checksumApiUrl,
+          fetchOptions,
+        ),
       ]);
       const expectedSha256 = parseKcodeChecksum(
         checksumBytes.toString('utf8'),
@@ -620,17 +669,55 @@ export function isKcodeGitHubReleaseAssetApiUrl(url: string): boolean {
   }
 }
 
-/** Merge caller headers with the Accept value GitHub requires for asset bytes. */
+/**
+ * Merge caller headers with the Accept value GitHub requires for asset bytes.
+ * For asset API URLs, `Accept: application/octet-stream` always wins — a stale
+ * `application/vnd.github+json` from a release-list caller must not stick.
+ */
 export function kcodeReleaseFetchHeaders(
   url: string,
   headers: Record<string, string> = {},
 ): Record<string, string> {
   const merged = { ...headers };
-  const hasAccept = Object.keys(merged).some((key) => key.toLocaleLowerCase() === 'accept');
-  if (!hasAccept && isKcodeGitHubReleaseAssetApiUrl(url)) {
+  if (isKcodeGitHubReleaseAssetApiUrl(url)) {
+    for (const key of Object.keys(merged)) {
+      if (key.toLowerCase() === 'accept') delete merged[key];
+    }
     merged.accept = 'application/octet-stream';
   }
   return merged;
+}
+
+/**
+ * Prefer the public `browser_download_url`; fall back to the API asset URL
+ * (with forced octet-stream Accept inside `fetchKcodeBytes`) when needed —
+ * private assets, transient browser-URL failures, etc.
+ */
+export async function fetchKcodeReleaseAssetBytes(
+  fetchBytes: KcodeReleaseDependencies['fetchBytes'],
+  preferredUrl: string,
+  apiUrl: string,
+  options: {
+    signal?: AbortSignal;
+    environment: NodeJS.ProcessEnv;
+    headers?: Record<string, string>;
+  },
+): Promise<Buffer> {
+  try {
+    return await fetchBytes(preferredUrl, options);
+  } catch (primaryError) {
+    if (preferredUrl === apiUrl || options.signal?.aborted) throw primaryError;
+    try {
+      return await fetchBytes(apiUrl, options);
+    } catch (fallbackError) {
+      throw new Error(
+        `KCode asset download failed for ${preferredUrl}${
+          fallbackError instanceof Error ? ` (API fallback: ${fallbackError.message})` : ''
+        }`,
+        { cause: primaryError },
+      );
+    }
+  }
 }
 
 /**
