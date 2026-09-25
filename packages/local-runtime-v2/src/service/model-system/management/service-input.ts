@@ -182,6 +182,7 @@ function modelMetadataFields(model: UserModelInputView): Partial<LocalModelConfi
   if (model.toolCall !== undefined) fields.tool_call = model.toolCall;
   if (model.temperature !== undefined) fields.temperature = model.temperature;
   if (model.modalities) fields.modalities = model.modalities as LocalModelConfig['modalities'];
+  if (model.cost) fields.cost = model.cost;
   if (limit) fields.limit = limit;
   return fields;
 }

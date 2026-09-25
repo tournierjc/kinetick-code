@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LocalModelConfig } from '../contracts.js';
 import {
   firstBuiltinModel,
   planCustomProviderResolution,
@@ -134,8 +135,34 @@ describe('custom BYOK planning', () => {
     });
   });
 
-  it('fails closed when the endpoint itself is incomplete', () => {
+  it('forwards the rate the provider declares for the model', () => {
     const base = {
+      provider: 'custom_provider:work',
+      providerKey: 'work',
+      modelId: 'model',
+    };
+    const declared = { input: 0.14, output: 0.28, cache_read: 0.0028 };
+    const withModels = (models: Record<string, LocalModelConfig>) =>
+      planCustomProviderResolution({
+        ...base,
+        byok: {
+          custom_provider: {
+            work: {
+              options: { apiKey: 'key', baseURL: 'https://custom.example' },
+              models,
+            },
+          },
+        },
+      });
+
+    expect(withModels({ model: { cost: declared } })?.modelCost).toEqual(declared);
+    // The Runtime prices a turn from this rate, so a model the provider leaves
+    // unpriceable must carry no rate at all: the resolver keeps its own zero
+    // rather than inheriting one from a sibling model.
+    expect(withModels({ model: {} })).not.toHaveProperty('modelCost');
+  });
+
+  it('fails closed when the endpoint itself is incomplete', () => {    const base = {
       provider: 'custom_provider:work',
       providerKey: 'work',
       modelId: 'model',

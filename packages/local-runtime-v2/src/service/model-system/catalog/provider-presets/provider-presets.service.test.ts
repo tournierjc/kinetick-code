@@ -439,6 +439,39 @@ describe('models.dev Provider Presets', () => {
     ]);
   });
 
+  it('projects the catalog token rates and drops one-sided or zero ones', async () => {
+    const presets = await parsePresetsForTest({
+      priced: {
+        name: 'Priced',
+        npm: '@ai-sdk/openai-compatible',
+        api: 'https://priced.example/v1',
+        models: {
+          rated: {
+            name: 'Rated',
+            tool_call: true,
+            cost: { input: 0.14, output: 0.28, cache_read: 0.0028 },
+          },
+          // The Runtime prices a turn from both directions, so a one-sided rate
+          // and a rate that says "free" are both left out rather than written as
+          // a price nobody published.
+          partial: { name: 'Partial', tool_call: true, cost: { input: 0.14 } },
+          free: { name: 'Free', tool_call: true, cost: { input: 0, output: 0 } },
+          malformed: { name: 'Malformed', tool_call: true, cost: '0.14' },
+        },
+      },
+    });
+
+    const models = presets[0]?.models ?? [];
+    expect(models.find((model) => model.modelId === 'rated')?.cost).toEqual({
+      input: 0.14,
+      output: 0.28,
+      cache_read: 0.0028,
+    });
+    expect(
+      models.filter((model) => model.modelId !== 'rated').map((model) => model.cost),
+    ).toEqual([undefined, undefined, undefined]);
+  });
+
   it('parses declared reasoning effort options for Kimi K3 on both Moonshot providers', async () => {
     const k3 = {
       name: 'Kimi K3',

@@ -210,6 +210,7 @@ function parseModel(modelId: string, value: unknown): UserModelInputView | undef
     ...parseModelEffortOptions(value),
     ...parseModelModalities(value),
     ...parseModelLimit(value),
+    ...parseModelCost(value),
   };
 }
 
@@ -263,6 +264,33 @@ function parseModelLimit(value: Record<string, unknown>): Partial<UserModelInput
   const output = positiveInteger(limit?.output);
   if (!context && !output) return {};
   return { limit: { ...(context ? { context } : {}), ...(output ? { output } : {}) } };
+}
+
+/**
+ * Reads the catalog's token rates, the USD-per-million-token prices models.dev
+ * publishes alongside a model's limits.
+ *
+ * The Runtime prices a turn by multiplying these rates by the tokens it spent,
+ * so a preset that drops them leaves every turn of the endpoint unpriceable and
+ * the session total at $0. Both directions are required: a one-sided rate would
+ * under-report the session, and a zero rate is indistinguishable from the
+ * "unknown" the Runtime already assumes, so neither one is written.
+ */
+function parseModelCost(value: Record<string, unknown>): Partial<UserModelInputView> {
+  const cost = isRecord(value.cost) ? value.cost : undefined;
+  const input = positiveRate(cost?.input);
+  const output = positiveRate(cost?.output);
+  if (input === undefined || output === undefined) return {};
+  const cacheRead = positiveRate(cost?.cache_read);
+  const cacheWrite = positiveRate(cost?.cache_write);
+  return {
+    cost: {
+      input,
+      output,
+      ...(cacheRead !== undefined ? { cache_read: cacheRead } : {}),
+      ...(cacheWrite !== undefined ? { cache_write: cacheWrite } : {}),
+    },
+  };
 }
 
 function parsePinnedProviderIds(value: unknown): string[] | undefined {
@@ -423,4 +451,8 @@ function stringArray(value: unknown): string[] | undefined {
 
 function positiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+function positiveRate(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
 }
