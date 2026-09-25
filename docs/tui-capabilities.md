@@ -4,27 +4,24 @@ The current capability target is **TUI 0.4.12**; see [version and evidence basel
 
 ## Terminal titles and notifications
 
-Terminal titles show the current state, session name and MCode, for example
-`Needs approval | Fix login | MCode`. Renaming or switching a session updates the
-title. Unnamed sessions use the project name and a short session ID. Titles are
-cleared when MCode exits or suspends and reapplied when it resumes.
+While Kinetick Code is running, the terminal title is the current session title.
+A missing title, or the placeholder "New session", uses `Kinetick Code`. The title
+is written only when that text changes. Renaming or switching to a named session
+updates it.
 
-Configure these presentation settings in the MCode data directory's `config.yaml`:
+Configure notifications in the user data directory's `config.yaml`:
 
 ```yaml
 tui:
-  terminalTitle: [status, session-name, app-name]
   notifications:
     when: unfocused
     method: auto
     events: [turn-complete, turn-failed, permission-required, question-required]
 ```
 
-Title items can be ordered or omitted; `project-name` is also available. Set
-`terminalTitle` to `null` or `[]` to disable title updates. Unknown items are ignored.
 Notification `when` accepts `unfocused`, `always` or `never`; `method` accepts
 `auto`, `osc9`, `osc777` or `bel`. Omitting `events` enables all four events; `[]`
-disables them. Apply configuration changes by restarting MCode.
+disables them. Apply configuration changes by restarting Kinetick Code.
 
 Notifications identify the session and suppress duplicates. Completion waits for
 the session's queue to finish; failed turns and requests for input can notify
@@ -34,8 +31,8 @@ Automatic delivery uses the detected terminal's notification protocol or falls
 back to a bell. The existing Windows toast bridge is restricted to local Windows
 or WSL interop. Terminal settings and OS notification permissions still apply.
 
-VS Code normally displays a process name in its terminal tabs. To display MCode's
-session titles, use this VS Code setting:
+VS Code normally displays a process name in its terminal tabs. To display Kinetick
+Code session titles, use this VS Code setting:
 
 ```json
 "terminal.integrated.tabs.title": "${sequence}"

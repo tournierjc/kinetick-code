@@ -32,7 +32,10 @@ export interface TuiCustomStatusLineConfig {
 }
 
 export interface TuiConfig {
-  /** Ordered terminal title items. Null or an empty list disables title updates. */
+  /**
+   * Accepted from `tui.terminalTitle`. The running TUI sets the terminal title
+   * to the session title, or "Kinetick Code" when the session is untitled.
+   */
   terminalTitle?: readonly string[] | null;
   /** Terminal notification policy. Unknown focus falls back to notifying. */
   notifications?: {

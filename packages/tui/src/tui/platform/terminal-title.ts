@@ -37,7 +37,7 @@ export function formatTuiTerminalTitle(
   items: readonly string[] | null = DEFAULT_ITEMS,
 ): string | undefined {
   const values: Readonly<Record<string, string>> = {
-    'app-name': 'MCode',
+    'app-name': 'KCode',
     'session-name': tuiTerminalSessionLabel(input),
     'project-name': sanitizeTerminalLabel(path.basename(input.workspace)),
     status: STATUS_LABELS[input.status],

@@ -61,7 +61,10 @@ export interface CreateTuiAppOptions extends TuiUpdateOptions {
   customStatusLine?: TuiCustomStatusLineConfig;
   /** Whether the idle conversation composer may show contextual Tips. Defaults to true. */
   showTips?: boolean;
-  /** Ordered terminal title items from tui.terminalTitle; null or [] disables updates. */
+  /**
+   * Accepted from `tui.terminalTitle`. The running TUI sets the terminal title
+   * to the session title, or "Kinetick Code" when the session is untitled.
+   */
   terminalTitle?: readonly string[] | null;
   notifications?: TuiNotificationSettings;
   /** Internal result-channel path; ignored unless statusLineItems enables build-mode. */
