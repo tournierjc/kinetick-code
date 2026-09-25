@@ -3324,6 +3324,7 @@
     "packages/tui/test/unit/tui/controller/projection/status-metrics-flow.test.ts",
     "packages/tui/test/unit/tui/controller/projection/visible-presentation.test.ts",
     "packages/tui/test/unit/tui/controller/run/turn-submission-retainer.test.ts",
+    "packages/tui/test/unit/tui/controller/session-lifecycle-bridge.test.ts",
     "packages/tui/test/unit/tui/controller/side-session-flow.test.ts",
     "packages/tui/test/unit/tui/features/composer/attachments.test.ts",
     "packages/tui/test/unit/tui/features/settings/hotkeys-picker.test.ts",
