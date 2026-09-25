@@ -1008,9 +1008,8 @@ export class TuiFeatureFlow {
         this.showCopilotLogin('provider');
       },
       onAddProvider: () => {
-        // The catalogue is the same one `/model` offers; OpenRouter is pinned in
-        // it, so a connection that is not configured yet is reachable from the
-        // panel that manages connections.
+        // OpenRouter and Local have their own rows. This catalogue is every
+        // other known provider, the same one `/model` offers.
         void this.showProviderOnboarding('provider');
       },
       onRefreshModels: (provider) => this.providerApplication.refreshModels(provider),

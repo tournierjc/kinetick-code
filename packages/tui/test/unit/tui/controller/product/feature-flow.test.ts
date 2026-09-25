@@ -238,6 +238,52 @@ describe("TuiFeatureFlow", () => {
     await vi.waitFor(() => expect(harness.shown).toHaveLength(3));
   });
 
+  it("sets up OpenRouter from the provider list and saves the API key", async () => {
+    const harness = createHarness();
+    harness.runtime.saveUserModelProviderCandidate.mockResolvedValue({
+      success: true,
+      provider: { providerId: "custom_provider:openrouter" },
+    });
+
+    await harness.flow.showProviderManager();
+    const manager = harness.shown[0] as {
+      handleInput(data: string): void;
+      render(width: number): string[];
+    };
+    const listed = stripAnsi(manager.render(120).join("\n"));
+    expect(listed).toContain("OpenRouter");
+    expect(listed).toContain("Local");
+    expect(listed).toContain("Not configured");
+
+    // Codex, MiniMax OAuth (selected), MiniMax API Key, then OpenRouter.
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    manager.handleInput("sk-from-provider");
+    manager.handleInput("\r");
+    manager.handleInput("openai/gpt-4.1-mini");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(harness.runtime.saveUserModelProviderCandidate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: "OpenRouter",
+          baseUrl: "https://openrouter.ai/api/v1",
+          apiKey: "sk-from-provider",
+          apiFormat: "openai-completions",
+          modelId: "openai/gpt-4.1-mini",
+          saveAndUse: true,
+        }),
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+        "OpenRouter saved and selected.",
+      ),
+    );
+    expect(stripAnsi(manager.render(120).join("\n"))).not.toContain("sk-from-provider");
+  });
+
   it("opens the Codex OAuth URL from the independent /provider row", async () => {
     const openExternalTarget = vi.fn(async () => undefined);
     const harness = createHarness({ openExternalTarget });
