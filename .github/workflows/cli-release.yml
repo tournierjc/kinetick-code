@@ -2,11 +2,13 @@ name: CLI release
 on:
   push:
     tags: ['v*']
+    branches: [main]
   pull_request:
     paths:
       - '.github/workflows/cli-release.yml'
       - 'scripts/build.mjs'
       - 'scripts/*cli-release.mjs'
+      - 'scripts/gate-cli-release.mjs'
       - 'scripts/release-cli.mjs'
       - 'scripts/lib/cli-release.mjs'
       - 'scripts/verify.mjs'
@@ -27,7 +29,34 @@ concurrency:
   group: cli-release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 jobs:
+  # Pushes to main publish only when v<package version> has no GitHub release.
+  # Tag pushes, pull requests, and workflow_dispatch skip this job and keep
+  # their existing build behavior. A published release ends the run here so
+  # upstream-sync merges do not rebuild or publish again.
+  gate:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Decide from the published GitHub release
+        id: decide
+        shell: bash
+        run: node scripts/gate-cli-release.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
   build:
+    needs: gate
+    if: "!cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.publish == 'true'))"
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
@@ -49,12 +78,12 @@ jobs:
         shell: bash
         run: |
           node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { cliBuildVersion, cliReleaseTargets } from "./scripts/lib/cli-release.mjs"; const tag = process.env.REQUESTED_TAG || `v${cliBuildVersion(process.cwd())}`; const version = cliBuildVersion(process.cwd(), tag); appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\ntag=${tag}\nmatrix=${JSON.stringify({include: cliReleaseTargets})}\n`); appendFileSync(process.env.GITHUB_ENV, `MCODE_RELEASE_TAG=${tag}\n`);'
-          if [ "$EVENT_NAME" = push ]; then
+          if [ "$EVENT_NAME" = push ] && [ -n "$REQUESTED_TAG" ]; then
             test "$(git rev-parse "refs/tags/$REQUESTED_TAG^{commit}")" = "$(git rev-parse HEAD)"
           fi
         env:
           EVENT_NAME: ${{ github.event_name }}
-          REQUESTED_TAG: ${{ inputs.tag || (github.event_name == 'push' && github.ref_name) || '' }}
+          REQUESTED_TAG: ${{ inputs.tag || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && github.ref_name) || '' }}
       - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/setup-gitleaks
       - name: Scan source history
@@ -81,6 +110,9 @@ jobs:
           retention-days: 14
   install:
     needs: build
+    # A skipped main-push gate must not cancel installation. Bare success()
+    # treats that skipped gate as a failed ancestor even after build passes.
+    if: "!cancelled() && needs.build.result == 'success'"
     env:
       MCODE_RELEASE_TAG: ${{ needs.build.outputs.tag }}
     runs-on: ${{ matrix.os }}
@@ -114,9 +146,12 @@ jobs:
           retention-days: 14
   publish:
     needs: [build, install]
-    if: github.event_name == 'push'
+    if: "!cancelled() && github.event_name == 'push' && needs.build.result == 'success' && needs.install.result == 'success'"
     permissions:
       contents: write
+    concurrency:
+      group: cli-release-publish-${{ needs.build.outputs.tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:

@@ -80,7 +80,7 @@ export function createVersionPullRequest({ root, branch, version, tag, attempts 
   const temporary = mkdtempSync(path.join(tmpdir(), 'mcode-version-pr-'));
   try {
     const body = path.join(temporary, 'body.md');
-    writeFileSync(body, `Update the root and TUI source versions to ${version}.\n\nTag \`${tag}\` points to this version commit. The tag-triggered CLI release workflow builds and validates the npm installation archive. Merge this PR to carry the released source version back to main; do not move or recreate the release tag.\n`);
+    writeFileSync(body, `Update the root and TUI source versions to ${version}.\n\nTag \`${tag}\` points to this version commit. The CLI release workflow builds and validates the npm installation archive when that tag is pushed. Merge this PR to carry the released source version back to main. A later push to main publishes only when that version has no GitHub release yet, so merging does not create a second release. Do not move or recreate the release tag.\n`);
     let failure = '';
     for (let attempt = 0; attempt < attempts; attempt++) {
       try {

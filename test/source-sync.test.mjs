@@ -15,6 +15,9 @@ import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { cliBuildVersion, cliExternalModules, cliReleaseTargets, versionFromTag } from '../scripts/lib/cli-release.mjs';
+import {
+  decideMainCliRelease, ensureAnnotatedReleaseTag, mainReleaseDecision, prepareCliReleasePublication, runMainReleaseGate,
+} from '../scripts/gate-cli-release.mjs';
 import { releaseManifest } from '../scripts/package-cli-release.mjs';
 import { validateReleaseReports } from '../scripts/publish-cli-release.mjs';
 import { compareVersions, createVersionPullRequest, releaseCli } from '../scripts/release-cli.mjs';
@@ -476,27 +479,251 @@ test('CLI publication requires every supported installation receipt for the exac
   assert.throws(() => validateReleaseReports(options));
 });
 
-test('CLI release publishes only tag pushes after full verification and archive installation', () => {
+test('CLI release publishes a new main version and skips an already published one', () => {
   const workflow = parseYaml(readFileSync(new URL('../.github/workflows/cli-release.yml', import.meta.url), 'utf8'));
-  assert.deepEqual(workflow.on.push, { tags: ['v*'] });
+  assert.deepEqual(workflow.on.push.tags, ['v*']);
+  assert.deepEqual(workflow.on.push.branches, ['main']);
   assert.equal(workflow.on.workflow_dispatch.inputs.tag.required, false);
+  assert.equal(workflow.on.workflow_dispatch.inputs.tag.description.includes('does not publish'), true);
   assert.equal(workflow.permissions.contents, 'read');
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
+  assert.equal(workflow.jobs.gate.if, "github.event_name == 'push' && github.ref == 'refs/heads/main'");
+  assert.equal(workflow.jobs.gate.steps.find(step => step.id === 'decide').run, 'node scripts/gate-cli-release.mjs');
+  assert.ok(workflow.on.pull_request.paths.includes('scripts/gate-cli-release.mjs'));
+  assert.equal(workflow.jobs.build.needs, 'gate');
+  assert.equal(workflow.jobs.build.if, "!cancelled() && (needs.gate.result == 'skipped' || (needs.gate.result == 'success' && needs.gate.outputs.publish == 'true'))");
   assert.ok(workflow.jobs.build.steps.some(step => step.run === 'pnpm verify'));
   assert.ok(workflow.jobs.build.steps.some(step => step.run?.includes('cliBuildVersion(process.cwd(), tag)')));
+  const versionStep = workflow.jobs.build.steps.find(step => step.id === 'release');
+  assert.match(versionStep.run, /EVENT_NAME" = push \] && \[ -n "\$REQUESTED_TAG" \]/);
+  assert.match(versionStep.env.REQUESTED_TAG, /startsWith\(github\.ref, 'refs\/tags\/'\)/);
+  assert.equal(workflow.jobs.install.if, "!cancelled() && needs.build.result == 'success'");
   assert.deepEqual(workflow.jobs.publish.needs, ['build', 'install']);
-  assert.equal(workflow.jobs.publish.if, "github.event_name == 'push'");
+  assert.equal(workflow.jobs.publish.if, "!cancelled() && github.event_name == 'push' && needs.build.result == 'success' && needs.install.result == 'success'");
   assert.equal(workflow.jobs.publish.permissions.contents, 'write');
+  assert.equal(workflow.jobs.publish.concurrency['cancel-in-progress'], false);
+  assert.match(workflow.jobs.publish.concurrency.group, /needs\.build\.outputs\.tag/);
   assert.equal(workflow.jobs.install.strategy.matrix, '${{ fromJSON(needs.build.outputs.matrix) }}');
   const install = workflow.jobs.install.steps.find(step => step.run === 'pnpm verify --profile package');
   assert.ok(install.env.MCODE_RELEASE_ARCHIVE.endsWith('.tar.gz'));
   for (const job of Object.values(workflow.jobs)) {
-    for (const step of job.steps) {
+    for (const step of job.steps ?? []) {
       if (step.uses && !step.uses.startsWith('./')) assert.match(step.uses, /@[a-f0-9]{40}$/);
       if (step.uses?.startsWith('actions/checkout@')) assert.equal(step.with['persist-credentials'], false);
       if (step.run) assert.doesNotMatch(step.run, /\$\{\{.*(?:inputs|github\.(?:ref|event))/);
     }
   }
+});
+
+function releaseGateRoot(t, version = '1.2.4', tuiVersion = version) {
+  const root = mkdtempSync(path.join(tmpdir(), 'release-gate-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(path.join(root, 'packages/tui'), { recursive: true });
+  writeFileSync(path.join(root, 'package.json'), JSON.stringify({ version }));
+  writeFileSync(path.join(root, 'packages/tui/package.json'), JSON.stringify({ version: tuiVersion }));
+  return root;
+}
+
+function fakeReleaseGh(routes) {
+  const calls = [];
+  const gh = (args, options = {}) => {
+    calls.push({ args, input: options.input });
+    const method = args[args.indexOf('--method') + 1];
+    const endpoint = args.find(arg => arg.startsWith('repos/'));
+    const route = routes.find(item => endpoint.includes(item.match) && (item.method ?? 'GET') === method);
+    if (!route) {
+      const error = new Error(`unexpected ${args.join(' ')}`);
+      error.stderr = error.message;
+      throw error;
+    }
+    if (route.notFound) {
+      const error = new Error('not found');
+      error.status = 1;
+      error.stderr = 'gh: Not Found (HTTP 404)';
+      throw error;
+    }
+    if (route.fail) throw route.fail;
+    return JSON.stringify(route.body ?? {});
+  };
+  return { gh, calls };
+}
+
+test('main release gate publishes only a version with no GitHub release', t => {
+  const head = 'a'.repeat(40);
+  const root = releaseGateRoot(t);
+  const published = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', body: { tag_name: 'v1.2.4', draft: false } }]);
+  const skip = decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: published.gh });
+  assert.equal(skip.publish, false);
+  assert.equal(skip.fail, undefined);
+  assert.match(skip.reason, /already published/);
+  assert.equal(published.calls.some(call => call.args.join(' ').includes('/commits/')), false);
+
+  const missing = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', notFound: true },
+  ]);
+  const publish = decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: missing.gh });
+  assert.equal(publish.publish, true);
+  assert.match(publish.reason, /will tag HEAD and publish/);
+
+  const tagged = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', body: { sha: head } },
+  ]);
+  assert.equal(decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: tagged.gh }).publish, true);
+
+  const moved = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', body: { sha: 'b'.repeat(40) } },
+  ]);
+  const movedOutput = path.join(root, 'moved-output.txt');
+  assert.throws(() => runMainReleaseGate({ root, repo: 'tournierjc/kinetick-code', head, gh: moved.gh, outputPath: movedOutput }), /Refusing to move/);
+  assert.equal(readFileSync(movedOutput, 'utf8'), 'publish=false\n');
+
+  const draft = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', body: { tag_name: 'v1.2.4', draft: true } }]);
+  assert.throws(() => runMainReleaseGate({ root, repo: 'tournierjc/kinetick-code', head, gh: draft.gh, outputPath: path.join(root, 'draft-output.txt') }), /does not delete releases/);
+  assert.throws(() => decideMainCliRelease({ root, repo: 'not a repo', head, gh: published.gh }), /GH_REPO must be owner\/name/);
+  const denied = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', fail: Object.assign(new Error('denied'), { stderr: 'HTTP 403' }) }]);
+  assert.throws(() => decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: denied.gh }), /denied/);
+  const stdout404 = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', fail: Object.assign(new Error('missing'), { stdout: '{"message":"Not Found","status":"404"}' }) },
+    { match: '/commits/v1.2.4', notFound: true },
+  ]);
+  assert.equal(decideMainCliRelease({ root, repo: 'tournierjc/kinetick-code', head, gh: stdout404.gh }).publish, true);
+  assert.equal(mainReleaseDecision({ tag: 'v1.2.4-rc.1', head, release: { draft: false }, tagCommit: null }).publish, false);
+  assert.throws(() => cliBuildVersion(releaseGateRoot(t, '1.2.4', '1.2.5'), null), /Root and TUI/);
+});
+
+test('publication creates one annotated tag and will not overwrite a release or move a tag', () => {
+  const commit = 'a'.repeat(40);
+  const other = 'b'.repeat(40);
+  const target = { tag: 'v1.2.4', version: '1.2.4', commit, repo: 'tournierjc/kinetick-code' };
+  const published = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', body: { tag_name: 'v1.2.4', draft: false } }]);
+  assert.deepEqual(prepareCliReleasePublication({ ...target, gh: published.gh }), {
+    action: 'skip', reason: 'GitHub release v1.2.4 is already published; leaving it untouched.',
+  });
+  assert.equal(published.calls.some(call => call.args.includes('POST')), false);
+
+  const created = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', notFound: true },
+    { match: '/git/tags', method: 'POST', body: { sha: 'c'.repeat(40) } },
+    { match: '/git/refs', method: 'POST', body: { ref: 'refs/tags/v1.2.4' } },
+  ]);
+  assert.deepEqual(prepareCliReleasePublication({ ...target, gh: created.gh }), { action: 'create', created: true, tagObject: 'c'.repeat(40) });
+  const tagBody = JSON.parse(created.calls.find(call => call.args.includes('POST') && call.args.some(arg => arg.endsWith('/git/tags'))).input);
+  assert.deepEqual(tagBody, { tag: 'v1.2.4', message: 'Kinetick Code 1.2.4\n', object: commit, type: 'commit' });
+  const refBody = JSON.parse(created.calls.find(call => call.args.some(arg => arg.endsWith('/git/refs'))).input);
+  assert.deepEqual(refBody, { ref: 'refs/tags/v1.2.4', sha: 'c'.repeat(40) });
+
+  const existingTag = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', body: { sha: commit } },
+  ]);
+  assert.deepEqual(ensureAnnotatedReleaseTag({ ...target, gh: existingTag.gh }), { created: false });
+  assert.equal(existingTag.calls.some(call => call.args.includes('POST')), false);
+
+  const moved = fakeReleaseGh([{ match: '/commits/v1.2.4', body: { sha: other } }]);
+  assert.throws(() => ensureAnnotatedReleaseTag({ ...target, gh: moved.gh }), /Refusing to move/);
+  const draft = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', body: { tag_name: 'v1.2.4', draft: true } }]);
+  assert.throws(() => prepareCliReleasePublication({ ...target, gh: draft.gh }), /does not delete releases/);
+  assert.throws(() => prepareCliReleasePublication({ ...target, version: '1.2.5', gh: published.gh }), /must match the package version/);
+
+  let lookups = 0;
+  const gh = (args, options = {}) => {
+    const endpoint = args.find(arg => arg.startsWith('repos/'));
+    const method = args[args.indexOf('--method') + 1];
+    if (endpoint.endsWith('/commits/v1.2.4')) {
+      lookups += 1;
+      if (lookups === 1) {
+        const error = new Error('not found');
+        error.stderr = 'gh: Not Found (HTTP 404)';
+        throw error;
+      }
+      return JSON.stringify({ sha: commit });
+    }
+    if (method === 'POST' && endpoint.endsWith('/git/tags')) {
+      assert.equal(JSON.parse(options.input).message, 'Kinetick Code 1.2.4\n');
+      return JSON.stringify({ sha: 'c'.repeat(40) });
+    }
+    if (method === 'POST' && endpoint.endsWith('/git/refs')) {
+      const error = new Error('exists');
+      error.stderr = 'Reference already exists';
+      throw error;
+    }
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  assert.deepEqual(ensureAnnotatedReleaseTag({ ...target, gh }), { created: false });
+  assert.equal(lookups, 2);
+});
+
+test('release gate command writes the main-push decision and does not create a release', { skip: process.platform === 'win32' }, t => {
+  const bin = mkdtempSync(path.join(tmpdir(), 'release-gate-gh-'));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  const program = `#!/usr/bin/env node
+const endpoint = process.argv.find(arg => arg.startsWith('repos/')) ?? '';
+const mode = process.env.GATE_FAKE_MODE;
+if (process.argv.includes('POST')) {
+  process.stderr.write('refusing to mutate ' + endpoint);
+  process.exit(2);
+}
+if (endpoint.includes('/releases/tags/')) {
+  if (mode === 'missing' || mode === 'mismatch') {
+    process.stderr.write('gh: Not Found (HTTP 404)\\n');
+    process.exit(1);
+  }
+  const tag = decodeURIComponent(endpoint.split('/').pop());
+  process.stdout.write(JSON.stringify({ tag_name: tag, draft: mode === 'draft' }));
+  process.exit(0);
+}
+if (endpoint.includes('/commits/')) {
+  if (mode === 'mismatch') {
+    process.stdout.write(JSON.stringify({ sha: ${JSON.stringify('b'.repeat(40))} }));
+    process.exit(0);
+  }
+  process.stderr.write('gh: Not Found (HTTP 404)\\n');
+  process.exit(1);
+}
+process.stderr.write('unexpected ' + process.argv.slice(2).join(' '));
+process.exit(2);
+`;
+  writeFileSync(path.join(bin, 'gh'), program, { mode: 0o755 });
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const head = execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const run = mode => {
+    const output = path.join(bin, `output-${mode}.txt`);
+    return {
+      output,
+      result: spawnSync(process.execPath, ['scripts/gate-cli-release.mjs'], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+          GH_REPO: 'tournierjc/kinetick-code',
+          GH_TOKEN: 'test-token',
+          GITHUB_OUTPUT: output,
+          GITHUB_SHA: head,
+          GATE_FAKE_MODE: mode,
+        },
+      }),
+    };
+  };
+  const published = run('published');
+  assert.equal(published.result.status, 0, published.result.stderr);
+  assert.match(published.result.stdout, /already published; not creating another/);
+  assert.equal(readFileSync(published.output, 'utf8'), 'publish=false\n');
+  const missing = run('missing');
+  assert.equal(missing.result.status, 0, missing.result.stderr);
+  assert.match(missing.result.stdout, /will tag HEAD and publish after validation/);
+  assert.equal(readFileSync(missing.output, 'utf8'), 'publish=true\n');
+  const mismatch = run('mismatch');
+  assert.equal(mismatch.result.status, 1);
+  assert.match(mismatch.result.stderr, /Refusing to move an existing tag/);
+  assert.equal(readFileSync(mismatch.output, 'utf8'), 'publish=false\n');
+  const draft = run('draft');
+  assert.equal(draft.result.status, 1);
+  assert.match(draft.result.stderr, /does not delete releases/);
 });
 import { runInNewContext } from 'node:vm';
 
