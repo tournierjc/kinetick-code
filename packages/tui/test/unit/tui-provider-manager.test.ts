@@ -719,6 +719,18 @@ const snapshotWithSetupRows: KcodeProviderSnapshot = {
       models: [],
     },
     {
+      providerId: "deepseek",
+      name: "DeepSeek",
+      kind: "deepseek-setup",
+      active: false,
+      enabled: true,
+      readOnly: false,
+      apiFormat: "openai-completions",
+      baseUrl: "https://api.deepseek.com/v1",
+      hasApiKey: false,
+      models: [],
+    },
+    {
       providerId: "local",
       name: "Local",
       kind: "local-setup",
@@ -734,18 +746,19 @@ const snapshotWithSetupRows: KcodeProviderSnapshot = {
   ],
 };
 
-describe("OpenRouter and Local setup", () => {
+describe("OpenRouter, DeepSeek, and Local setup", () => {
   function setupManager(
     overrides: Partial<ConstructorParameters<typeof TuiProviderManager>[0]> = {},
   ) {
     return createManager({ snapshot: snapshotWithSetupRows, ...overrides });
   }
 
-  it("lists OpenRouter and Local as setup choices before they are saved", () => {
+  it("lists OpenRouter, DeepSeek, and Local as setup choices before they are saved", () => {
     const manager = setupManager();
     const rendered = stripAnsi(manager.render(120).join("\n"));
 
     expect(rendered).toContain("OpenRouter");
+    expect(rendered).toContain("DeepSeek");
     expect(rendered).toContain("Local");
     expect(rendered).toContain("Not configured");
 
@@ -753,6 +766,10 @@ describe("OpenRouter and Local setup", () => {
     manager.handleInput("\u001b[B");
     expect(stripAnsi(manager.render(120).join("\n"))).toContain(
       "https://openrouter.ai/api/v1",
+    );
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "https://api.deepseek.com/v1",
     );
   });
 
@@ -850,6 +867,78 @@ describe("OpenRouter and Local setup", () => {
     expect(onSaveCustom).toHaveBeenCalledOnce();
   });
 
+
+  it("saves a DeepSeek API key through the custom-provider candidate", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:deepseek" },
+    }));
+    const saved: KcodeProviderSnapshot = {
+      ...snapshot,
+      providers: [
+        ...snapshot.providers,
+        {
+          providerId: "custom_provider:deepseek",
+          name: "DeepSeek",
+          kind: "custom",
+          active: true,
+          enabled: true,
+          readOnly: false,
+          configRevision: "rev-ds",
+          apiFormat: "openai-completions",
+          baseUrl: "https://api.deepseek.com/v1",
+          hasApiKey: true,
+          maskedApiKey: "sk-d****cret",
+          models: [{ modelId: "deepseek-chat" }],
+        },
+      ],
+    };
+    const onRefresh = vi.fn(async () => saved);
+    const manager = setupManager({ onSaveCustom, onRefresh });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "Enter to set an API key",
+    );
+
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(100).join("\n"))).toContain(
+      "Configure DeepSeek API Key",
+    );
+    manager.handleInput("sk-deepseek-secret");
+    expect(stripAnsi(manager.render(100).join("\n"))).not.toContain(
+      "sk-deepseek-secret",
+    );
+    manager.handleInput("\r");
+    manager.handleInput("deepseek-chat");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith({
+      name: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "sk-deepseek-secret",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "deepseek-chat",
+          displayName: "deepseek-chat",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "deepseek-chat",
+      saveAndUse: true,
+    });
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(110).join("\n"))).toContain(
+        "DeepSeek saved and selected.",
+      ),
+    );
+  });
+
   it("saves a Local base URL without a key", async () => {
     const onSaveCustom = vi.fn(async () => ({
       success: true,
@@ -857,6 +946,7 @@ describe("OpenRouter and Local setup", () => {
     }));
     const manager = setupManager({ onSaveCustom });
 
+    manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
@@ -901,6 +991,7 @@ describe("OpenRouter and Local setup", () => {
     manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
     manager.handleInput("\r");
     for (let index = 0; index < "http://localhost:11434/v1".length; index += 1) {
       manager.handleInput("\u007f");
@@ -928,6 +1019,7 @@ describe("OpenRouter and Local setup", () => {
     const onSaveCustom = vi.fn();
     const manager = setupManager({ onSaveCustom });
 
+    manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");
     manager.handleInput("\u001b[B");

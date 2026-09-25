@@ -119,11 +119,17 @@ export async function runKcodeProviderCommand(
       const listed = (await context.application.snapshot()).providers.find(
         (provider) => provider.providerId === request.providerId,
       );
-      if (listed?.kind === 'openrouter-setup' || listed?.kind === 'local-setup') {
+      if (
+        listed?.kind === 'openrouter-setup' ||
+        listed?.kind === 'deepseek-setup' ||
+        listed?.kind === 'local-setup'
+      ) {
         const message =
           listed.kind === 'openrouter-setup'
             ? 'OpenRouter is not configured. Open /provider and enter an API key.'
-            : 'Local is not configured. Open /provider and enter a base URL.';
+            : listed.kind === 'deepseek-setup'
+              ? 'DeepSeek is not configured. Open /provider and enter an API key.'
+              : 'Local is not configured. Open /provider and enter a base URL.';
         if (request.json) {
           return JSON.stringify(
             {
@@ -138,7 +144,9 @@ export async function runKcodeProviderCommand(
           summary:
             listed.kind === 'openrouter-setup'
               ? 'OpenRouter setup is incomplete.'
-              : 'Local setup is incomplete.',
+              : listed.kind === 'deepseek-setup'
+                ? 'DeepSeek setup is incomplete.'
+                : 'Local setup is incomplete.',
           nextStep: 'Run /provider and finish the prompted setup.',
         });
       }
@@ -207,7 +215,7 @@ async function createProviderCommandContext(
 function formatSnapshot(snapshot: KcodeProviderSnapshot, json: boolean): string {
   if (json) return JSON.stringify(snapshot, null, 2);
   const lines = snapshot.providers.map((provider) => {
-    if (provider.kind === 'openrouter-setup') {
+    if (provider.kind === 'openrouter-setup' || provider.kind === 'deepseek-setup') {
       return `  ${provider.providerId}\tnot configured\tAPI key required`;
     }
     if (provider.kind === 'local-setup') {

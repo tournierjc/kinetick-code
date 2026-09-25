@@ -16,6 +16,7 @@ import type {
 } from './contract.js';
 import {
   KCODE_COPILOT_PROVIDER_ID,
+  KCODE_DEEPSEEK_SETUP,
   KCODE_LOCAL_SETUP,
   KCODE_OPENROUTER_SETUP,
   isModelProviderApiFormat,
@@ -82,10 +83,11 @@ export class KcodeProviderApplication {
           ...(minimaxStatus.cachedStatus ? { status: minimaxStatus.cachedStatus } : {}),
           models: [],
         },
-        // These rows exist so the two connections the panel sets up itself are
+        // These rows exist so the connections the panel sets up itself are
         // visible before anything is saved. A matching connection replaces the
         // row: the saved entry carries the key, URL, revision, and models.
         ...(!providers.some(isOpenRouterConnection) ? [openRouterSetupRow()] : []),
+        ...(!providers.some(isDeepSeekConnection) ? [deepSeekSetupRow()] : []),
         ...(!providers.some(isLocalConnection) ? [localSetupRow()] : []),
         ...providers.map((provider) => normalizeConfiguredProvider(provider, copilotOAuthStatus)),
       ],
@@ -206,6 +208,21 @@ function openRouterSetupRow(): KcodeProviderView {
   };
 }
 
+function deepSeekSetupRow(): KcodeProviderView {
+  return {
+    providerId: KCODE_DEEPSEEK_SETUP.providerId,
+    name: KCODE_DEEPSEEK_SETUP.name,
+    kind: 'deepseek-setup',
+    active: false,
+    enabled: true,
+    readOnly: false,
+    apiFormat: KCODE_DEEPSEEK_SETUP.apiFormat,
+    baseUrl: KCODE_DEEPSEEK_SETUP.baseUrl,
+    hasApiKey: false,
+    models: [],
+  };
+}
+
 function localSetupRow(): KcodeProviderView {
   return {
     providerId: KCODE_LOCAL_SETUP.providerId,
@@ -233,6 +250,19 @@ function isOpenRouterConnection(provider: KcodeRuntimeProviderView): boolean {
   if (provider.name?.trim().toLowerCase() === KCODE_OPENROUTER_SETUP.name.toLowerCase()) return true;
   const host = providerHostname(provider.baseUrl);
   return host === 'openrouter.ai' || Boolean(host?.endsWith('.openrouter.ai'));
+}
+
+/** A saved connection that already is DeepSeek, so the setup row would duplicate it. */
+function isDeepSeekConnection(provider: KcodeRuntimeProviderView): boolean {
+  const key = kcodeCustomProviderKey(provider.providerId).trim().toLowerCase();
+  if (
+    key === KCODE_DEEPSEEK_SETUP.providerId ||
+    key.startsWith(`${KCODE_DEEPSEEK_SETUP.providerId}-`)
+  ) {
+    return true;
+  }
+  if (provider.name?.trim().toLowerCase() === KCODE_DEEPSEEK_SETUP.name.toLowerCase()) return true;
+  return providerHostname(provider.baseUrl) === 'api.deepseek.com';
 }
 
 /**

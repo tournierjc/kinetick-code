@@ -354,20 +354,42 @@ describe('ModelConnectionTester response errors', () => {
 });
 
 describe('ModelConnectionTester HTTP response errors', () => {
-  it('maps 401/403 to unauthorized without leaking the key', async () => {
+  it('maps 401/403 to unauthorized with a sanitized upstream reason', async () => {
     for (const status of [401, 403]) {
-      const fetchImpl = vi.fn(async () => new Response(`bad key ${API_KEY}`, { status }));
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: { message: `User not found for ${API_KEY}` } }), {
+            status,
+            headers: { 'content-type': 'application/json' },
+          }),
+      );
       const tester = new ModelConnectionTester({ fetchImpl: fetchImpl as unknown as typeof fetch });
       const result = await tester.test(`p-${status}`, {
         api: 'openai-completions',
-        baseUrl: 'https://api.openai.com/v1',
+        baseUrl: 'https://openrouter.ai/api/v1',
         apiKey: API_KEY,
-        modelId: 'gpt-4.1',
+        modelId: 'openai/gpt-4.1-mini',
       });
       expect(result.ok).toBe(false);
       expect(result.errorCode).toBe('unauthorized');
+      expect(result.errorMessage).toBe(
+        `Authentication failed (HTTP ${status}): User not found for ***`,
+      );
       expect(JSON.stringify(result)).not.toContain(API_KEY);
     }
+  });
+
+  it('keeps the unauthorized message when the upstream body has no usable reason', async () => {
+    const fetchImpl = vi.fn(async () => new Response('<html>denied</html>', { status: 401 }));
+    const tester = new ModelConnectionTester({ fetchImpl: fetchImpl as unknown as typeof fetch });
+    const result = await tester.test('p-401-empty', {
+      api: 'openai-completions',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: API_KEY,
+      modelId: 'gpt-4.1',
+    });
+    expect(result.errorCode).toBe('unauthorized');
+    expect(result.errorMessage).toBe('Authentication failed (HTTP 401)');
   });
 
   it('maps other http failures to http_<status> with a sanitized upstream reason', async () => {

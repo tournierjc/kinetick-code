@@ -10,6 +10,7 @@ import {
   tuiColors as colors,
 } from '../../theme/runtime.js';
 import {
+  KCODE_DEEPSEEK_SETUP,
   KCODE_LOCAL_SETUP,
   KCODE_OPENROUTER_SETUP,
   type KcodeProviderModelInput,
@@ -39,6 +40,8 @@ type ProviderManagerMode =
   | { readonly kind: 'minimax-key'; readonly replacing: boolean }
   | { readonly kind: 'openrouter-key'; readonly apiKey?: string }
   | { readonly kind: 'openrouter-model'; readonly apiKey: string }
+  | { readonly kind: 'deepseek-key'; readonly apiKey?: string }
+  | { readonly kind: 'deepseek-model'; readonly apiKey: string }
   | { readonly kind: 'local-url' }
   | { readonly kind: 'local-model'; readonly baseUrl: string }
   | { readonly kind: 'local-key'; readonly baseUrl: string; readonly modelId: string };
@@ -81,6 +84,7 @@ export class TuiProviderManager implements Component, Focusable {
     this.selectedIndex = Math.max(0, activeIndex);
     this.secretInput.onSubmit = (value) => {
       if (this.mode.kind === 'openrouter-key') this.submitOpenRouterKey(value);
+      else if (this.mode.kind === 'deepseek-key') this.submitDeepSeekKey(value);
       else if (this.mode.kind === 'local-key') this.submitLocalKey(value);
       else this.submitMiniMaxKey(value);
     };
@@ -107,6 +111,7 @@ export class TuiProviderManager implements Component, Focusable {
     if (
       this.mode.kind === 'minimax-key' ||
       this.mode.kind === 'openrouter-key' ||
+      this.mode.kind === 'deepseek-key' ||
       this.mode.kind === 'local-key'
     ) {
       this.secretInput.handleInput(data);
@@ -115,6 +120,7 @@ export class TuiProviderManager implements Component, Focusable {
     }
     if (
       this.mode.kind === 'openrouter-model' ||
+      this.mode.kind === 'deepseek-model' ||
       this.mode.kind === 'local-url' ||
       this.mode.kind === 'local-model'
     ) {
@@ -190,7 +196,7 @@ export class TuiProviderManager implements Component, Focusable {
       ),
       frameRow(
         chalk.hex(colors.dim)(
-          'OpenRouter takes an API key. Local takes a server address. Keys stay masked.',
+          'OpenRouter and DeepSeek take an API key. Local takes a server address. Keys stay masked.',
         ),
         width,
       ),
@@ -286,7 +292,9 @@ export class TuiProviderManager implements Component, Focusable {
   private renderSetup(width: number): string[] {
     const copy = this.setupCopy();
     const input =
-      this.mode.kind === 'openrouter-key' || this.mode.kind === 'local-key'
+      this.mode.kind === 'openrouter-key' ||
+      this.mode.kind === 'deepseek-key' ||
+      this.mode.kind === 'local-key'
         ? this.secretInput
         : this.textInput;
     return [
@@ -318,6 +326,24 @@ export class TuiProviderManager implements Component, Focusable {
       return {
         title: 'Choose an OpenRouter model',
         subtitle: 'Model id from the OpenRouter catalog, for example openai/gpt-4.1-mini.',
+        label: 'Model ID',
+        footer: 'Enter test, save, and use · Esc back',
+      };
+    }
+    if (this.mode.kind === 'deepseek-key') {
+      return {
+        title: 'Configure DeepSeek API Key',
+        subtitle: this.mode.apiKey
+          ? 'An API key is already entered. Submit empty to keep it, or type a replacement.'
+          : `Saved locally and sent to ${KCODE_DEEPSEEK_SETUP.baseUrl}.`,
+        label: 'API Key',
+        footer: 'Enter continue · Esc cancel',
+      };
+    }
+    if (this.mode.kind === 'deepseek-model') {
+      return {
+        title: 'Choose a DeepSeek model',
+        subtitle: 'Model id such as deepseek-chat or deepseek-reasoner.',
         label: 'Model ID',
         footer: 'Enter test, save, and use · Esc back',
       };
@@ -416,6 +442,10 @@ export class TuiProviderManager implements Component, Focusable {
       this.startOpenRouterSetup();
       return;
     }
+    if (provider.kind === 'deepseek-setup') {
+      this.startDeepSeekSetup();
+      return;
+    }
     if (provider.kind === 'local-setup') {
       this.startLocalSetup();
       return;
@@ -460,6 +490,10 @@ export class TuiProviderManager implements Component, Focusable {
     }
     if (provider.kind === 'openrouter-setup') {
       this.startOpenRouterSetup();
+      return;
+    }
+    if (provider.kind === 'deepseek-setup') {
+      this.startDeepSeekSetup();
       return;
     }
     if (provider.kind === 'local-setup') {
@@ -564,6 +598,16 @@ export class TuiProviderManager implements Component, Focusable {
     this.requestRender();
   }
 
+  private startDeepSeekSetup(): void {
+    this.mode = { kind: 'deepseek-key' };
+    this.status = undefined;
+    this.secretToRedact = undefined;
+    this.secretInput.setValue('');
+    this.secretInput.moveCursorToEnd();
+    this.syncFocus();
+    this.requestRender();
+  }
+
   private startLocalSetup(): void {
     this.mode = { kind: 'local-url' };
     this.status = undefined;
@@ -591,6 +635,23 @@ export class TuiProviderManager implements Component, Focusable {
     this.requestRender();
   }
 
+  private submitDeepSeekKey(value: string): void {
+    if (this.mode.kind !== 'deepseek-key') return;
+    const apiKey = value.trim() || this.mode.apiKey;
+    if (!apiKey) {
+      this.setStatus('API key is required.', 'error');
+      return;
+    }
+    this.secretToRedact = apiKey;
+    this.mode = { kind: 'deepseek-model', apiKey };
+    this.status = undefined;
+    this.secretInput.setValue('');
+    this.textInput.setValue('');
+    this.textInput.moveCursorToEnd();
+    this.syncFocus();
+    this.requestRender();
+  }
+
   private submitSetupText(value: string): void {
     const trimmed = value.trim();
     if (this.mode.kind === 'openrouter-model') {
@@ -599,6 +660,14 @@ export class TuiProviderManager implements Component, Focusable {
         return;
       }
       void this.saveSetup(openRouterSaveInput(this.mode.apiKey, trimmed), this.mode.apiKey);
+      return;
+    }
+    if (this.mode.kind === 'deepseek-model') {
+      if (!trimmed) {
+        this.setStatus('Model ID is required.', 'error');
+        return;
+      }
+      void this.saveSetup(deepSeekSaveInput(this.mode.apiKey, trimmed), this.mode.apiKey);
       return;
     }
     if (this.mode.kind === 'local-url') {
@@ -733,6 +802,10 @@ export class TuiProviderManager implements Component, Focusable {
       this.setStatus('Enter an OpenRouter API key before testing.', 'info');
       return;
     }
+    if (provider.kind === 'deepseek-setup') {
+      this.setStatus('Enter a DeepSeek API key before testing.', 'info');
+      return;
+    }
     if (provider.kind === 'local-setup') {
       this.setStatus('Enter a Local base URL before testing.', 'info');
       return;
@@ -810,6 +883,15 @@ export class TuiProviderManager implements Component, Focusable {
       this.requestRender();
       return;
     }
+    if (this.mode.kind === 'deepseek-model') {
+      const apiKey = this.mode.apiKey;
+      this.mode = { kind: 'deepseek-key', apiKey };
+      this.status = undefined;
+      this.secretInput.setValue('');
+      this.syncFocus();
+      this.requestRender();
+      return;
+    }
     if (this.mode.kind === 'local-model') {
       const baseUrl = this.mode.baseUrl;
       this.mode = { kind: 'local-url' };
@@ -854,9 +936,11 @@ export class TuiProviderManager implements Component, Focusable {
     const secret =
       this.mode.kind === 'minimax-key' ||
       this.mode.kind === 'openrouter-key' ||
+      this.mode.kind === 'deepseek-key' ||
       this.mode.kind === 'local-key';
     const text =
       this.mode.kind === 'openrouter-model' ||
+      this.mode.kind === 'deepseek-model' ||
       this.mode.kind === 'local-url' ||
       this.mode.kind === 'local-model';
     this.secretInput.focused = this._focused && secret && !this.editor;
@@ -904,6 +988,7 @@ function showsConnectionDetails(provider: KcodeProviderView): boolean {
     provider.kind === 'builtin' ||
     provider.kind === 'copilot-oauth' ||
     provider.kind === 'openrouter-setup' ||
+    provider.kind === 'deepseek-setup' ||
     provider.kind === 'local-setup'
   );
 }
@@ -951,6 +1036,9 @@ function providerDetail(provider: KcodeProviderView): string {
   if (provider.kind === 'openrouter-setup') {
     return 'Not configured · Enter to set an API key';
   }
+  if (provider.kind === 'deepseek-setup') {
+    return 'Not configured · Enter to set an API key';
+  }
   if (provider.kind === 'local-setup') {
     return 'Not configured · Enter to set a base URL';
   }
@@ -985,7 +1073,11 @@ function providerSummary(provider: KcodeProviderView): string {
         : 'Key saved'
       : 'Not configured';
   }
-  if (provider.kind === 'openrouter-setup' || provider.kind === 'local-setup') {
+  if (
+    provider.kind === 'openrouter-setup' ||
+    provider.kind === 'deepseek-setup' ||
+    provider.kind === 'local-setup'
+  ) {
     return 'Not configured';
   }
   return `${provider.enabled ? 'Enabled' : 'Disabled'} · ${provider.models.length} model${provider.models.length === 1 ? '' : 's'}`;
@@ -997,6 +1089,18 @@ function openRouterSaveInput(apiKey: string, modelId: string): KcodeSaveProvider
     baseUrl: KCODE_OPENROUTER_SETUP.baseUrl,
     apiKey,
     apiFormat: KCODE_OPENROUTER_SETUP.apiFormat,
+    models: [manualModel(modelId)],
+    modelId,
+    saveAndUse: true,
+  };
+}
+
+function deepSeekSaveInput(apiKey: string, modelId: string): KcodeSaveProviderCandidateInput {
+  return {
+    name: KCODE_DEEPSEEK_SETUP.name,
+    baseUrl: KCODE_DEEPSEEK_SETUP.baseUrl,
+    apiKey,
+    apiFormat: KCODE_DEEPSEEK_SETUP.apiFormat,
     models: [manualModel(modelId)],
     modelId,
     saveAndUse: true,
