@@ -711,8 +711,9 @@ export async function fetchKcodeReleaseAssetBytes(
       return await fetchBytes(apiUrl, options);
     } catch (fallbackError) {
       throw new Error(
-        `KCode asset download failed for ${preferredUrl}` +
-          (fallbackError instanceof Error ? ` (API fallback: ${fallbackError.message})` : ''),
+        `KCode asset download failed for ${preferredUrl}${
+          fallbackError instanceof Error ? ` (API fallback: ${fallbackError.message})` : ''
+        }`,
         { cause: primaryError },
       );
     }
