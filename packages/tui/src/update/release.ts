@@ -606,6 +606,34 @@ function readKcodeToken(environment: NodeJS.ProcessEnv): string | undefined {
 }
 
 /**
+ * GitHub release asset API URLs (`/releases/assets/<id>`) return JSON metadata
+ * unless the client asks for the raw bytes. With a token present that mistake
+ * looks like a successful download of the wrong body — the checksum parser then
+ * rejects "not a SHA-256 digest list". Browser download URLs are unaffected.
+ */
+export function isKcodeGitHubReleaseAssetApiUrl(url: string): boolean {
+  try {
+    const pathname = new URL(url).pathname;
+    return /\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/u.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** Merge caller headers with the Accept value GitHub requires for asset bytes. */
+export function kcodeReleaseFetchHeaders(
+  url: string,
+  headers: Record<string, string> = {},
+): Record<string, string> {
+  const merged = { ...headers };
+  const hasAccept = Object.keys(merged).some((key) => key.toLocaleLowerCase() === 'accept');
+  if (!hasAccept && isKcodeGitHubReleaseAssetApiUrl(url)) {
+    merged.accept = 'application/octet-stream';
+  }
+  return merged;
+}
+
+/**
  * GitHub serves release assets through a redirect to a signed storage URL, so
  * the fetch follows redirects; each hop is still a socket the egress guard
  * checks by hostname.
@@ -632,7 +660,7 @@ async function fetchKcodeBytes(
       headers: {
         'user-agent': 'kinetick-code',
         ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
-        ...options.headers,
+        ...kcodeReleaseFetchHeaders(url, options.headers),
       },
     });
     if (!response.ok) {
