@@ -22,6 +22,7 @@ import type { TuiTextClipboardReader, TuiTextClipboardWriter } from '../host/cli
 import type { TuiExternalTargetOpener } from '../host/open-external.js';
 import type { TuiTranscriptExporter } from '../host/transcript-export.js';
 import type { TuiNotificationSettings } from '../tui/platform/terminal-notifications.js';
+import type { TerminalCapabilities } from '../tui/platform/terminal-capabilities.js';
 import type { MavisRegion } from '@mavis/config';
 import type { TuiKeybindingOverride, TuiKeybindingRegistry } from '../tui/shell/keybindings.js';
 import type { FindRecentCodexSession } from '../host/recent-codex-session.js';
@@ -33,6 +34,7 @@ export interface CreateTuiAppOptions extends TuiUpdateOptions {
   workspaceRoots?: readonly TuiWorkspaceRoot[];
   homeDir?: string;
   terminal?: Terminal;
+  terminalCapabilities?: TerminalCapabilities;
   tuiMode?: TuiMode;
   persistTuiMode?: (mode: TuiMode) => void;
   /** Saved theme selection, e.g. `aurora` or `aurora/dark`. */
@@ -59,6 +61,11 @@ export interface CreateTuiAppOptions extends TuiUpdateOptions {
   customStatusLine?: TuiCustomStatusLineConfig;
   /** Whether the idle conversation composer may show contextual Tips. Defaults to true. */
   showTips?: boolean;
+  /**
+   * Accepted from `tui.terminalTitle`. The running TUI sets the terminal title
+   * to the session title, or "Kinetick Code" when the session is untitled.
+   */
+  terminalTitle?: readonly string[] | null;
   notifications?: TuiNotificationSettings;
   /** Internal result-channel path; ignored unless statusLineItems enables build-mode. */
   automationResultPath?: string;

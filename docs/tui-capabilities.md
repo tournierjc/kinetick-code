@@ -2,6 +2,48 @@
 
 The current capability target is **TUI 0.4.12**; see [version and evidence baseline](open-source-status.md#version-and-evidence-baseline) for the separate workspace and embedded-tool versions. “Restored” below describes implementation and assembly, not acceptance of every account or online service.
 
+## Terminal titles and notifications
+
+While Kinetick Code is running, the terminal title is the current session title.
+A missing title, or the placeholder "New session", uses `Kinetick Code`. The title
+is written only when that text changes. Renaming or switching to a named session
+updates it.
+
+Configure notifications in the user data directory's `config.yaml`:
+
+```yaml
+tui:
+  notifications:
+    when: unfocused
+    method: auto
+    events: [turn-complete, turn-failed, permission-required, question-required]
+```
+
+Notification `when` accepts `unfocused`, `always` or `never`; `method` accepts
+`auto`, `osc9`, `osc777` or `bel`. Omitting `events` enables all four events; `[]`
+disables them. Apply configuration changes by restarting Kinetick Code.
+
+Notifications identify the session and suppress duplicates. Completion waits for
+the session's queue to finish; failed turns and requests for input can notify
+independently. Known foreground focus suppresses notifications by default. When
+focus is unknown, delivery is best-effort; cmux manages its own surface focus.
+Automatic delivery uses the detected terminal's notification protocol or falls
+back to a bell. The existing Windows toast bridge is restricted to local Windows
+or WSL interop. Terminal settings and OS notification permissions still apply.
+
+VS Code normally displays a process name in its terminal tabs. To display Kinetick
+Code session titles, use this VS Code setting:
+
+```json
+"terminal.integrated.tabs.title": "${sequence}"
+```
+
+A manually assigned tab title overrides automatic titles. VS Code's bell is a
+terminal-tab indicator, not a guarantee of a desktop notification. See the
+[VS Code terminal appearance documentation](https://code.visualstudio.com/docs/terminal/appearance#_tab-text).
+Inside tmux, OSC notifications require passthrough and support from the outer
+terminal; use `method: bel` for a bell fallback.
+
 The evidence column summarizes the historical TUI 0.3.11 restoration record from 2026-09-11. It does not claim fresh TUI 0.4.12 live-service acceptance. Use [current verification status](verification.md#current-source-verification-status) for checks run against the updated source and explicit NOT RUN boundaries.
 
 | Capability | Implementation | Evidence |
@@ -21,6 +63,25 @@ The evidence column summarizes the historical TUI 0.3.11 restoration record from
 | Model catalog | Online catalog and bundled snapshot fallback restored | Actual build boundary checks and offline startup; online catalog contents not accepted |
 | Files, shell, subagents, sessions, headless, ACP | Actual runtime retained | BYOK, file reads, session resume, ACP, sandbox, and status protocol tests |
 | Built-in skills, MCP, plugin tools | Original TUI assets and activation conditions retained | Asset build, plugin, and MCP tests; no claim that every skill has passed a real task |
+
+## Local Bash execution
+
+When the current turn includes native `task_output`, foreground Bash waits up to
+60 seconds before returning the same command's background task ID. Its total
+command timeout defaults to 600 seconds and is capped at 600 seconds; a shorter
+requested timeout applies. Backgrounding and output reads preserve the original
+deadline. Without native `task_output`, Bash stays in the foreground with a
+120-second default and a 300-second cap, and its schema omits `run_in_background`.
+Explicit background commands use the requested timeout; when omitted, the
+existing 30-minute runtime watchdog applies.
+
+Only exit code zero is success. Results retain available exit, signal, timeout,
+cancellation, and partial-output facts. Large output keeps its original beginning
+and end within a 24 KiB first-response text budget, with a full-log reference when
+persistence succeeds. `task_output` reads use byte offsets; a successful read can
+report a failed command. Stop failures and incomplete logs are reported separately.
+An optional `description` supplies the TUI summary while execution and permission
+checks continue to use the original command.
 
 ## Skill directory links
 

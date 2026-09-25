@@ -314,6 +314,10 @@ export async function launchTui(
         dataDir,
         version: options.version,
         workspaceDir,
+        terminalCapabilities,
+        ...(presentationConfig.terminalTitle !== undefined
+          ? { terminalTitle: presentationConfig.terminalTitle }
+          : {}),
         ...(presentationConfig.statusLineItems
           ? { statusLineItems: presentationConfig.statusLineItems }
           : {}),

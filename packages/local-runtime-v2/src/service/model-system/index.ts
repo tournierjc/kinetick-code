@@ -50,6 +50,7 @@ export * from './catalog/catalog.js';
 export * from './catalog/config-fingerprint.js';
 export * from './catalog/list-models.js';
 export * from './catalog/model-cache.js';
+export * from './catalog/model-favorites.js';
 export * from './catalog/model-selection.js';
 export * from './catalog/provider-views.js';
 export * from './connectivity/copilot-model-discovery.js';

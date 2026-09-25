@@ -279,6 +279,8 @@ export interface TuiConfigurationPort extends KcodeProviderRuntimePort {
   listModels(sessionId?: string): Promise<TuiModel[]>;
   selectModel(model: TuiModelSelection, sessionId?: string): Promise<boolean>;
   selectSessionModel(model: TuiModelSelection, sessionId: string): Promise<boolean>;
+  /** Stars or unstars a model; resolves false when favorites are unavailable. */
+  setModelFavorite?(model: TuiModelSelection, favorite: boolean): Promise<boolean>;
 }
 
 export interface TuiAccountStatusOptions {

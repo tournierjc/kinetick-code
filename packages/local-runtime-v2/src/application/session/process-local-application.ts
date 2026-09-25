@@ -1,13 +1,16 @@
 import type { GlobalEvent } from '@mavis/shared/global-events';
 import { isLegacyManagedMinimaxProvider } from '@mavis/config';
 
-import type {
-  CodexOAuthManager,
-  CopilotOAuthManager,
-  LocalModelProviderService,
-  ModelSystemOwner,
-  ModelProviderView,
-  UserModelInputView,
+import {
+  annotateModelFavorites,
+  modelFavoriteRefs,
+  type CodexOAuthManager,
+  type CopilotOAuthManager,
+  type LocalModelProviderService,
+  type ModelFavoritesPreference,
+  type ModelSystemOwner,
+  type ModelProviderView,
+  type UserModelInputView,
 } from '../../service/model-system/index.js';
 import { watchGlobalEvents, watchProcessEvents } from '../events.js';
 import type { ModelProviderApplication } from './model-provider-application.js';
@@ -36,6 +39,7 @@ export interface ProcessLocalApplicationOptions {
     readonly providers: LocalModelProviderService;
     readonly listProviderPresets: ModelSystemOwner['listProviderPresets'];
     readonly oauth: Pick<CodexOAuthManager, 'getStatus' | 'startLogin' | 'cancelLogin'>;
+    readonly favorites?: Pick<ModelFavoritesPreference, 'list' | 'set'>;
     readonly copilotOAuth: Pick<CopilotOAuthManager, 'getStatus' | 'startLogin' | 'cancelLogin'>;
   };
   readonly peripherals: Required<
@@ -126,10 +130,7 @@ export function createProcessLocalApplication(
     },
     ...(options.instructions ? { instructions: options.instructions } : {}),
     configuration: options.peripherals.configuration,
-    models: {
-      list: (request = {}) => options.modelProvider.application.list(request),
-      select: (request) => options.modelProvider.application.select(request),
-    },
+    models: createModelsApplication(options.modelProvider),
     modelProviders: {
       listProviderPresets: () => options.modelProvider.listProviderPresets(),
       getCodexOAuthStatus: async () => options.modelProvider.oauth.getStatus(),
@@ -223,4 +224,41 @@ function toUserModelInputs(
         }
       : {}),
   }));
+}
+
+function createModelsApplication(
+  modelProvider: ProcessLocalApplicationOptions['modelProvider'],
+): NonNullable<LocalRuntimeApplication['models']> {
+  const favorites = modelProvider.favorites;
+  const list = (request: { sessionId?: string } = {}) =>
+    modelProvider.application.list(request);
+  if (!favorites) {
+    return { list, select: (request) => modelProvider.application.select(request) };
+  }
+  return {
+    list: async (request = {}) => {
+      const models = await list(request);
+      // A broken preference row must never hide the catalog.
+      let saved: ReturnType<typeof favorites.list> = [];
+      try {
+        saved = favorites.list();
+      } catch {
+        saved = [];
+      }
+      return annotateModelFavorites(models, saved);
+    },
+    select: (request) => modelProvider.application.select(request),
+    setFavorite: async (request) => {
+      // Prune stale favorites only against a catalog we actually read.
+      let catalog: ReturnType<typeof modelFavoriteRefs> | undefined;
+      try {
+        catalog = modelFavoriteRefs(await list({}));
+      } catch {
+        catalog = undefined;
+      }
+      if (catalog && catalog.length === 0) catalog = undefined;
+      favorites.set(request, catalog);
+      return true;
+    },
+  };
 }
