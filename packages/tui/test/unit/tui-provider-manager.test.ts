@@ -939,6 +939,64 @@ describe("OpenRouter, DeepSeek, and Local setup", () => {
     );
   });
 
+  it("sanitizes a pasted DeepSeek API key before save", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:deepseek" },
+    }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    manager.handleInput('Bearer "sk-deepseek-secret"');
+    manager.handleInput("\r");
+    manager.handleInput("deepseek-v4-flash");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "sk-deepseek-secret",
+        modelId: "deepseek-v4-flash",
+      }),
+    );
+  });
+
+  it("normalizes DeepSeek model aliases at setup submit", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:deepseek" },
+    }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    manager.handleInput("sk-deepseek-secret");
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain("deepseek-v4-flash");
+    manager.handleInput("deepseek-flash");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "sk-deepseek-secret",
+        modelId: "deepseek-v4-flash",
+        models: [
+          expect.objectContaining({
+            modelId: "deepseek-v4-flash",
+            displayName: "deepseek-v4-flash",
+          }),
+        ],
+      }),
+    );
+  });
+
+
   it("saves a Local base URL without a key", async () => {
     const onSaveCustom = vi.fn(async () => ({
       success: true,

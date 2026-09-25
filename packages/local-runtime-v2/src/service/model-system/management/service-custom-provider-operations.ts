@@ -1,3 +1,4 @@
+import { sanitizeApiKeyCredential } from '@mavis/shared';
 import { providerFamilyForLookup } from '../catalog/provider-families.js';
 import { CUSTOM_PROVIDER_ID_PREFIX, formatModelKey } from '../resolution/model-key.js';
 import {
@@ -72,7 +73,8 @@ export async function createUserProvider(
       'TEST_REQUIRED',
     );
   }
-  const apiKey = input.apiKey?.trim() ? assertValidRawApiKey(input.apiKey) : undefined;
+  const sanitizedKey = input.apiKey === undefined ? '' : sanitizeApiKeyCredential(input.apiKey);
+  const apiKey = sanitizedKey ? assertValidRawApiKey(sanitizedKey) : undefined;
   const baseUrl = input.baseUrl?.trim();
   if (!baseUrl) {
     throw new LocalModelProviderError(400, 'base_url must not be empty', 'VALIDATION_ERROR');

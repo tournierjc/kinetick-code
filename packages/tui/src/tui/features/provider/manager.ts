@@ -1,3 +1,4 @@
+import { sanitizeApiKeyCredential } from '@mavis/shared';
 import { getKeybindings, Key, matchesKey } from '../../engine/public.js';
 import type { Component, Focusable } from '../../rendering/component.js';
 import { truncateToWidth, visibleWidth } from '../../rendering/text.js';
@@ -13,6 +14,7 @@ import {
   KCODE_DEEPSEEK_SETUP,
   KCODE_LOCAL_SETUP,
   KCODE_OPENROUTER_SETUP,
+  normalizeDeepSeekModelId,
   type KcodeProviderModelInput,
   type KcodeProviderSnapshot,
   type KcodeProviderTestResult,
@@ -343,7 +345,7 @@ export class TuiProviderManager implements Component, Focusable {
     if (this.mode.kind === 'deepseek-model') {
       return {
         title: 'Choose a DeepSeek model',
-        subtitle: 'Model id such as deepseek-chat or deepseek-reasoner.',
+        subtitle: 'Model id such as deepseek-v4-flash or deepseek-v4-pro (legacy: deepseek-chat / deepseek-reasoner).',
         label: 'Model ID',
         footer: 'Enter test, save, and use · Esc back',
       };
@@ -620,7 +622,7 @@ export class TuiProviderManager implements Component, Focusable {
 
   private submitOpenRouterKey(value: string): void {
     if (this.mode.kind !== 'openrouter-key') return;
-    const apiKey = value.trim() || this.mode.apiKey;
+    const apiKey = sanitizeApiKeyCredential(value) || this.mode.apiKey;
     if (!apiKey) {
       this.setStatus('API key is required.', 'error');
       return;
@@ -637,7 +639,7 @@ export class TuiProviderManager implements Component, Focusable {
 
   private submitDeepSeekKey(value: string): void {
     if (this.mode.kind !== 'deepseek-key') return;
-    const apiKey = value.trim() || this.mode.apiKey;
+    const apiKey = sanitizeApiKeyCredential(value) || this.mode.apiKey;
     if (!apiKey) {
       this.setStatus('API key is required.', 'error');
       return;
@@ -667,7 +669,8 @@ export class TuiProviderManager implements Component, Focusable {
         this.setStatus('Model ID is required.', 'error');
         return;
       }
-      void this.saveSetup(deepSeekSaveInput(this.mode.apiKey, trimmed), this.mode.apiKey);
+      const modelId = normalizeDeepSeekModelId(trimmed);
+      void this.saveSetup(deepSeekSaveInput(this.mode.apiKey, modelId), this.mode.apiKey);
       return;
     }
     if (this.mode.kind === 'local-url') {
@@ -699,7 +702,7 @@ export class TuiProviderManager implements Component, Focusable {
 
   private submitLocalKey(value: string): void {
     if (this.mode.kind !== 'local-key') return;
-    const apiKey = value.trim();
+    const apiKey = sanitizeApiKeyCredential(value);
     if (apiKey) this.secretToRedact = apiKey;
     void this.saveSetup(
       localSaveInput(this.mode.baseUrl, this.mode.modelId, apiKey || undefined),
@@ -766,12 +769,13 @@ export class TuiProviderManager implements Component, Focusable {
   private submitMiniMaxKey(value: string): void {
     if (this.mode.kind !== 'minimax-key') return;
     const replacing = this.mode.replacing;
-    if (!value.trim()) {
+    const apiKey = sanitizeApiKeyCredential(value);
+    if (!apiKey) {
       this.setStatus('API key is required.', 'error');
       return;
     }
     void this.perform(async () => {
-      await this.options.onSetMiniMaxApiKey(value.trim());
+      await this.options.onSetMiniMaxApiKey(apiKey);
       if (this.disposed) return;
       await this.refresh(
         replacing

@@ -40,3 +40,38 @@ export function withClearedCredentialHeaders(
   }
   return cleared;
 }
+
+/**
+ * Normalize a pasted or typed API key before storage or Authorization headers.
+ *
+ * Paste from dashboards and curl snippets often adds BOM/zero-width characters,
+ * surrounding quotes, or a leading `Bearer ` prefix. Those produce a 401 that
+ * looks like a revoked key even when the underlying secret is valid.
+ */
+export function sanitizeApiKeyCredential(apiKey: string): string {
+  let value = typeof apiKey === 'string' ? apiKey : '';
+  // Peel paste artifacts in layers: BOM/zero-width, quotes, and a leading Bearer
+  // prefix commonly copied from curl examples. Order is intentional so both
+  // `Bearer "sk-…"` and `"Bearer sk-…"` normalize to the raw key.
+  for (let i = 0; i < 4; i += 1) {
+    const before = value;
+    value = value
+      .replace(/\uFEFF/gu, '')
+      .replace(/\u200B/gu, '')
+      .replace(/\u200C/gu, '')
+      .replace(/\u200D/gu, '')
+      .replace(/\u2060/gu, '')
+      .trim();
+    if (
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
+    ) {
+      value = value.slice(1, -1);
+    }
+    value = value.replace(/^Bearer(?:\s+|$)/iu, '').trim();
+    if (value === before) break;
+  }
+  return value;
+}
+

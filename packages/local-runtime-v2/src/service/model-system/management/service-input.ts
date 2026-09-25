@@ -1,3 +1,5 @@
+import { sanitizeApiKeyCredential } from '@mavis/shared';
+
 import type { LocalModelConfig, ModelProviderTestApi, UserModelInputView } from '../contracts.js';
 import { LocalModelProviderError } from '../contracts.js';
 import {
@@ -13,7 +15,7 @@ import {
 const MASKED_KEY_MARKER = '****';
 
 export function assertValidRawApiKey(apiKey: string): string {
-  const trimmed = typeof apiKey === 'string' ? apiKey.trim() : '';
+  const trimmed = sanitizeApiKeyCredential(typeof apiKey === 'string' ? apiKey : '');
   if (!trimmed) {
     throw new LocalModelProviderError(400, 'API key must not be empty', 'INVALID_API_KEY');
   }
@@ -31,7 +33,7 @@ export function normalizeApiKeyUpdate(
   apiKey: string | undefined,
 ): { kind: 'keep' } | { kind: 'clear' } | { kind: 'set'; apiKey: string } {
   if (apiKey === undefined) return { kind: 'keep' };
-  if (apiKey.trim() === '') return { kind: 'clear' };
+  if (sanitizeApiKeyCredential(apiKey) === '') return { kind: 'clear' };
   return { kind: 'set', apiKey: assertValidRawApiKey(apiKey) };
 }
 

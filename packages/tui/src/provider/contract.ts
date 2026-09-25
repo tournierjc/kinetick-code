@@ -59,6 +59,24 @@ export const KCODE_DEEPSEEK_SETUP = {
 };
 
 /**
+ * Common DeepSeek model-id typos / shorthand typed at `/provider` setup.
+ * Official V4 ids are `deepseek-v4-flash` / `deepseek-v4-pro`; legacy
+ * `deepseek-chat` / `deepseek-reasoner` remain valid and are left unchanged.
+ */
+export const KCODE_DEEPSEEK_MODEL_ALIASES: Readonly<Record<string, string>> = {
+  'deepseek-flash': 'deepseek-v4-flash',
+  'deepseek-pro': 'deepseek-v4-pro',
+};
+
+/** Map known DeepSeek setup aliases to official model ids; otherwise trim only. */
+export function normalizeDeepSeekModelId(modelId: string): string {
+  const trimmed = modelId.trim();
+  if (!trimmed) return trimmed;
+  const aliased = KCODE_DEEPSEEK_MODEL_ALIASES[trimmed.toLowerCase()];
+  return aliased ?? trimmed;
+}
+
+/**
  * Local as `/provider` offers it before any connection exists: an
  * OpenAI-compatible base URL, defaulting to the address Ollama exposes. The
  * API key on that flow is optional, matching a server that checks no credential.

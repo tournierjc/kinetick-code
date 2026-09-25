@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { KcodeProviderModel, KcodeProviderView } from '../../src/provider/contract.js';
-import { defaultProviderApiFormatForBaseUrl } from '../../src/provider/contract.js';
+import {
+  defaultProviderApiFormatForBaseUrl,
+  normalizeDeepSeekModelId,
+} from '../../src/provider/contract.js';
 import { KcodeProviderApplication } from '../../src/provider/application.js';
 
 function createPort() {
@@ -593,5 +596,15 @@ describe('defaultProviderApiFormatForBaseUrl', () => {
       'anthropic-messages',
     );
     expect(defaultProviderApiFormatForBaseUrl('not-a-url')).toBe('anthropic-messages');
+  });
+});
+
+describe('normalizeDeepSeekModelId', () => {
+  it('maps common aliases to official V4 ids and leaves legacy ids alone', () => {
+    expect(normalizeDeepSeekModelId('deepseek-flash')).toBe('deepseek-v4-flash');
+    expect(normalizeDeepSeekModelId('DeepSeek-Pro')).toBe('deepseek-v4-pro');
+    expect(normalizeDeepSeekModelId(' deepseek-v4-flash ')).toBe('deepseek-v4-flash');
+    expect(normalizeDeepSeekModelId('deepseek-chat')).toBe('deepseek-chat');
+    expect(normalizeDeepSeekModelId('deepseek-reasoner')).toBe('deepseek-reasoner');
   });
 });

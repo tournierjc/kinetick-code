@@ -1,4 +1,8 @@
-import { withOpenCodeGoHeaders, withOpenRouterAttributionHeaders } from '@mavis/shared';
+import {
+  sanitizeApiKeyCredential,
+  withOpenCodeGoHeaders,
+  withOpenRouterAttributionHeaders,
+} from '@mavis/shared';
 
 export type ModelProviderApi = 'anthropic-messages' | 'openai-completions' | 'openai-responses';
 
@@ -10,16 +14,17 @@ export function buildProviderHeaders(input: {
   baseUrl?: string;
   headers?: Record<string, string>;
 }): Headers {
+  const credential = sanitizeApiKeyCredential(input.apiKey);
   const defaults: Record<string, string> =
     input.api === 'anthropic-messages'
       ? {
           'content-type': 'application/json',
-          'x-api-key': input.apiKey,
+          'x-api-key': credential,
           [MESSAGES_VERSION_HEADER]: '2023-06-01',
         }
       : {
           'content-type': 'application/json',
-          Authorization: `Bearer ${input.apiKey}`,
+          Authorization: `Bearer ${credential}`,
         };
   const headers = new Headers(defaults);
   const attributedHeaders = withOpenCodeGoHeaders(

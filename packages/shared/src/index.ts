@@ -444,5 +444,6 @@ export { withOpenCodeGoHeaders } from './opencode-go-headers.js';
 export {
   CREDENTIAL_HEADER_NAMES,
   UNAUTHENTICATED_PROVIDER_API_KEY,
+  sanitizeApiKeyCredential,
   withClearedCredentialHeaders,
 } from './credential-headers.js';

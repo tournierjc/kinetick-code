@@ -1,3 +1,4 @@
+import { sanitizeApiKeyCredential } from '@mavis/shared';
 import { KcodeProviderApplication } from '../provider/application.js';
 import type { KcodeProviderApiFormat, KcodeProviderSnapshot } from '../provider/contract.js';
 import { prepareTuiDataDir } from '../runtime/data-dir.js';
@@ -55,7 +56,7 @@ export async function runKcodeProviderCommand(
     }
     if (request.action === 'add') {
       const envName = request.apiKeyEnv?.trim() || 'MCODE_PROVIDER_API_KEY';
-      const apiKey = (options.environment ?? process.env)[envName]?.trim();
+      const apiKey = sanitizeApiKeyCredential((options.environment ?? process.env)[envName] ?? '');
       // A key is optional: without one the provider is saved as an endpoint that
       // needs no authentication, which is the local-server case. An explicitly
       // named variable that is empty is still an error, because the caller
@@ -178,7 +179,7 @@ export async function runKcodeProviderCommand(
     }
     if (request.action === 'set-minimax-key') {
       const envName = request.apiKeyEnv?.trim() || 'MCODE_PROVIDER_API_KEY';
-      const apiKey = (options.environment ?? process.env)[envName]?.trim();
+      const apiKey = sanitizeApiKeyCredential((options.environment ?? process.env)[envName] ?? '');
       if (!apiKey) {
         throw new Error(`MiniMax API key is missing. Set ${envName} or pass --api-key-env <name>.`);
       }

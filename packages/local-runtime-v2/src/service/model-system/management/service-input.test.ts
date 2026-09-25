@@ -45,9 +45,18 @@ describe('model provider input normalization', () => {
     );
     expect(() => assertValidRawApiKey('sk-a****z')).toThrow(LocalModelProviderError);
     expect(assertValidRawApiKey(' sk-raw ')).toBe('sk-raw');
+    expect(assertValidRawApiKey('Bearer sk-pasted')).toBe('sk-pasted');
+    expect(assertValidRawApiKey('Bearer "sk-quoted-bearer"')).toBe('sk-quoted-bearer');
+    expect(assertValidRawApiKey('"Bearer sk-quoted-bearer"')).toBe('sk-quoted-bearer');
+    expect(assertValidRawApiKey('bearer sk-pasted')).toBe('sk-pasted');
+    expect(assertValidRawApiKey('"sk-quoted"')).toBe('sk-quoted');
+    expect(assertValidRawApiKey("'sk-quoted'")).toBe('sk-quoted');
+    expect(assertValidRawApiKey('\uFEFFsk-bom\u200B')).toBe('sk-bom');
     expect(normalizeApiKeyUpdate(undefined)).toEqual({ kind: 'keep' });
     expect(normalizeApiKeyUpdate('   ')).toEqual({ kind: 'clear' });
+    expect(normalizeApiKeyUpdate('Bearer   ')).toEqual({ kind: 'clear' });
     expect(normalizeApiKeyUpdate(' sk-next ')).toEqual({ kind: 'set', apiKey: 'sk-next' });
+    expect(normalizeApiKeyUpdate('Bearer sk-next')).toEqual({ kind: 'set', apiKey: 'sk-next' });
 
     expect(normalizeApiFormat(undefined)).toBeUndefined();
     expect(normalizeApiFormat('   ')).toBeUndefined();

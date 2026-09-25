@@ -1,4 +1,8 @@
-import { withOpenCodeGoHeaders, withOpenRouterAttributionHeaders } from '@mavis/shared';
+import {
+  sanitizeApiKeyCredential,
+  withOpenCodeGoHeaders,
+  withOpenRouterAttributionHeaders,
+} from '@mavis/shared';
 
 import type { ModelProviderApi } from '../identity.js';
 
@@ -14,7 +18,7 @@ export function buildProviderHeaders(input: {
   baseUrl?: string;
   headers?: Record<string, string>;
 }): Headers {
-  const credential = input.apiKey?.trim();
+  const credential = input.apiKey ? sanitizeApiKeyCredential(input.apiKey) : undefined;
   const defaults: Record<string, string> =
     input.api === 'anthropic-messages'
       ? {
@@ -44,7 +48,7 @@ export function buildModelDiscoveryHeaders(input: {
   headers?: Record<string, string>;
 }): Headers {
   const headers = buildProviderHeaders(input);
-  const credential = input.apiKey?.trim();
+  const credential = input.apiKey ? sanitizeApiKeyCredential(input.apiKey) : undefined;
   if (!credential) return headers;
   if (!headers.has('authorization')) headers.set('authorization', `Bearer ${credential}`);
   if (!headers.has('x-api-key')) headers.set('x-api-key', credential);
