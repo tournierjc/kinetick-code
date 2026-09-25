@@ -7,8 +7,10 @@ import {
   applyExecReviewCliContract,
   applyInteractiveCliContract,
   resolveInteractiveLaunchRequest,
+  resolveServerLaunchRequest,
   type RawTuiInteractiveOptions,
   type TuiInteractiveLaunchRequest,
+  type TuiServerLaunchRequest,
 } from './contract.js';
 import type { KcodeProviderCliRequest } from './provider-command.js';
 import {
@@ -37,6 +39,7 @@ export interface CreateTuiProgramOptions {
     lane?: string,
   ) => Promise<void>;
   runAcp?: (lane?: string) => Promise<void>;
+  runServer?: (request: TuiServerLaunchRequest, lane?: string) => Promise<void>;
   runLogin: (region?: MavisRegion, openBrowser?: boolean, lane?: string) => Promise<void>;
   runLogout: (region?: MavisRegion) => Promise<void>;
   runUpdate: () => Promise<void>;
@@ -68,9 +71,15 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
       .version(options.version)
       .enablePositionalOptions(),
     { allowStartupEnvironmentSelection: options.allowStartupEnvironmentSelection },
-  ).action((prompt: string | undefined, commandOptions: RawTuiInteractiveOptions) =>
-    options.launchTui(withLane(resolveInteractiveLaunchRequest(prompt, commandOptions))),
-  );
+  ).action((prompt: string | undefined, commandOptions: RawTuiInteractiveOptions) => {
+    const serverRequest = resolveServerLaunchRequest(prompt, commandOptions);
+    if (serverRequest) {
+      return activeLane
+        ? requireServerRunner(options)(serverRequest, activeLane)
+        : requireServerRunner(options)(serverRequest);
+    }
+    return options.launchTui(withLane(resolveInteractiveLaunchRequest(prompt, commandOptions)));
+  });
 
   program.hook('preAction', () => {
     activeLane = (options.resolveLane ?? resolveTuiManagedBackendLane)(
@@ -400,6 +409,11 @@ function requirePluginRunner(options: CreateTuiProgramOptions) {
 function requireAcpRunner(options: CreateTuiProgramOptions) {
   if (!options.runAcp) throw new Error('ACP server is unavailable.');
   return options.runAcp;
+}
+
+function requireServerRunner(options: CreateTuiProgramOptions) {
+  if (!options.runServer) throw new Error('Session server is unavailable.');
+  return options.runServer;
 }
 
 function parsePositiveSafeInteger(value: string): number {

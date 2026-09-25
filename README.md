@@ -141,6 +141,7 @@ Use `kcode init .` to generate or update project guidance in `AGENTS.md`. Descri
 | Interactive TUI | `kcode [prompt]` | Explore code, continue a conversation, and review changes or permissions. |
 | Headless | `kcode exec [prompt]` | Shell scripts, CI, batch work, and evaluations. |
 | ACP | `kcode acp` | Editors and clients supporting Agent Client Protocol. |
+| Session server | `kcode --server` | Serve Sessions over HTTP to a webapp, mobile client, or other remote tooling. |
 
 See [harness integration](docs/harness-integration.md) for the `exec` and ACP
 contracts a script, CI job, or client depends on: output formats, exit codes,

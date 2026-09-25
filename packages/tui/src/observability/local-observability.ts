@@ -2,7 +2,7 @@ import { appendFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { redactTuiSensitiveText } from '../user-facing-failure.js';
 
-export type TuiObservabilitySurface = 'tui' | 'headless' | 'acp' | 'inspection';
+export type TuiObservabilitySurface = 'tui' | 'headless' | 'acp' | 'inspection' | 'server';
 export type TuiRuntimeAccessSource = 'process-local';
 
 export interface TuiStartupObservation {

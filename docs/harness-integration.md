@@ -1,6 +1,6 @@
 # Driving Kinetick Code from another process
 
-Kinetick Code is a program other programs can run. Two transports exist, and both
+Kinetick Code is a program other programs can run. Three transports exist, and all
 are stable enough that a script, a CI job, an editor, or another agent harness
 can depend on them.
 
@@ -8,6 +8,7 @@ can depend on them.
 | --- | --- | --- |
 | Headless run | `kcode exec` | One process, one result, exits when the turn ends. |
 | Agent Client Protocol | `kcode acp` | One long-lived process over stdio, many sessions and turns. |
+| Session server | `kcode --server` | One long-lived HTTP process serving Sessions to external clients. |
 
 Everything below was observed on a build of this repository against a real
 provider. The verification method is stated per claim, because a documented
@@ -171,7 +172,40 @@ answering `deny` left it absent and the agent reported the refusal. Tools that
 need approval are decided by policy (`packages/agent-modules/permission`), not
 by the mode alone — the mode decides how a matched rule is honoured.
 
-## 3. Notes for callers
+## 3. Session server: `kcode --server`
+
+`kcode --server` starts the Runtime without the TUI and serves Sessions over
+HTTP instead. It is the entry point for reaching Kinetick Code from a webapp or
+a mobile client: the process runs anywhere the data directory lives, and any
+client that can reach the bind address can read Sessions.
+
+```bash
+kcode --server                       # http://127.0.0.1:8788
+kcode --server --host 0.0.0.0 --port 9430   # accept external connections
+```
+
+The server is read-only: it lists Sessions and transcripts, it cannot start
+turns. `--server` cannot be combined with a prompt, `--model`, `--session`,
+`--continue`, `--resume`, or `--tui-mode`; `--host` and `--port` only apply to
+`--server`. The default bind is loopback. Binding `0.0.0.0` or any non-loopback
+address prints a warning: there is no authentication, so every client that can
+reach the address can read your Sessions. The process shuts down cleanly on
+`SIGINT`, `SIGTERM`, or `SIGHUP`.
+
+Endpoints (all `GET`, JSON, `cache-control: no-store`):
+
+| Path | Result |
+| --- | --- |
+| `/` | Server descriptor with the version and endpoint names. |
+| `/health` | `{ "ok": true, "version": "..." }`. |
+| `/sessions` | Session page; query `limit`, `cursor`, `agent`, `allAgents`, `includeArchived`, `onlyArchived`, `includeHidden`. |
+| `/sessions/<id>` | One Session. Unknown ids are `404`. |
+| `/sessions/<id>/messages` | Transcript page; query `limit`, `before`. |
+
+Invalid query values are `400` with an `error` message; non-`GET` requests are
+`405`. `MINIMAX_DATA_DIR` isolates state exactly as it does for `exec`.
+
+## 4. Notes for callers
 
 - Isolate state with `MINIMAX_DATA_DIR`; a caller gets its own config, sessions,
   and credentials rather than sharing the user's.
@@ -183,7 +217,7 @@ by the mode alone — the mode decides how a matched rule is honoured.
 - Do not parse the human-readable `--output-format text`, and do not read
   progress from stdout there. The JSON and stream-json formats are the contract.
 
-## 4. Verification scope
+## 5. Verification scope
 
 Recorded on 2026-09-19 (build `0.4.12`, Linux aarch64) against a configured
 `custom_provider` running on GitHub Copilot, driven by a standalone client
@@ -196,6 +230,23 @@ through the SDK:
 - `acp`: handshake, `session/new` controls, prompt with streamed updates, a
   tool call that created a file with the requested content, a second prompt on
   the same session, and an approval answered both ways.
+
+Recorded on 2026-09-25 (build `0.5.3`, Linux x86_64), session server:
+
+- `--server`: process boots the Runtime without the TUI, answers `/`, `/health`,
+  and `/sessions` over HTTP from a fresh data directory, and exits cleanly
+  within three seconds of `SIGTERM`.
+- CLI contract: default `127.0.0.1:8788`, explicit `--host`/`--port` forwarded,
+  `--server` rejected with `--model`, `--session`, `--continue`, `--resume`,
+  `--tui-mode`, and a prompt argument; invalid ports rejected at parse time.
+- HTTP contract (unit tested against a scripted Runtime): session pages with
+  query forwarding, transcript pages after session-id validation, `400` for
+  invalid query values, `404` for unknown sessions and paths, `405` for
+  non-`GET`, and the non-loopback bind warning.
+
+Not verified for the session server: access from a separate host over a
+non-loopback bind, and a data directory with existing Sessions (the live check
+ran against a fresh directory).
 
 Not verified: Windows and macOS hosts, enterprise Copilot accounts, MCP servers
 passed in `session/new`, `session/cancel` against a running turn, and clients
