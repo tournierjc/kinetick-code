@@ -21,6 +21,11 @@
 > **更名说明。** 本分叉原名为 `tournierjc/minimax-code-fork`，命令原为 `mcode`。旧链接由 GitHub 自动跳转；
 > 当前命令为 **`kcode`**，发布归档名为 `kinetick-code-<version>.tar.gz`。旧安装的 `mcode` 启动器仍可继续使用，
 > 安装当前归档后改用 `kcode`；详见[安装说明](docs/installation.md#renamed-from-minimax-code-fork)。
+>
+> **本分叉新增的能力：** Session 标签栏与后台多任务（切换 Session 后任务继续运行并持续流式输出）、
+> 在 `/provider` 中配置 OpenRouter、DeepSeek、GitHub Copilot 与免鉴权本地端点、状态栏与 `/usage`
+> 中的整场会话成本统计、独立的分叉更新通道，以及无遥测——见
+> [Session 标签栏](#session-标签栏与多任务)与[网络出口策略](docs/egress-policy.md)。
 <p align="center">
   <a href="#快速开始">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -36,7 +41,7 @@
 
 在终端里读懂项目、修改代码并运行测试。使用 MiniMax 账号或自己的模型，把搜索、插件和多模态工具接入同一个工作流。
 
-[![Kinetick Code 真实 TUI：修复 clamp、查看代码 diff 并运行测试](docs/assets/tui-demo.png)](docs/demo.md)
+[![Kinetick Code TUI：Session 标签栏、Plan Mode 与正在运行的任务](docs/assets/tui-demo.png)](docs/demo.md)
 
 <p align="center"><a href="docs/demo.md">观看 20 秒真实演示 →</a> · 真实终端输出回放，已压缩等待时间</p>
 
@@ -100,7 +105,7 @@ kcode --version
 kcode --help
 ```
 
-参阅官网的[快速开始](https://agent.minimaxi.com/docs/cli/quick-start)、[功能与配置](https://agent.minimaxi.com/docs/cli/features)和[故障排查](https://agent.minimaxi.com/docs/cli/faq)。
+本分叉文档见[安装说明](docs/installation.md)、[使用示例](docs/examples.md)与 [TUI 能力](docs/tui-capabilities.md)。
 
 ### 2. 登录账号或配置 API Key
 
@@ -183,7 +188,23 @@ kcode --session
 | 引用工作区文件或目录 | `@` |
 | 切换 Plan Mode | `Shift+Tab` |
 | 切换权限模式 | `Alt+M` |
+| 切换 Session 标签 | `Ctrl+Shift+Left` / `Ctrl+Shift+Right` |
+| 按槽位直达 Session 标签 | `Alt+1`…`Alt+9` |
+| 关闭当前 Session 标签 | `Alt+W` |
+| 重命名当前 Session 标签 | `Alt+R` |
 | 关闭面板或中断正在运行的任务；在模型回复之前中断会把消息放回输入框 | `Esc` |
+
+### Session 标签栏与多任务
+
+Kinetick Code 可以在 Composer 上方的标签栏中并行运行多个 Session：
+
+- **每个打开的 Session 都是一个标签**，带实时状态（`working`、`waiting`、`unread`）。`/new` 新开标签，`/clear` 在当前标签内开始新会话，`/clone` 把 Session 复制为新会话。
+- **后台任务持续运行。** 切换走之后，运行中的任务继续在自己的标签里流式输出；切回来即回到离开时的画面。任务在你离开期间完成时会出现 `unread` 标记。
+- **按你的方式整理标签栏：** `Alt+R` 重命名标签，`Shift+Alt+Left` / `Shift+Alt+Right` 把标签移动到指定槽位；来自多个项目的标签会自动按项目分组。
+- **用 `/pin` 固定常用 Session**：被固定的 Session 在 `/sessions` 列表中置顶，并在标签栏上标记。
+- **快速找到任意会话：** `/sessions` 按项目分组、支持按会话内容搜索，删除时默认归档。
+
+完整按键绑定与语义见 [Open Session tabs](docs/tui-capabilities.md#open-session-tabs)。
 
 ## 卸载
 
@@ -244,9 +265,10 @@ profile 使用 `~/.minimax-<profile>`；`MINIMAX_DATA_DIR` 或 `MAVIS_DATA_DIR` 
 | 场景 | 使用方式 |
 | --- | --- |
 | **修改与验证代码** | 读取文件、编辑 diff、执行 Shell 和测试；通过权限与沙箱控制工具执行。 |
-| **选择模型** | MiniMax 账号 / Token Plan，或兼容 OpenAI、Anthropic 格式的自定义提供方。 |
+| **选择模型** | MiniMax 账号 / Token Plan，或兼容 OpenAI、Anthropic 格式的自定义提供方——包括 OpenRouter、DeepSeek、GitHub Copilot 与免鉴权本地端点，均可在 `/provider` 中配置。 |
 | **搜索与多模态** | 内置搜索、`mcode-tools` 媒体工具、MCP 和托管连接器；按账号权限和服务额度使用。 |
-| **延续工作** | 会话恢复、任务规划、子 Agent、官方 / 本地 / GitHub 插件与内置 Skills。 |
+| **多 Session 并行** | Session 标签栏与实时状态、切换后继续流式输出的后台任务、固定 Session、项目分组与 `/clone`。 |
+| **延续工作** | 会话恢复、任务规划、子 Agent、状态栏与 `/usage` 的整场会话成本统计、插件与内置 Skills。 |
 | **接入工作流** | Headless CLI 用于脚本任务，ACP 用于兼容的编辑器和客户端。 |
 
 账号、更新、反馈与诊断能力也在。托管工具需要网络和相应授权，详细边界见 [能力与服务边界](docs/tui-capabilities.md)。
@@ -291,17 +313,15 @@ node /absolute/path/to/kinetick-code/dist/cli.js
 
 目前仅接受仓库协作者提交代码和文档 Pull Request。本分叉的开发一律通过功能分支和针对 `main` 的审阅 PR 进行（包括上游同步 PR），禁止直接推送 `main`；见 [docs/releasing.md](docs/releasing.md) 与 [docs/source-sync.md](docs/source-sync.md)。
 
-## 桌面版与问题反馈
+## 问题反馈
 
-<a href="https://agent.minimaxi.com/download" title="下载 Kinetick Code">
-  <img src="https://filecdn.minimax.chat/public/c3ebbd2e-f55b-48d7-adff-030abb63e06d.png" alt="Kinetick Code 桌面版 — 点击下载" width="100%" />
-</a>
-
-本分叉仅覆盖终端 CLI，不包含 Kinetick Code 桌面版。桌面版可从
-[agent.minimaxi.com/download](https://agent.minimaxi.com/download) 下载，属于
-MiniMax 官方产品，不含本分叉的改动。上游桌面版问题反馈入口：
-[MiniMax-AI/minimax-code/issues](https://github.com/MiniMax-AI/minimax-code/issues)。
+本仓库覆盖 Kinetick Code 终端 CLI：TUI、Headless CLI 与 ACP。报告问题或提问请在本仓库
+[提交 issue](https://github.com/tournierjc/kinetick-code/issues/new/choose)。报告缺陷时请附上
+`kcode --version`、使用的界面与最小复现步骤，并删除报告中的凭据和私有项目内容。
 
 ## 许可
 
-第一方代码默认采用 [MIT](LICENSE)；文件或子包已有独立声明时保留原许可。依赖、资源与 `mcode-tools` 的许可分别见 [第三方声明](THIRD_PARTY_NOTICES.md) 和 [许可状态](LICENSE-STATUS.md)。
+Kinetick Code 是 [MiniMax Code](https://github.com/MiniMax-AI/minimax-code)（`MiniMax-AI/minimax-code`）的分叉，
+上游代码版权归 MiniMax Code（Copyright (c) 2026 MiniMax Code）。上游采用 MIT 许可证，**本分叉对整个代码库——
+包括上游代码与 Kinetick Code 的改动——保持相同的 [MIT 许可证](LICENSE)**。原始项目的全部功劳归属于 MiniMax Code。
+文件或子包已有独立声明时保留原许可。依赖、资源与 `mcode-tools` 的许可分别见 [第三方声明](THIRD_PARTY_NOTICES.md) 和 [许可状态](LICENSE-STATUS.md)。
