@@ -19,6 +19,7 @@ import {
   type TuiSessionTabStatus,
   type TuiSessionTabView,
 } from '../../src/tui/shell/session-tabs.js';
+import { formatTuiShortcut } from '../../src/tui/shell/shortcut-labels.js';
 
 const IDLE_CONTEXT: TuiKeybindingContext = {
   interactionActive: false,
@@ -332,7 +333,7 @@ describe('tab keybindings', () => {
 
     expect(cycle?.ids).toEqual(['tabs.previous', 'tabs.next']);
     expect(cycle?.keys).toContain('/');
-    expect(rows.find((row) => row.ids.includes('tabs.new'))?.keys).toContain('Alt+N');
+    expect(rows.find((row) => row.ids.includes('tabs.new'))?.keys).toContain(formatTuiShortcut('alt+n'));
     expect(rows.find((row) => row.ids.includes('tabs.close'))?.description).toBe(
       'Close the visible Session tab',
     );
