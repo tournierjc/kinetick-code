@@ -175,35 +175,131 @@ by the mode alone — the mode decides how a matched rule is honoured.
 ## 3. Session server: `kcode --server`
 
 `kcode --server` starts the Runtime without the TUI and serves Sessions over
-HTTP instead. It is the entry point for reaching Kinetick Code from a webapp or
-a mobile client: the process runs anywhere the data directory lives, and any
-client that can reach the bind address can read Sessions.
+HTTP, so an external application — a webapp, a mobile client, a dashboard —
+can read what is in the data directory. The server is read-only today: it
+lists Sessions and replays transcripts, it cannot start turns.
+
+### Starting the server
 
 ```bash
-kcode --server                       # http://127.0.0.1:8788
-kcode --server --host 0.0.0.0 --port 9430   # accept external connections
+kcode --server                             # http://127.0.0.1:8788, loopback only
+kcode --server --host 0.0.0.0 --port 9430  # accept connections from other machines
+MINIMAX_DATA_DIR=/work/kcode kcode --server  # serve an isolated data directory
 ```
 
-The server is read-only: it lists Sessions and transcripts, it cannot start
-turns. `--server` cannot be combined with a prompt, `--model`, `--session`,
-`--continue`, `--resume`, or `--tui-mode`; `--host` and `--port` only apply to
-`--server`. The default bind is loopback. Binding `0.0.0.0` or any non-loopback
-address prints a warning: there is no authentication, so every client that can
-reach the address can read your Sessions. The process shuts down cleanly on
-`SIGINT`, `SIGTERM`, or `SIGHUP`.
+The process prints `Kinetick Code session server listening on
+http://<host>:<port>` and keeps serving until `SIGINT`, `SIGTERM`, or `SIGHUP`,
+which shut the server and the Runtime down. `--server` cannot be combined with
+a prompt, `--model`, `--session`, `--continue`, `--resume`, or `--tui-mode`;
+`--host` and `--port` only apply to `--server`. Like `exec`, the server reads
+and writes only its data directory: `MINIMAX_DATA_DIR` points it at an isolated
+one, and omitting it serves the user's own Sessions.
 
-Endpoints (all `GET`, JSON, `cache-control: no-store`):
+There is no authentication. The default bind keeps the server on the loopback
+interface; binding `0.0.0.0` or any non-loopback address prints a warning on
+startup, because every client that can reach the address can read all Sessions
+in the data directory. Treat a non-loopback bind as a local-network trust
+decision until authentication lands.
+
+### Endpoint reference
+
+Every endpoint is `GET`, answers JSON with `content-type: application/json;
+charset=utf-8` and `cache-control: no-store`, and takes its parameters in the
+query string. `<base>` is the bind address — for example `http://127.0.0.1:8788`
+or, from another device on the LAN, `http://192.168.1.50:9430`.
 
 | Path | Result |
 | --- | --- |
-| `/` | Server descriptor with the version and endpoint names. |
-| `/health` | `{ "ok": true, "version": "..." }`. |
-| `/sessions` | Session page; query `limit`, `cursor`, `agent`, `allAgents`, `includeArchived`, `onlyArchived`, `includeHidden`. |
-| `/sessions/<id>` | One Session. Unknown ids are `404`. |
-| `/sessions/<id>/messages` | Transcript page; query `limit`, `before`. |
+| `/` | Server descriptor: name, version, and endpoint paths. |
+| `/health` | Liveness: `{"ok":true,"version":"0.5.3"}`. |
+| `/sessions` | Session page, most recently updated first. Query: `limit`, `cursor`, `agent`, `allAgents`, `includeArchived`, `onlyArchived`, `includeHidden`. |
+| `/sessions/<id>` | One Session. |
+| `/sessions/<id>/messages` | Transcript page; the first page holds the newest messages. Query: `limit`, `before`. |
 
-Invalid query values are `400` with an `error` message; non-`GET` requests are
-`405`. `MINIMAX_DATA_DIR` isolates state exactly as it does for `exec`.
+```console
+$ curl http://127.0.0.1:9430/
+{"server":"kinetick-code-session-server","version":"0.5.3","health":"/health","sessions":"/sessions"}
+
+$ curl http://127.0.0.1:9430/sessions?limit=5
+{"sessions":[{"sessionId":"mvs_4a86acbe847b4bc28567046796a1b791","agentName":"mavis","title":"Reply with the single word: pong","sessionType":"branch","sessionKind":"conversation","visibility":"visible","archived":false,"workspaceDir":"/opt/data/work/minimax-code","createdAt":1790355644115,"updatedAt":1790355644468,"status":"idle","model":{"providerId":"minimax","modelId":"MiniMax-M3","variant":"thinking"}}],"hasMore":false}
+```
+
+`/sessions` and `/sessions/<id>/messages` are pages. Session pages start with
+the most recently updated Session; transcript pages start with the newest
+messages and walk backwards in time, while a single page always stays in
+chronological order. `hasMore` says whether another page exists, `nextCursor`
+is the value to send back — as `cursor` on `/sessions`, as `before` on the
+transcript — and `limit` caps the page size.
+
+```console
+$ curl "http://127.0.0.1:9430/sessions/mvs_4a86acbe847b4bc28567046796a1b791/messages?limit=10"
+{"messages":[{"id":"msg-user-v1-ofKih550fY3t2XOOAD8SD5IofVGQh1cR-c4MEm4R8x4","turnId":"turn_muh7iw9x_a36jsb","role":"user","source":"api","content":"Reply with the single word: pong","timestamp":1790355644138,"actions":{"fork":false,"rewind":true}},{"id":"855ce531-5415-47c8-9732-51a8f8be9d35","turnId":"turn_muh7iw9x_a36jsb","role":"assistant","source":"api","content":"pong","timestamp":1790355644454,"finishReason":"stop","usage":{"totalTokens":14,"inputTokens":12,"outputTokens":2},"actions":{"fork":true,"rewind":false}}],"hasMore":false}
+```
+
+A page with `limit=1` on the same Session shows the pagination envelope:
+
+```json
+{"messages":[{"id":"855ce531-5415-47c8-9732-51a8f8be9d35","role":"assistant","content":"pong","finishReason":"stop","usage":{"totalTokens":14,"inputTokens":12,"outputTokens":2}}],"hasMore":true,"nextCursor":"855ce531-5415-47c8-9732-51a8f8be9d35"}
+```
+
+### Error contract
+
+Failures answer `{"error":"<message>"}` with an HTTP status the client can
+branch on:
+
+| Status | When | Example body |
+| --- | --- | --- |
+| `400` | An invalid query value (`limit=zero`, `allAgents=maybe`). | `{"error":"invalid limit: zero"}` |
+| `404` | Unknown Session id, or unknown path. | `{"error":"Session not found: mvs_missing"}` / `{"error":"not found"}` |
+| `405` | Any non-`GET` method. | `{"error":"only GET requests are supported"}` |
+| `409`, `5xx` | Runtime failures carry their transport-neutral status through (for example a queue conflict), and anything unrecognized fails closed as `500`. | |
+
+### Writing a client
+
+The whole API is three GETs, so a client that shows the latest Session and its
+transcript is roughly:
+
+```js
+const base = 'http://127.0.0.1:8788';
+
+async function get(path) {
+  const response = await fetch(`${base}${path}`);
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error);
+  return body;
+}
+
+const { sessions } = await get('/sessions?limit=20');
+const session = sessions[0];
+const { messages } = await get(
+  `/sessions/${encodeURIComponent(session.sessionId)}/messages?limit=50`,
+);
+for (const message of messages) console.log(`${message.role}: ${message.content}`);
+```
+
+The same walkthrough from Python:
+
+```python
+import requests
+
+base = "http://127.0.0.1:8788"
+session = requests.get(f"{base}/sessions", params={"limit": 20}).json()["sessions"][0]
+page = requests.get(f"{base}/sessions/{session['sessionId']}/messages",
+                    params={"limit": 50}).json()
+for message in page["messages"]:
+    print(message["role"], message["content"])
+```
+
+To follow a long transcript, request a page, then pass `nextCursor` as `before`
+while `hasMore` is true. Session ids are opaque: percent-encode them, do not
+parse them.
+
+### What the server does not do (yet)
+
+The read-only surface is deliberate. An external client cannot start turns or
+stream replies, cannot rename, archive, fork, or delete Sessions, and the
+server has no authentication. Those are the next steps; until then the server
+answers only what the tables above describe.
 
 ## 4. Notes for callers
 
@@ -231,22 +327,29 @@ through the SDK:
   tool call that created a file with the requested content, a second prompt on
   the same session, and an approval answered both ways.
 
-Recorded on 2026-09-25 (build `0.5.3`, Linux x86_64), session server:
+Recorded on 2026-09-25 (build `0.5.3`, Linux x86_64), session server, against a
+data directory holding two real Sessions produced by `kcode exec` turns (a
+scripted OpenAI-compatible provider on loopback):
 
-- `--server`: process boots the Runtime without the TUI, answers `/`, `/health`,
-  and `/sessions` over HTTP from a fresh data directory, and exits cleanly
-  within three seconds of `SIGTERM`.
+- `--server`: boots the Runtime without the TUI, answers `/`, `/health`,
+  `/sessions`, `/sessions/<id>`, and `/sessions/<id>/messages`, and exits
+  cleanly within a few seconds of `SIGTERM`. Every response quoted in section 3
+  is captured from that run.
+- Reaching it externally: a `--host 0.0.0.0` bind accepts requests over the
+  machine's LAN address, and the non-loopback warning is printed at startup.
+- Error contract: the `400`/`404`/`405` bodies quoted in section 3 were
+  captured live; the transport-neutral runtime status mapping is unit tested.
 - CLI contract: default `127.0.0.1:8788`, explicit `--host`/`--port` forwarded,
   `--server` rejected with `--model`, `--session`, `--continue`, `--resume`,
   `--tui-mode`, and a prompt argument; invalid ports rejected at parse time.
-- HTTP contract (unit tested against a scripted Runtime): session pages with
-  query forwarding, transcript pages after session-id validation, `400` for
-  invalid query values, `404` for unknown sessions and paths, `405` for
-  non-`GET`, and the non-loopback bind warning.
+- HTTP contract (unit tested against a scripted Runtime): query forwarding for
+  both pages, transcript pages after session-id validation, `400` for invalid
+  query values, `404` for unknown sessions and paths, `405` for non-`GET`, and
+  the non-loopback bind warning.
 
-Not verified for the session server: access from a separate host over a
-non-loopback bind, and a data directory with existing Sessions (the live check
-ran against a fresh directory).
+Not verified for the session server: reaching a non-loopback bind from a
+separate machine (the live LAN check ran from the same host), and Windows or
+macOS hosts.
 
 Not verified: Windows and macOS hosts, enterprise Copilot accounts, MCP servers
 passed in `session/new`, `session/cancel` against a running turn, and clients

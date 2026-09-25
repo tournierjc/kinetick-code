@@ -173,20 +173,41 @@ async function sendRuntimeJson(
   try {
     payload = await load();
   } catch (error) {
-    const message = toErrorMessage(error);
-    const status = isSessionLookupMiss(error)
-      ? 404
-      : error instanceof InvalidTuiServerQueryError
-        ? 400
-        : 500;
-    sendJson(response, status, { error: message });
+    sendJson(response, toHttpStatus(error), { error: toErrorMessage(error) });
     return;
   }
   sendJson(response, 200, payload);
 }
 
+/**
+ * Runtime failures carry a transport-neutral status (`AppError.status`) when
+ * the application layer raises them, but the session-owner layer throws plain
+ * `Error("Session not found: …")` — both are 404 at this boundary, the
+ * session-access adapter's own lookup miss included. Query-validation errors
+ * are 400, and anything else fails closed as 500.
+ */
+function toHttpStatus(error: unknown): number {
+  if (error instanceof InvalidTuiServerQueryError) return 400;
+  if (error && typeof error === 'object' && 'status' in error) {
+    const status = (error as { readonly status?: unknown }).status;
+    if (
+      typeof status === 'number' &&
+      Number.isSafeInteger(status) &&
+      status >= 400 &&
+      status <= 599
+    ) {
+      return status;
+    }
+  }
+  if (isSessionLookupMiss(error)) return 404;
+  return 500;
+}
+
 function isSessionLookupMiss(error: unknown): boolean {
-  return error instanceof Error && /did not return session/iu.test(error.message);
+  return (
+    error instanceof Error &&
+    /(?:did not return session|session not found)/iu.test(error.message)
+  );
 }
 
 function parseSessionPageInput(query: URLSearchParams): ListTuiSessionPageInput {

@@ -20,6 +20,14 @@ interface RecordedRuntime {
   readonly messageInputs: { sessionId: string; input?: { limit?: number; before?: string } }[];
 }
 
+/** Mirrors the Runtime's transport-neutral failure: `AppError(status, key, message)`. */
+function sessionNotFound(sessionId: string): Error {
+  return Object.assign(new Error(`Session not found: ${sessionId}`), {
+    status: 404,
+    key: 'local_session_not_found',
+  });
+}
+
 function createFakeRuntime(): RecordedRuntime {
   const sessions: TuiSession[] = [
     { sessionId: 'session-1', title: 'Fix the parser', workspaceDir: '/workspace' },
@@ -38,7 +46,7 @@ function createFakeRuntime(): RecordedRuntime {
       },
       async getSession(sessionId: string): Promise<TuiSession> {
         const session = sessions.find((candidate) => candidate.sessionId === sessionId);
-        if (!session) throw new Error(`Runtime did not return session ${sessionId}.`);
+        if (!session) throw sessionNotFound(sessionId);
         return session;
       },
       async listMessagePage(sessionId: string, input): Promise<TuiMessagePage> {
@@ -138,8 +146,48 @@ describe('session server HTTP contract', () => {
     const missing = await get('/sessions/session-missing');
     expect(missing.status).toBe(404);
     expect(((await missing.json()) as { error: string }).error).toContain(
-      'did not return session session-missing',
+      'Session not found: session-missing',
     );
+  });
+
+  it('honours a transport-neutral runtime status on failures', async () => {
+    recorded!.runtime.getSession = async () => {
+      throw Object.assign(new Error('This session already has a handoff proposal awaiting approval.'), {
+        status: 409,
+        key: 'HANDOFF_PREFLIGHT_DENIED',
+      });
+    };
+    await start();
+    const response = await get('/sessions/session-1');
+    expect(response.status).toBe(409);
+  });
+
+  it('fails closed as 500 for a failure without a status', async () => {
+    recorded!.runtime.getSession = async () => {
+      throw new Error('database is locked');
+    };
+    await start();
+    const response = await get('/sessions/session-1');
+    expect(response.status).toBe(500);
+    expect(((await response.json()) as { error: string }).error).toContain('database is locked');
+  });
+
+  it('maps the adapter lookup miss to 404 without a runtime status', async () => {
+    recorded!.runtime.getSession = async (sessionId: string) => {
+      throw new Error(`Runtime did not return session ${sessionId}.`);
+    };
+    await start();
+    const response = await get('/sessions/session-1');
+    expect(response.status).toBe(404);
+  });
+
+  it('maps the session-owner plain not-found error to 404', async () => {
+    recorded!.runtime.getSession = async (sessionId: string) => {
+      throw new Error(`Session not found: ${sessionId}`);
+    };
+    await start();
+    const response = await get('/sessions/session-1');
+    expect(response.status).toBe(404);
   });
 
   it('serves a session transcript after validating the session id', async () => {
