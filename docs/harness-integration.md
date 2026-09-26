@@ -176,8 +176,11 @@ by the mode alone — the mode decides how a matched rule is honoured.
 
 `kcode --server` starts the Runtime without the TUI and serves Sessions over
 HTTP, so an external application — a webapp, a mobile client, a dashboard —
-can read what is in the data directory. The server is read-only today: it
-lists Sessions and replays transcripts, it cannot start turns.
+can browse, drive, and supervise what is in the data directory. The server
+reads Sessions, streams replies, starts turns, answers interactive prompts,
+and exposes the Runtime surface (queue, delegation, skills, models, goals).
+Like every other surface, it has no authentication: treat the bind address as
+a trust boundary.
 
 ### Starting the server
 
@@ -198,30 +201,88 @@ one, and omitting it serves the user's own Sessions.
 There is no authentication. The default bind keeps the server on the loopback
 interface; binding `0.0.0.0` or any non-loopback address prints a warning on
 startup, because every client that can reach the address can read all Sessions
-in the data directory. Treat a non-loopback bind as a local-network trust
-decision until authentication lands.
+in the data directory and run turns on them. The write verbs (prompt, abort,
+permission replies, delete) make a non-loopback bind an execution surface:
+treat it as a local-network trust decision until authentication lands.
 
 ### Endpoint reference
 
-Every endpoint is `GET`, answers JSON with `content-type: application/json;
-charset=utf-8` and `cache-control: no-store`, and takes its parameters in the
-query string. `<base>` is the bind address — for example `http://127.0.0.1:8788`
-or, from another device on the LAN, `http://192.168.1.50:9430`.
+Read endpoints answer JSON with `content-type: application/json;
+charset=utf-8` and `cache-control: no-store`, and take their parameters in the
+query string. Write endpoints take a JSON body (max 4 MiB). `<base>` is the
+bind address — for example `http://127.0.0.1:8788` or, from another device on
+the LAN, `http://192.168.1.50:9430`.
 
-| Path | Result |
-| --- | --- |
-| `/` | Server descriptor: name, version, and endpoint paths. |
-| `/health` | Liveness: `{"ok":true,"version":"0.5.3"}`. |
-| `/sessions` | Session page, most recently updated first. Query: `limit`, `cursor`, `agent`, `allAgents`, `includeArchived`, `onlyArchived`, `includeHidden`. |
-| `/sessions/<id>` | One Session. |
-| `/sessions/<id>/messages` | Transcript page; the first page holds the newest messages. Query: `limit`, `before`. |
+| Method | Path | Result |
+| --- | --- | --- |
+| `GET` | `/` | Server descriptor: name, version, and endpoint paths. |
+| `GET` | `/health` | Liveness: `{"ok":true,"version":"0.5.3"}`. |
+| `GET` | `/sessions` | Session page, most recently updated first. Query: `limit`, `cursor`, `agent`, `allAgents`, `includeArchived`, `onlyArchived`, `includeHidden`. |
+| `POST` | `/sessions` | Create a Session. Body: `{workspaceDir, title?, parentSessionId?, visibility?, purpose?}`. |
+| `GET` | `/sessions/<id>` | One Session. |
+| `PATCH` | `/sessions/<id>` | Rename. Body: `{title}`. |
+| `DELETE` | `/sessions/<id>` | Delete (falls back to archive when the Runtime has no hard delete). |
+| `GET` | `/sessions/<id>/messages` | Transcript page; the first page holds the newest messages. Query: `limit`, `before`. |
+| `POST` | `/sessions/<id>/prompt` | Start a turn. Body: `{content, model?}`. Answers `text/event-stream` of `TuiStreamEvent`s (`session-status`, `delta`, `message`, `done`, `error`, `end`). |
+| `POST` | `/sessions/<id>/abort` | Abort the active turn. Body: `{turnId?, reason?}`. |
+| `POST` | `/sessions/<id>/steer` | Steer the running turn. Body: `{content}`. |
+| `GET` | `/sessions/<id>/active-run` | Active-run snapshot (`running`, `decision-blocked`, `terminal`, `idle`). |
+| `GET` | `/sessions/<id>/interactions` | What needs user input: pending questionnaire, latest plan review, session permissions, active run. |
+| `POST` | `/sessions/<id>/questionnaires/<requestId>/reply` | Answer a questionnaire. Body: `{answers:[{stepId, selectedOptionIds?, selectedOther?, otherText?, skipped?}]}`. |
+| `POST` | `/sessions/<id>/questionnaires/<requestId>/dismiss` | Dismiss a questionnaire. |
+| `GET` | `/permissions` | All pending permission requests (Runtime-wide). |
+| `POST` | `/permissions/<agentName>/<requestId>/reply` | Answer a permission. Body: `{decision:"allowOnce"|"allowAlways"|"deny"}`. |
+| `GET` | `/sessions/<id>/delegation` | Delegation snapshot: subagent members with `queued`/`running`/`completed`/`failed`/`stopped` status. |
+| `POST` | `/sessions/<id>/delegation/stop` | Stop the delegation tree. |
+| `GET` | `/sessions/<id>/background-tasks` | Background tasks owned by the Session. |
+| `GET` | `/sessions/<id>/queue` | Queue snapshot (`items`, `paused`, `pendingCount`). |
+| `POST` | `/sessions/<id>/queue/enqueue` | Enqueue a follow-up. Body: `{content}`. |
+| `POST` | `/sessions/<id>/queue/continue` | Resume a paused queue. |
+| `POST` | `/sessions/<id>/queue/steer/<itemId>` | Steer a queued item into the live turn. |
+| `POST` | `/sessions/<id>/queue/delete/<itemId>` | Drop a queued item. |
+| `GET` | `/sessions/<id>/usage` | Token/cost usage summary. |
+| `GET` | `/sessions/<id>/context` | Context-window snapshot. |
+| `GET` | `/sessions/<id>/goal` · `POST` · `PATCH` · `DELETE` | Read / create / patch / clear the session goal. |
+| `GET` | `/sessions/<id>/model` · `POST` | List models for the Session / select one. Body: `{model:{providerId, modelId, variant?}}`. |
+| `GET` | `/sessions/<id>/fork` · `POST` | Fork options / fork. Body: `{title?, assistantMessageId?, useSuggestedTitle?, createIsolatedWorktree?}`. |
+| `POST` | `/sessions/<id>/archive` | Archive/unarchive. Body: `{archived}`. |
+| `POST` | `/sessions/<id>/pin` | Pin/unpin. Body: `{pinned}`. |
+| `GET` | `/sessions/<id>/rewind-preview/<userMessageId>` · `POST /sessions/<id>/rewind` | Rewind preview / rewind. Body: `{userMessageId, rewindTurnDiff?}`. |
+| `GET` | `/skills` | Skill list. Query: `agent`, `keyword`, `workspaceDir`. |
+| `GET` | `/mcp` | MCP server list. Query: `keyword`, `sessionId`. |
+| `GET` | `/status` | Runtime diagnostics, account status, permission mode, model roster. |
+| `GET` | `/events` | Runtime event stream (`text/event-stream`): `questionnaire.ask`, `permission.ask`, `session.created`, `session.queue.updated`, … One subscription per connection; `: ping` keepalives every 15 s. |
+
+Every write endpoint beyond the core reads is capability-optional: when the
+active Runtime does not expose a capability, its endpoints answer `404` with
+`{"error":"<capability> is not supported by this runtime"}` rather than
+failing in some other way. A client probes with `GET /` plus a `404` check.
+
+The event stream is the mobile-client backbone: subscribe to `GET /events`
+once, and a `questionnaire.ask` / `permission.ask` event is exactly the moment
+a notification belongs on the phone. The per-session `interactions` probe
+answers the same state on demand (poll fallback when SSE is unavailable).
 
 ```console
 $ curl http://127.0.0.1:9430/
-{"server":"kinetick-code-session-server","version":"0.5.3","health":"/health","sessions":"/sessions"}
+{"server":"kinetick-code-session-server","version":"0.5.3","health":"/health","sessions":"/sessions","events":"/events (SSE)","prompt":"POST /sessions/:id/prompt (SSE turn stream)"}
 
 $ curl http://127.0.0.1:9430/sessions?limit=5
 {"sessions":[{"sessionId":"mvs_4a86acbe847b4bc28567046796a1b791","agentName":"mavis","title":"Reply with the single word: pong","sessionType":"branch","sessionKind":"conversation","visibility":"visible","archived":false,"workspaceDir":"/opt/data/work/minimax-code","createdAt":1790355644115,"updatedAt":1790355644468,"status":"idle","model":{"providerId":"minimax","modelId":"MiniMax-M3","variant":"thinking"}}],"hasMore":false}
+
+$ curl -N -X POST http://127.0.0.1:9430/sessions/mvs_4a86acbe847b4bc28567046796a1b791/prompt \
+    -H 'content-type: application/json' -d '{"content":"Reply with the single word: pong"}'
+event: session-status
+data: {"type":"session-status","status":"started","turnId":"turn_..."}
+
+event: delta
+data: {"type":"delta","turnId":"turn_...","content":"pong"}
+
+event: done
+data: {"type":"done","turnId":"turn_..."}
+
+event: end
+data: {}
 ```
 
 `/sessions` and `/sessions/<id>/messages` are pages. Session pages start with
@@ -256,8 +317,8 @@ branch on:
 
 ### Writing a client
 
-The whole API is three GETs, so a client that shows the latest Session and its
-transcript is roughly:
+A client that shows the latest Session, drives it, and reacts to input-needed
+events is roughly:
 
 ```js
 const base = 'http://127.0.0.1:8788';
@@ -275,6 +336,15 @@ const { messages } = await get(
   `/sessions/${encodeURIComponent(session.sessionId)}/messages?limit=50`,
 );
 for (const message of messages) console.log(`${message.role}: ${message.content}`);
+
+// Notifications: the event stream tells you when the agent needs a human.
+const events = await fetch(`${base}/events`);
+for await (const chunk of events.body) {
+  const text = new TextDecoder().decode(chunk);
+  if (text.includes('questionnaire.ask') || text.includes('permission.ask')) {
+    console.log('user input needed');
+  }
+}
 ```
 
 The same walkthrough from Python:
@@ -296,10 +366,12 @@ parse them.
 
 ### What the server does not do (yet)
 
-The read-only surface is deliberate. An external client cannot start turns or
-stream replies, cannot rename, archive, fork, or delete Sessions, and the
-server has no authentication. Those are the next steps; until then the server
-answers only what the tables above describe.
+There is no authentication, no TLS, and no origin check: any client that can
+reach the bind address can read Sessions, run turns, and answer permissions.
+There is no per-turn subscription endpoint that replays a turn started by
+another connection (`/events` carries Runtime events, not deltas), so a second
+device joining a live turn polls the transcript until it settles. Skill writes
+(create/edit/delete) are not exposed; `GET /skills` is read-only.
 
 ## 4. Notes for callers
 
