@@ -310,17 +310,17 @@ describe("TuiProviderOnboarding", () => {
     onboarding.handleInput("\r");
     onboarding.handleInput("https://gateway.example/v1");
     onboarding.handleInput("\r");
-    onboarding.handleInput("\r");
+    onboarding.handleInput("\r"); // OpenAI Compatible (default format).
+    onboarding.handleInput("\r"); // Manual model entry without discovery.
     onboarding.handleInput("model-a");
     onboarding.handleInput("\r");
-    onboarding.handleInput("secret");
-    onboarding.handleInput("\r");
 
+    // Fork flow (fe24b27): the credential step only exists when models are
+    // imported; a manual model saves the endpoint without an API key.
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(onSave).toHaveBeenCalledWith({
       name: "Team Gateway",
       baseUrl: "https://gateway.example/v1",
-      apiKey: "secret",
       apiFormat: "openai-completions",
       models: [
         {
@@ -362,13 +362,15 @@ describe("TuiProviderOnboarding", () => {
     expect(urlStep).toContain("http://localhost:11434/v1");
 
     onboarding.handleInput("\r");
-    onboarding.handleInput("qwen3-local");
-    onboarding.handleInput("\r");
-    const keyStep = stripAnsi(onboarding.render(90).join("\n"));
-    expect(keyStep).toContain("API Key (optional)");
-    expect(keyStep).toContain("left empty");
 
-    // Enter on the empty field connects the endpoint with no credential.
+    // The fork's local endpoint is credential-free by design: the protocol and
+    // key steps are skipped, the model ID prompt follows the URL directly, and
+    // the save carries no credential.
+    const modelStep = stripAnsi(onboarding.render(90).join("\n"));
+    expect(modelStep).toContain("Model ID");
+    expect(modelStep).not.toContain("API Key");
+
+    onboarding.handleInput("qwen3-local");
     onboarding.handleInput("\r");
 
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
@@ -408,9 +410,10 @@ describe("TuiProviderOnboarding", () => {
     onboarding.handleInput("https://gateway.example/v1");
     onboarding.handleInput("\r");
     onboarding.handleInput("\r");
-    onboarding.handleInput("model-a");
-    onboarding.handleInput("\r");
     onboarding.handleInput("bad-key");
+    onboarding.handleInput("\r");
+    onboarding.handleInput("\r"); // Manual model entry without discovery.
+    onboarding.handleInput("model-a");
     onboarding.handleInput("\r");
 
     await vi.waitFor(() =>
@@ -643,4 +646,192 @@ describe("preset endpoint editing", () => {
     );
     expect(onSave).not.toHaveBeenCalled();
   });
+});
+
+function enterCustomCredentials(onboarding: TuiProviderOnboarding): void {
+  // Fork flow (fe24b27): name -> URL -> protocol (OpenAI Compatible default)
+  // -> model source. The API key is captured on the model-source step: esc
+  // enters the key editor, enter stores the draft and re-opens the source list.
+  for (const input of ["\r", "Gateway", "\r", "https://gateway.example/v1", "\r", "\r"])
+    onboarding.handleInput(input);
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import models from /models");
+  onboarding.handleInput("\u001b");
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("API Key");
+  onboarding.handleInput("synthetic-discovery-key");
+  expect(stripAnsi(onboarding.render(100).join("\n"))).not.toContain("synthetic-discovery-key");
+  onboarding.handleInput("\r");
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import models from /models");
+}
+
+describe("custom provider model import", () => {
+  it("discovers with credentials before requiring a model and saves all unique models after selection", async () => {
+    const onDiscover = vi.fn(async () => [
+      { modelId: " model-a ", displayName: "Model A" },
+      { modelId: "model-b", displayName: "Model B" },
+      { modelId: "model-a" },
+      { modelId: " " },
+    ]);
+    const onSave = vi.fn(async () => ({ success: true }));
+    const onComplete = vi.fn();
+    const onboarding = new TuiProviderOnboarding({
+      templates: [],
+      onDiscover,
+      onSave,
+      onComplete,
+      onCancel: vi.fn(),
+      requestRender: vi.fn(),
+    });
+    enterCustomCredentials(onboarding);
+    expect(stripAnsi(onboarding.render(120).join("\n"))).toContain("Import models from /models");
+    onboarding.handleInput("\r");
+    await vi.waitFor(() =>
+      expect(stripAnsi(onboarding.render(120).join("\n"))).toContain("Import 2 models"),
+    );
+    expect(onDiscover).toHaveBeenCalledWith({
+      name: "Gateway",
+      baseUrl: "https://gateway.example/v1",
+      apiKey: "synthetic-discovery-key",
+      apiFormat: "openai-completions",
+    });
+    expect(onSave).not.toHaveBeenCalled();
+    onboarding.handleInput("model-b");
+    onboarding.handleInput("\r");
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: "synthetic-discovery-key",
+        modelId: "model-b",
+        saveAndUse: true,
+        models: [
+          { modelId: "model-a", displayName: "Model A", configurationSource: "discovered" },
+          { modelId: "model-b", displayName: "Model B", configurationSource: "discovered" },
+        ],
+      }),
+    );
+  });
+
+  it.each(["error", "empty"])(
+    "keeps credentials and manual entry available after %s discovery",
+    async (failure) => {
+      const onDiscover = vi.fn(async () => {
+        if (failure === "error") throw new Error("401 synthetic-discovery-key");
+        return [];
+      });
+      const onSave = vi.fn(async () => ({ success: true }));
+      const onboarding = new TuiProviderOnboarding({
+        templates: [],
+        onDiscover,
+        onSave,
+        onComplete: vi.fn(),
+        onCancel: vi.fn(),
+        requestRender: vi.fn(),
+      });
+      enterCustomCredentials(onboarding);
+      onboarding.handleInput("\r");
+      await vi.waitFor(() =>
+        expect(stripAnsi(onboarding.render(120).join("\n"))).toContain(
+          failure === "error" ? "Couldn't import models" : "No models returned",
+        ),
+      );
+      const rendered = stripAnsi(onboarding.render(120).join("\n"));
+      expect(rendered).not.toContain("synthetic-discovery-key");
+      expect(onSave).not.toHaveBeenCalled();
+      onboarding.handleInput("\u001b[B");
+      onboarding.handleInput("\r");
+      onboarding.handleInput("manual-model");
+      onboarding.handleInput("\r");
+      await vi.waitFor(() => expect(onSave).toHaveBeenCalledOnce());
+      expect(onSave).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: "synthetic-discovery-key",
+          modelId: "manual-model",
+          models: [
+            expect.objectContaining({ modelId: "manual-model", configurationSource: "manual" }),
+          ],
+        }),
+      );
+    },
+  );
+
+  it("returns to API key editing and retries discovery with the replacement key", async () => {
+    const onDiscover = vi.fn(async () => []);
+    const onboarding = new TuiProviderOnboarding({
+      templates: [],
+      onDiscover,
+      onSave: vi.fn(),
+      onComplete: vi.fn(),
+      onCancel: vi.fn(),
+      requestRender: vi.fn(),
+    });
+    enterCustomCredentials(onboarding);
+    onboarding.handleInput("\r");
+    await vi.waitFor(() =>
+      expect(stripAnsi(onboarding.render(120).join("\n"))).toContain("No models returned"),
+    );
+    onboarding.handleInput("\u001b");
+    onboarding.handleInput("replacement-key");
+    onboarding.handleInput("\r");
+    onboarding.handleInput("\r");
+    await vi.waitFor(() => expect(onDiscover).toHaveBeenCalledTimes(2));
+    expect(onDiscover).toHaveBeenLastCalledWith(
+      expect.objectContaining({ apiKey: "replacement-key" }),
+    );
+  });
+});
+
+it("keeps the imported list after a failed connection test and saves only once while busy", async () => {
+  let finishDiscovery!: (models: { modelId: string }[]) => void;
+  const onDiscover = vi.fn(
+    () =>
+      new Promise<{ modelId: string }[]>((resolve) => {
+        finishDiscovery = resolve;
+      }),
+  );
+  const onSave = vi
+    .fn()
+    .mockResolvedValueOnce({
+      success: false,
+      status: { state: "failed", lastErrorMessage: "unsupported model synthetic-discovery-key" },
+    })
+    .mockResolvedValueOnce({ success: true });
+  const onComplete = vi.fn();
+  const onboarding = new TuiProviderOnboarding({
+    templates: [],
+    onDiscover,
+    onSave,
+    onComplete,
+    onCancel: vi.fn(),
+    requestRender: vi.fn(),
+  });
+  enterCustomCredentials(onboarding);
+  onboarding.handleInput("\r");
+  onboarding.handleInput("\r");
+  expect(onDiscover).toHaveBeenCalledOnce();
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Importing models");
+  finishDiscovery([{ modelId: "model-a" }, { modelId: "model-b" }]);
+  await vi.waitFor(() =>
+    expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import 2 models"),
+  );
+  expect(onboarding.render(40).every((line) => visibleWidth(line) <= 40)).toBe(true);
+  onboarding.handleInput("\r");
+  onboarding.handleInput("\r");
+  await vi.waitFor(() =>
+    expect(stripAnsi(onboarding.render(120).join("\n"))).toContain("Changes were not saved"),
+  );
+  expect(onSave).toHaveBeenCalledOnce();
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(stripAnsi(onboarding.render(120).join("\n"))).not.toContain("synthetic-discovery-key");
+  onboarding.handleInput("\u001b[B");
+  onboarding.handleInput("\r");
+  await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      modelId: "model-b",
+      apiKey: "synthetic-discovery-key",
+      models: [
+        expect.objectContaining({ modelId: "model-a" }),
+        expect.objectContaining({ modelId: "model-b" }),
+      ],
+    }),
+  );
 });

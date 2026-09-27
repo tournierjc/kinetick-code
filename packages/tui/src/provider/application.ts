@@ -4,6 +4,7 @@ import type {
   KcodeCodexOAuthLoginOptions,
   KcodeCodexOAuthStatus,
   KcodeCreateProviderInput,
+  KcodeDiscoverProviderModelsInput,
   KcodeMiniMaxModelSource,
   KcodeProviderRuntimePort,
   KcodeSaveProviderCandidateInput,
@@ -132,6 +133,10 @@ export class KcodeProviderApplication {
 
   saveCandidate(input: KcodeSaveProviderCandidateInput): Promise<KcodeSaveProviderCandidateResult> {
     return this.port.saveUserModelProviderCandidate(input);
+  }
+
+  discoverModels(input: KcodeDiscoverProviderModelsInput) {
+    return this.port.discoverUserModelsCandidate(input);
   }
 
   async refreshModels(provider: KcodeProviderView): Promise<number> {
@@ -382,6 +387,7 @@ function normalizeConfiguredProvider(
 
 export type {
   KcodeCreateProviderInput,
+  KcodeDiscoverProviderModelsInput,
   KcodeProviderRuntimePort,
   KcodeProviderSnapshot,
   KcodeUpdateProviderInput,

@@ -879,6 +879,7 @@ export class TuiFeatureFlow {
       providers,
       ...(catalogWarning ? { catalogWarning } : {}),
       onSave: (input) => this.providerApplication.saveCandidate(input),
+      onDiscover: (input) => this.providerApplication.discoverModels(input),
       onComplete: (result) =>
         this.completeProviderOnboarding(onboarding, result, sessionId, sessionGeneration, returnTo),
       onCancel: () => {

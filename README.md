@@ -330,6 +330,18 @@ If you have an idea or proposal, please [open an issue](https://github.com/tourn
 
 This repository covers the Kinetick Code terminal CLI: the TUI, the headless CLI, and ACP. To report a problem or ask a question, [open an issue](https://github.com/tournierjc/kinetick-code/issues/new/choose) on this repository. For a bug, include `kcode --version`, your interface, and a minimal reproduction. Remove credentials and private project content from reports.
 
+## Feedback and contact
+
+| Channel | Use it for |
+| --- | --- |
+| [GitHub Issues](https://github.com/MiniMax-AI/minimax-code/issues/new/choose) | Public bug reports, feature requests, and questions about the CLI or desktop app. |
+| [MiniMaxCode@minimax.io](mailto:MiniMaxCode@minimax.io) | General feedback and support inquiries. |
+| [security.mcode@minimax.io](mailto:security.mcode@minimax.io) | Private vulnerability reports. Send reproduction details and redacted evidence here; see [Security](SECURITY.md). |
+| [Discord](https://minimax.io/discord) | Community discussion and feedback. |
+| [Feishu feedback group QR code](https://cdn.hailuoai.com/hailuo-video-web/public_assets/minimax_code_feishu_group_url.png) | Chinese-language community feedback. Scan with Feishu, or find the QR code in the Chinese desktop app under the user menu → **Contact us → Feishu**. |
+
+Follow [MiniMax on X](https://x.com/MiniMaxAgent) for updates. Keep vulnerability details, credentials, and private project content out of public issues and community chats.
+
 ## License
 
 Kinetick Code is a fork of [MiniMax Code](https://github.com/MiniMax-AI/minimax-code) (`MiniMax-AI/minimax-code`), Copyright (c) 2026 MiniMax Code. Upstream is released under the MIT license, and **this fork keeps the same [MIT license](LICENSE)** for the entire codebase — upstream code and Kinetick Code's changes alike. All credit for the original project belongs to MiniMax Code. Existing file-level and package-level licenses remain in place. See [third-party notices](THIRD_PARTY_NOTICES.md) and [license status](LICENSE-STATUS.md) for dependencies, assets, and `mcode-tools`.

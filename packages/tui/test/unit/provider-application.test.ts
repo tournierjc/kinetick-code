@@ -574,6 +574,21 @@ describe('saved provider model refresh', () => {
   });
 });
 
+it('forwards unsaved discovery credentials without saving the candidate', async () => {
+  const port = createPort();
+  const candidate = {
+    name: 'Draft',
+    baseUrl: 'https://draft.example/v1',
+    apiKey: 'synthetic-key',
+    apiFormat: 'openai-completions' as const,
+  };
+  port.discoverUserModelsCandidate.mockResolvedValue([{ modelId: 'new-model' }]);
+  await expect(new KcodeProviderApplication(port).discoverModels(candidate)).resolves.toEqual([
+    { modelId: 'new-model' },
+  ]);
+  expect(port.discoverUserModelsCandidate).toHaveBeenCalledWith(candidate);
+  expect(port.saveUserModelProviderCandidate).not.toHaveBeenCalled();
+});
 
 describe('defaultProviderApiFormatForBaseUrl', () => {
   it('defaults OpenRouter and DeepSeek hosts to openai-completions', () => {

@@ -287,11 +287,12 @@ export interface KcodeSaveProviderCandidateInput extends Omit<
   readonly skipConnectionTest?: boolean;
 }
 
-export interface KcodeDiscoverProviderModelsInput {
-  readonly providerId: string;
-  readonly expectedRevision: string;
+export type KcodeDiscoverProviderModelsInput = {
   readonly baseUrl: string;
-}
+} & (
+  | { readonly providerId: string; readonly expectedRevision: string }
+  | { readonly name: string; readonly apiKey: string; readonly apiFormat: KcodeProviderApiFormat }
+);
 
 export interface KcodeSaveProviderCandidateResult {
   readonly success: boolean;
