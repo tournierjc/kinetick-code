@@ -310,18 +310,17 @@ describe("TuiProviderOnboarding", () => {
     onboarding.handleInput("\r");
     onboarding.handleInput("https://gateway.example/v1");
     onboarding.handleInput("\r");
-    onboarding.handleInput("\r");
-    onboarding.handleInput("secret");
-    onboarding.handleInput("\r");
+    onboarding.handleInput("\r"); // OpenAI Compatible (default format).
     onboarding.handleInput("\r"); // Manual model entry without discovery.
     onboarding.handleInput("model-a");
     onboarding.handleInput("\r");
 
+    // Fork flow (fe24b27): the credential step only exists when models are
+    // imported; a manual model saves the endpoint without an API key.
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(onSave).toHaveBeenCalledWith({
       name: "Team Gateway",
       baseUrl: "https://gateway.example/v1",
-      apiKey: "secret",
       apiFormat: "openai-completions",
       models: [
         {
@@ -363,13 +362,15 @@ describe("TuiProviderOnboarding", () => {
     expect(urlStep).toContain("http://localhost:11434/v1");
 
     onboarding.handleInput("\r");
-    onboarding.handleInput("qwen3-local");
-    onboarding.handleInput("\r");
-    const keyStep = stripAnsi(onboarding.render(90).join("\n"));
-    expect(keyStep).toContain("API Key (optional)");
-    expect(keyStep).toContain("left empty");
 
-    // Enter on the empty field connects the endpoint with no credential.
+    // The fork's local endpoint is credential-free by design: the protocol and
+    // key steps are skipped, the model ID prompt follows the URL directly, and
+    // the save carries no credential.
+    const modelStep = stripAnsi(onboarding.render(90).join("\n"));
+    expect(modelStep).toContain("Model ID");
+    expect(modelStep).not.toContain("API Key");
+
+    onboarding.handleInput("qwen3-local");
     onboarding.handleInput("\r");
 
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
@@ -648,12 +649,18 @@ describe("preset endpoint editing", () => {
 });
 
 function enterCustomCredentials(onboarding: TuiProviderOnboarding): void {
+  // Fork flow (fe24b27): name -> URL -> protocol (OpenAI Compatible default)
+  // -> model source. The API key is captured on the model-source step: esc
+  // enters the key editor, enter stores the draft and re-opens the source list.
   for (const input of ["\r", "Gateway", "\r", "https://gateway.example/v1", "\r", "\r"])
     onboarding.handleInput(input);
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import models from /models");
+  onboarding.handleInput("\u001b");
   expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("API Key");
   onboarding.handleInput("synthetic-discovery-key");
   expect(stripAnsi(onboarding.render(100).join("\n"))).not.toContain("synthetic-discovery-key");
   onboarding.handleInput("\r");
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import models from /models");
 }
 
 describe("custom provider model import", () => {

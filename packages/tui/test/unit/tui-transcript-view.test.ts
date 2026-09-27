@@ -1332,8 +1332,8 @@ describe('TranscriptView', () => {
     (description) => {
       const original = getTuiThemeSnapshot();
       const palette =
-        original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+        original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+      applyTuiRenderTheme(KCODE_DARK_THEME, 3);
       try {
         const view = new TranscriptView(
           () => [
