@@ -204,13 +204,17 @@ describe('session server HTTP contract', () => {
     expect(recorded!.messageInputs).toHaveLength(1);
   });
 
-  it('rejects unknown paths and non-GET methods', async () => {
+  it('rejects unknown paths and unsupported methods', async () => {
     await start();
     expect((await get('/sessions/session-1/unknown')).status).toBe(404);
     expect((await get('/nope')).status).toBe(404);
-    const post = await get('/sessions', { method: 'POST' });
-    expect(post.status).toBe(405);
-    expect(((await post.json()) as { error: string }).error).toContain('only GET');
+    // The server is writable: POST /sessions creates a session, so an
+    // unsupported verb on it is 405, and unknown sub-resources stay 404.
+    const put = await get('/sessions', { method: 'PUT' });
+    expect(put.status).toBe(405);
+    expect(((await put.json()) as { error: string }).error).toContain('method not allowed');
+    const putSession = await get('/sessions/session-1', { method: 'PUT' });
+    expect(putSession.status).toBe(405);
   });
 
   it('warns when binding a non-loopback host', async () => {
@@ -235,5 +239,148 @@ describe('session server HTTP contract', () => {
     await get('/health');
     await server.close();
     await expect(get('/health')).rejects.toThrow();
+  });
+
+  // --- Write surface -------------------------------------------------------
+
+  async function startWritable(): Promise<void> {
+    const writable = createFakeRuntime();
+    const calls: string[] = [];
+    Object.assign(writable.runtime, {
+      async createSession(input: { workspaceDir: string; title?: string }) {
+        calls.push(`create:${input.workspaceDir}:${input.title ?? ''}`);
+        return { sessionId: 'session-3', title: input.title, workspaceDir: input.workspaceDir };
+      },
+      async renameSession(sessionId: string, title: string) {
+        calls.push(`rename:${sessionId}:${title}`);
+        return { sessionId, title, workspaceDir: '/workspace' };
+      },
+      async deleteSession(sessionId: string) {
+        calls.push(`delete:${sessionId}`);
+      },
+      async abortSession(req: { id: string }) {
+        calls.push(`abort:${req.id}`);
+        return true;
+      },
+      async replyPermission(agentName: string, requestId: string, decision: string) {
+        calls.push(`permission:${agentName}:${requestId}:${decision}`);
+        return true;
+      },
+      async listPendingPermissions() {
+        return [{ requestId: 'perm-1', toolName: 'bash', sessionId: 'session-1' }];
+      },
+      async *sendMessage(req: { id: string; content: string }) {
+        calls.push(`send:${req.id}:${req.content}`);
+        yield { type: 'session-status', status: 'started', turnId: 'turn-1' };
+        yield { type: 'delta', turnId: 'turn-1', content: 'hello' };
+        yield { type: 'done', turnId: 'turn-1' };
+      },
+      async getDelegationSnapshot(rootSessionId: string) {
+        return {
+          schemaVersion: 1 as const,
+          rootSessionId,
+          members: [{ sessionId: 'child-1', parentSessionId: rootSessionId, status: 'running' as const }],
+        };
+      },
+      async listSkills() {
+        return { skills: [{ name: 'pdf', description: 'work with pdf files' }] };
+      },
+    });
+    recorded = writable;
+    (recorded as { runtime: Record<string, unknown> }).runtime = writable.runtime;
+    handle = await startTuiServerHttp({
+      runtime: writable.runtime,
+      version: 'test-version',
+      host: '127.0.0.1',
+      port: 0,
+      logger: { info: () => undefined, warn: () => undefined },
+    });
+    void calls;
+  }
+
+  it('creates, renames, and deletes sessions through the write verbs', async () => {
+    await startWritable();
+    const created = await get('/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ workspaceDir: '/workspace', title: 'New work' }),
+    });
+    expect(created.status).toBe(200);
+    const renamed = await get('/sessions/session-1', {
+      method: 'PATCH',
+      body: JSON.stringify({ title: 'Renamed' }),
+    });
+    expect(renamed.status).toBe(200);
+    const deleted = await get('/sessions/session-2', { method: 'DELETE' });
+    expect(deleted.status).toBe(200);
+    const badCreate = await get('/sessions', { method: 'POST', body: JSON.stringify({}) });
+    expect(badCreate.status).toBe(400);
+  });
+
+  it('streams a prompt turn as SSE and aborts sessions', async () => {
+    await startWritable();
+    const response = await get('/sessions/session-1/prompt', {
+      method: 'POST',
+      body: JSON.stringify({ content: 'do the thing' }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    const body = await response.text();
+    expect(body).toContain('event: session-status');
+    expect(body).toContain('event: delta');
+    expect(body).toContain('event: done');
+    expect(body).toContain('event: end');
+
+    const aborted = await get('/sessions/session-1/abort', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(aborted.status).toBe(200);
+    expect(((await aborted.json()) as { ok: boolean }).ok).toBe(true);
+
+    const missingContent = await get('/sessions/session-1/prompt', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(missingContent.status).toBe(400);
+  });
+
+  it('serves permissions, delegation, and skills resources', async () => {
+    await startWritable();
+    const pending = await get('/permissions');
+    expect(pending.status).toBe(200);
+    expect(await pending.json()).toEqual([
+      { requestId: 'perm-1', toolName: 'bash', sessionId: 'session-1' },
+    ]);
+
+    const reply = await get('/permissions/worker/perm-1/reply', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'allowOnce' }),
+    });
+    expect(reply.status).toBe(200);
+    const badDecision = await get('/permissions/worker/perm-1/reply', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'yes' }),
+    });
+    expect(badDecision.status).toBe(400);
+
+    const delegation = await get('/sessions/session-1/delegation');
+    expect(delegation.status).toBe(200);
+    const snapshot = (await delegation.json()) as { members: unknown[] };
+    expect(snapshot.members).toHaveLength(1);
+
+    const skills = await get('/skills?keyword=pdf');
+    expect(skills.status).toBe(200);
+    const list = (await skills.json()) as { skills: { name: string }[] };
+    expect(list.skills[0]?.name).toBe('pdf');
+  });
+
+  it('reports unsupported capabilities as 404 for the minimal runtime', async () => {
+    await start();
+    // The minimal read-only fake runtime exposes none of the write surface.
+    expect((await get('/sessions/session-1/prompt', { method: 'POST', body: '{}' })).status).toBe(404);
+    expect((await get('/permissions')).status).toBe(404);
+    expect((await get('/skills')).status).toBe(404);
+    expect((await get('/sessions/session-1/delegation')).status).toBe(404);
+    expect((await get('/events')).status).toBe(404);
   });
 });
