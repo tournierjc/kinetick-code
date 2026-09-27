@@ -40,6 +40,14 @@ export interface TuiShellState {
   sessionCount?: number;
   /** Aggregate cache-read share of prompt tokens for the active Session. */
   sessionCacheReadRatio?: number;
+  /**
+   * Provider-reported USD cost for the active Session tree (root + delegated
+   * sub-agent Sessions), aggregated per model. Absent until usage is recorded
+   * or when the Runtime cannot report costs.
+   */
+  sessionCostUsd?: number;
+  /** True when some folded-in usage rows had no provider-reported cost. */
+  sessionCostUnpriced?: boolean;
   busy?: boolean;
   permissionMode?: TuiPermissionMode;
   permissionModeUpdating?: boolean;

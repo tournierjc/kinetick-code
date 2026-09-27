@@ -1,23 +1,24 @@
 import { getPrimaryDataDirPath, getProfile } from '@mavis/config';
-import { resolveMcodeDataEnvironment, type McodeDataEnvironment } from '../auth/environment.js';
+import { resolveKcodeDataEnvironment, type KcodeDataEnvironment } from '../auth/environment.js';
 import { configureTuiRuntimeEnvironment } from '../cli/environment.js';
 
 export type TuiDefaultDataDirResolver = () => string;
 
 export interface TuiDataDirEnvironment {
+  KINETICK_DATA_DIR?: string;
   MINIMAX_DATA_DIR?: string;
   MAVIS_DATA_DIR?: string;
 }
 
 export interface PrepareTuiDataDirOptions {
   environment?: TuiDataDirEnvironment;
-  getBuildEnv?: () => McodeDataEnvironment;
+  getBuildEnv?: () => KcodeDataEnvironment;
   getDefaultDataDir?: TuiDefaultDataDirResolver;
   configureRuntimeEnvironment?: typeof configureTuiRuntimeEnvironment;
 }
 
 export function resolveDefaultTuiDataDir(
-  _buildEnv: McodeDataEnvironment,
+  _buildEnv: KcodeDataEnvironment,
   getPrimaryDataDir: typeof getPrimaryDataDirPath = getPrimaryDataDirPath,
   getCurrentProfile: typeof getProfile = getProfile,
 ): string {
@@ -25,10 +26,13 @@ export function resolveDefaultTuiDataDir(
 }
 
 function getDefaultTuiDataDir(): string {
-  return resolveDefaultTuiDataDir(resolveMcodeDataEnvironment());
+  return resolveDefaultTuiDataDir(resolveKcodeDataEnvironment());
 }
 
 function readDataDirOverride(environment: TuiDataDirEnvironment): string | undefined {
+  const kinetickDataDir = environment.KINETICK_DATA_DIR?.trim();
+  if (kinetickDataDir) return kinetickDataDir;
+
   const minimaxDataDir = environment.MINIMAX_DATA_DIR?.trim();
   if (minimaxDataDir) return minimaxDataDir;
 
@@ -51,7 +55,7 @@ export function resolveTuiDataDir(
 }
 
 export function prepareTuiDataDir(options: PrepareTuiDataDirOptions = {}): Promise<string> {
-  const buildEnv = (options.getBuildEnv ?? resolveMcodeDataEnvironment)();
+  const buildEnv = (options.getBuildEnv ?? resolveKcodeDataEnvironment)();
   const dataDir = resolveTuiDataDir(
     options.getDefaultDataDir ?? (() => resolveDefaultTuiDataDir(buildEnv)),
     options.environment ?? process.env,

@@ -20,6 +20,8 @@ import { copyMcodeToolsArtifact } from './lib/mcode-tools-artifact.mjs';
 import { readExtraction } from "./lib/release-metadata.mjs";
 import { cliBuildVersion, cliExternalModules } from './lib/cli-release.mjs';
 
+import { PACKAGE_NAME } from './lib/package-identity.mjs';
+
 const root = fileURLToPath(new URL("../", import.meta.url));
 const metadata = readExtraction(root);
 const packages = new Map(
@@ -104,7 +106,6 @@ const result = await build({
     __BUILD_PROFILE__: '"tui"',
     __TUI_BUILD_ENV__: '"prod"',
     __TUI_BUILD_VARIANT__: '"standard"',
-    __TUI_NPM_DIST_TAG__: '"latest"',
   },
   logLevel: "info",
 });
@@ -135,14 +136,14 @@ writeFileSync(
   JSON.stringify(result.metafile, null, 2) + "\n",
 );
 console.log(
-  `Built MiniMax Code ${version} from ${Object.keys(result.metafile.inputs).length} source files.`,
+  `Built Kinetick Code ${version} from ${Object.keys(result.metafile.inputs).length} source files.`,
 );
 
 writeFileSync(
   path.join(outdir, "package.json"),
   JSON.stringify(
     {
-      name: "@minimax-ai/code", version, type: "module", private: true,
+      name: PACKAGE_NAME, version, type: "module", private: true,
       ...(process.env.MCODE_RELEASE_TAG ? {
         gitHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
       } : {}),

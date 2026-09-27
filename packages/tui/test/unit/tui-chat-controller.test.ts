@@ -6,12 +6,14 @@ import {
   type CreateTuiChatControllerOptions,
 } from '../../src/tui/controller/chat-controller.js';
 import type { TuiStreamEvent } from '../../src/runtime/stream-events.js';
-import { TranscriptStore } from '../../src/tui/transcript/store.js';
+import { TranscriptStore, UNSCOPED_TRANSCRIPT_SESSION } from '../../src/tui/transcript/store.js';
 import { TranscriptView } from '../../src/tui/transcript/view.js';
 import { TuiRunCoordinator, type TuiRunRuntime } from '../../src/application/run-coordinator.js';
 import { resolveTuiVisiblePresentation } from '../../src/tui/controller/projection/visible-presentation.js';
 import { TuiActivityLine } from '../../src/tui/shell/activity-line.js';
 import { isQuestionnaireTool } from '../../src/tui/controller/projection/turn-tool-projection.js';
+import { sortSessions } from '../../src/tui/controller/chat-controller-support.js';
+import type { TuiSession } from '../../src/runtime/port.js';
 
 class TuiChatController extends ProductionTuiChatController {
   constructor(options: CreateTuiChatControllerOptions) {
@@ -412,6 +414,403 @@ describe('TuiChatController', () => {
     expect(transcript.snapshot().some((cell) => cell.content.includes('late answer from A'))).toBe(
       false,
     );
+  });
+
+  it('sorts pinned Sessions first, then by recency', () => {
+    const order = (sessions: readonly TuiSession[]): readonly string[] =>
+      sortSessions(sessions).map((session) => session.sessionId);
+
+    expect(
+      order([
+        { sessionId: 'older' as never, updatedAt: 10 } as never,
+        { sessionId: 'newer', updatedAt: 30 } as never,
+        { sessionId: 'pinned-but-quiet', updatedAt: 5, pinned: true } as never,
+      ]),
+    ).toEqual(['pinned-but-quiet', 'newer', 'older']);
+    // Two pinned Sessions keep their own recency order inside the pinned block.
+    expect(
+      order([
+        { sessionId: 'pinned-quiet', updatedAt: 5, pinned: true } as never,
+        { sessionId: 'pinned-loud', updatedAt: 40, pinned: true } as never,
+        { sessionId: 'plain', updatedAt: 100 } as never,
+      ]),
+    ).toEqual(['pinned-loud', 'pinned-quiet', 'plain']);
+  });
+
+  it('pins a Session through the runtime and keeps it on screen', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, title: sessionId })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+      pinSession: vi.fn(async () => undefined),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-1');
+
+    await expect(controller.pinSession('session-1', true)).resolves.toMatchObject({
+      sessionId: 'session-1',
+      pinned: true,
+    });
+
+    expect(runtime.pinSession).toHaveBeenCalledWith({ sessionId: 'session-1', pinned: true });
+    // Pinning is not a visibility change: the Session keeps its pane.
+    expect(controller.snapshot().session).toMatchObject({ sessionId: 'session-1', pinned: true });
+    expect(controller.snapshot().sessions).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', pinned: true }),
+    ]);
+
+    await expect(controller.pinSession('session-1', false)).resolves.toMatchObject({
+      sessionId: 'session-1',
+      pinned: false,
+    });
+    expect(runtime.pinSession).toHaveBeenLastCalledWith({ sessionId: 'session-1', pinned: false });
+    expect(controller.snapshot().session?.pinned).toBe(false);
+  });
+
+  it('reports a runtime that cannot pin instead of pretending the Session is pinned', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const controller = new TuiChatController({
+      runtime,
+      transcript: new TranscriptStore(),
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-1');
+
+    await expect(controller.pinSession('session-1', true)).rejects.toThrow(/pinSession/u);
+    expect(controller.snapshot().session?.pinned).toBeUndefined();
+  });
+
+  it('rebuilds a Session pane when its history was rewritten', async () => {
+    let messages = [
+      {
+        id: 'message-1',
+        turnId: 'turn-1',
+        role: 'user' as const,
+        content: 'Question one',
+        timestamp: 10,
+      },
+      {
+        id: 'message-2',
+        turnId: 'turn-2',
+        role: 'user' as const,
+        content: 'Question two',
+        timestamp: 11,
+      },
+    ];
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => messages),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-a');
+    expect(transcript.snapshot().map((cell) => cell.content)).toContain('Question two');
+
+    // A rewind dropped the second turn, and the pane must not keep showing it.
+    messages = messages.slice(0, 1);
+    await controller.loadSessionProjection('session-a', { rebuild: true });
+
+    expect(transcript.snapshot().map((cell) => cell.content)).toEqual(
+      expect.arrayContaining(['Question one']),
+    );
+    expect(transcript.snapshot().some((cell) => cell.content.includes('Question two'))).toBe(false);
+  });
+
+  it('reports which Sessions keep a pane', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+
+    expect(controller.retainsTranscript('session-a')).toBe(false);
+    await controller.loadSessionProjection('session-a');
+    expect(controller.retainsTranscript('session-a')).toBe(true);
+    controller.releaseSessionTranscript('session-a');
+    expect(controller.retainsTranscript('session-a')).toBe(false);
+  });
+
+  it('streams a background turn into its own pane, not the visible one', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-a');
+    await controller.loadSessionProjection('session-b');
+
+    controller.applyBackgroundTurnEvent('session-a', 'turn-a', {
+      type: 'delta',
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      content: 'background output',
+      timestamp: 5,
+    });
+
+    // Nothing of a background turn reaches the pane on screen…
+    expect(transcript.snapshot().some((cell) => cell.content.includes('background output'))).toBe(
+      false,
+    );
+    // …and the background Session's pane has it, settled in place.
+    expect(
+      transcript.snapshot('session-a').some((cell) => cell.content.includes('background output')),
+    ).toBe(true);
+
+    controller.settleBackgroundTurn('session-a', 'turn-a', 'succeeded', 120);
+
+    const backgroundCell = transcript
+      .snapshot('session-a')
+      .find((cell) => cell.content.includes('background output'));
+    expect(backgroundCell?.status).toBe('succeeded');
+    // The visible Session's state is untouched by a background turn.
+    expect(controller.snapshot().lastSettledTurn).toBeUndefined();
+  });
+
+  it('hands a turn back to the visible projection when its Session is opened again', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-a');
+
+    controller.applyBackgroundTurnEvent('session-a', 'turn-a', {
+      type: 'delta',
+      turnId: 'turn-a',
+      messageId: 'message-a',
+      content: 'visible output',
+      timestamp: 5,
+    });
+
+    // The Session is the pane, so the visible projection writes it.
+    expect(transcript.snapshot().some((cell) => cell.content.includes('visible output'))).toBe(true);
+  });
+
+  it('keeps a Session pane when the Session is left and revisited', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async (sessionId: string) =>
+        sessionId === 'session-a'
+          ? [
+              {
+                id: 'message-a',
+                turnId: 'turn-a',
+                role: 'user' as const,
+                content: 'Question in A',
+                timestamp: 10,
+              },
+              {
+                id: 'message-a-answer',
+                turnId: 'turn-a',
+                role: 'assistant' as const,
+                content: 'Answer in A',
+                timestamp: 11,
+              },
+            ]
+          : [],
+      ),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+
+    await controller.loadSessionProjection('session-a');
+    const cellsOfA = transcript.snapshot();
+    expect(cellsOfA.length).toBeGreaterThan(0);
+
+    await controller.loadSessionProjection('session-b');
+    expect(transcript.activeSessionId).toBe('session-b');
+
+    await controller.loadSessionProjection('session-a');
+
+    expect(transcript.activeSessionId).toBe('session-a');
+    expect(transcript.snapshot().map((cell) => cell.id)).toEqual(cellsOfA.map((cell) => cell.id));
+    expect(transcript.snapshot().map((cell) => cell.content)).toContain('Question in A');
+    expect(runtime.getMessages).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps the streaming tail of a running turn when its Session is revisited', async () => {
+    let releaseTurn: (() => void) | undefined;
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(async function* sendMessage(): AsyncGenerator<TuiStreamEvent> {
+        yield {
+          type: 'delta',
+          turnId: 'turn-a',
+          messageId: 'message-a',
+          content: 'streaming in A',
+          timestamp: 5,
+        };
+        await new Promise<void>((resolve) => {
+          releaseTurn = resolve;
+        });
+        yield { type: 'done', turnId: 'turn-a' };
+      }),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+      createTurnId: () => 'turn-a',
+    });
+    await controller.loadSessionProjection('session-a');
+    const running = controller.submit('stream this');
+    await vi.waitFor(() => expect(releaseTurn).toBeTypeOf('function'));
+    expect(transcript.snapshot().some((cell) => cell.content.includes('streaming in A'))).toBe(true);
+
+    await controller.loadSessionProjection('session-b');
+    await controller.loadSessionProjection('session-a');
+
+    // Durable history is empty, so a rebuild would have dropped the live tail.
+    expect(transcript.snapshot().some((cell) => cell.content.includes('streaming in A'))).toBe(true);
+    releaseTurn?.();
+    await expect(running).resolves.toBe('succeeded');
+  });
+
+  it('forgets a Session pane when its tab closes, and rebuilds it on the next visit', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async (sessionId: string) =>
+        sessionId === 'session-a'
+          ? [
+              {
+                id: 'message-a',
+                turnId: 'turn-a',
+                role: 'user' as const,
+                content: 'Question in A',
+                timestamp: 10,
+              },
+            ]
+          : [],
+      ),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+    await controller.loadSessionProjection('session-a');
+    expect(transcript.hasSession('session-a')).toBe(true);
+
+    controller.releaseSessionTranscript('session-a');
+
+    expect(transcript.hasSession('session-a')).toBe(false);
+    await controller.loadSessionProjection('session-a');
+    expect(transcript.snapshot().map((cell) => cell.content)).toContain('Question in A');
+  });
+
+  it('retains at most six Session panes', async () => {
+    const runtime = {
+      createSession: vi.fn(),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+    });
+
+    for (let index = 1; index <= 7; index += 1) {
+      await controller.loadSessionProjection(`session-${index}`);
+    }
+
+    expect(transcript.sessionIds()).not.toContain('session-1');
+    expect(transcript.sessionIds()).toContain('session-7');
+    expect(transcript.sessionIds().length).toBeLessThanOrEqual(6);
+  });
+
+  it('gives the Session it creates the cells the pane already showed', async () => {
+    const runtime = {
+      createSession: vi.fn(async () => ({ sessionId: 'session-new', workspaceDir: '/workspace' })),
+      getSession: vi.fn(async (sessionId: string) => ({ sessionId, workspaceDir: '/workspace' })),
+      getMessages: vi.fn(async () => []),
+      sendMessage: vi.fn(async function* sendMessage(): AsyncGenerator<TuiStreamEvent> {
+        yield {
+          type: 'delta',
+          turnId: 'turn-new',
+          messageId: 'message-new',
+          content: 'first answer',
+          timestamp: 5,
+        };
+        yield { type: 'done', turnId: 'turn-new' };
+      }),
+      abortSession: vi.fn(async () => true),
+    };
+    const transcript = new TranscriptStore();
+    const controller = new TuiChatController({
+      runtime,
+      transcript,
+      workspaceDir: '/workspace',
+      createTurnId: () => 'turn-new',
+    });
+
+    await expect(controller.submit('first question')).resolves.toBe('succeeded');
+
+    expect(transcript.activeSessionId).toBe('session-new');
+    expect(transcript.hasSession(UNSCOPED_TRANSCRIPT_SESSION)).toBe(false);
+    expect(transcript.snapshot().map((cell) => cell.content)).toContain('first question');
   });
 
   it('requires MiniMax login before starting a managed-model Turn', async () => {
@@ -2332,7 +2731,7 @@ describe('TuiChatController', () => {
       id: 'local:status',
       kind: 'final-summary',
       status: 'succeeded',
-      content: 'MCode status',
+      content: 'KCode status',
       ephemeral: true,
       createdAtMs: 100,
       updatedAtMs: 100,
@@ -2354,7 +2753,7 @@ describe('TuiChatController', () => {
 
     expect(transcript.snapshot().map((cell) => cell.content)).toEqual([
       'First durable answer',
-      'MCode status',
+      'KCode status',
       'Second durable answer',
     ]);
 

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { stripAnsi } from "../../src/tui/rendering/text.js";
 import { TuiProviderManager } from "../../src/tui/features/provider/manager.js";
-import type { McodeProviderSnapshot } from "../../src/provider/contract.js";
+import type { KcodeProviderSnapshot } from "../../src/provider/contract.js";
 
-const snapshot: McodeProviderSnapshot = {
+const snapshot: KcodeProviderSnapshot = {
   minimaxModelSource: "token_plan",
   providers: [
     {
@@ -43,7 +43,7 @@ const snapshot: McodeProviderSnapshot = {
   ],
 };
 
-const snapshotWithCodex: McodeProviderSnapshot = {
+const snapshotWithCodex: KcodeProviderSnapshot = {
   ...snapshot,
   providers: [
     {
@@ -63,7 +63,7 @@ const snapshotWithCodex: McodeProviderSnapshot = {
 
 function withSource(
   source: "token_plan" | "minimax_api_key",
-): McodeProviderSnapshot {
+): KcodeProviderSnapshot {
   return {
     ...snapshot,
     minimaxModelSource: source,
@@ -80,6 +80,24 @@ function withSource(
     ),
   };
 }
+
+const snapshotWithCopilot: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    {
+      providerId: "github-copilot",
+      name: "GitHub Copilot",
+      kind: "copilot-oauth",
+      active: false,
+      enabled: true,
+      readOnly: true,
+      hasApiKey: false,
+      status: { state: "disconnected" },
+      models: [],
+    },
+    ...snapshot.providers,
+  ],
+};
 
 function createManager(
   overrides: Partial<ConstructorParameters<typeof TuiProviderManager>[0]> = {},
@@ -126,7 +144,7 @@ describe("TuiProviderManager", () => {
       providerId: "openai-codex" as const,
       authUrl: "https://auth.openai.example/authorize",
     }));
-    const pendingSnapshot: McodeProviderSnapshot = {
+    const pendingSnapshot: KcodeProviderSnapshot = {
       ...snapshotWithCodex,
       providers: snapshotWithCodex.providers.map((provider) =>
         provider.kind === "codex-oauth"
@@ -143,6 +161,75 @@ describe("TuiProviderManager", () => {
     manager.handleInput("\r");
 
     await vi.waitFor(() => expect(onConnectCodex).toHaveBeenCalledOnce());
+  });
+
+
+  it("starts the independent Copilot OAuth flow from its provider row", async () => {
+    const onConnectCopilot = vi.fn();
+    const manager = createManager({
+      snapshot: snapshotWithCopilot,
+      onConnectCopilot,
+    });
+
+    manager.handleInput("\u001b[A");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Not connected · Enter or Space to connect",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onConnectCopilot).toHaveBeenCalledOnce());
+  });
+
+  it("reports the Copilot row as connected without restarting sign-in", async () => {
+    const onConnectCopilot = vi.fn();
+    const connected: KcodeProviderSnapshot = {
+      ...snapshotWithCopilot,
+      providers: snapshotWithCopilot.providers.map((provider) =>
+        provider.kind === "copilot-oauth"
+          ? {
+              ...provider,
+              status: { state: "connected" },
+              models: [{ modelId: "claude-opus-4.8", displayName: "Claude Opus 4.8" }],
+            }
+          : provider,
+      ),
+    };
+    const manager = createManager({ snapshot: connected, onConnectCopilot });
+
+    manager.handleInput("\u001b[A");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Connected with GitHub OAuth · 1 model",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+        "GitHub Copilot is already connected.",
+      ),
+    );
+    expect(onConnectCopilot).not.toHaveBeenCalled();
+  });
+
+  it("routes Copilot connectivity and editing through its sign-in flow", async () => {
+    const onConnectCopilot = vi.fn();
+    const manager = createManager({
+      snapshot: snapshotWithCopilot,
+      onConnectCopilot,
+    });
+
+    manager.handleInput("\u001b[A");
+    manager.handleInput("t");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+        "Copilot OAuth connectivity is managed by its sign-in flow.",
+      ),
+    );
+
+    manager.handleInput("e");
+    expect(stripAnsi(manager.render(90).join("\n"))).toContain(
+      "Use Enter or Space on the GitHub Copilot row to start sign-in.",
+    );
   });
 
   it("uses the Pi cancel binding to close the provider list", () => {
@@ -337,7 +424,7 @@ describe("TuiProviderManager", () => {
     // Regression caught in review: `active` means "current MiniMax credential
     // source" for MiniMax rows but "owns the selected model" for custom rows.
     // Rendering both as ● made two rows look selected at once.
-    const withSelectedCustomModel: McodeProviderSnapshot = {
+    const withSelectedCustomModel: KcodeProviderSnapshot = {
       ...withSource("minimax_api_key"),
       providers: withSource("minimax_api_key").providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -371,7 +458,7 @@ describe("TuiProviderManager", () => {
   });
 
   it("redacts credentials and URL parameters from a custom provider", () => {
-    const credentialed: McodeProviderSnapshot = {
+    const credentialed: KcodeProviderSnapshot = {
       ...snapshot,
       providers: snapshot.providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -430,7 +517,7 @@ describe("TuiProviderManager", () => {
   it("renders a disabled custom provider without the in-use marker", () => {
     // Regression caught: a leftover selected model rendered `● … Disabled`,
     // claiming a provider Runtime no longer resolves is the active source.
-    const disabled: McodeProviderSnapshot = {
+    const disabled: KcodeProviderSnapshot = {
       ...snapshot,
       providers: snapshot.providers.map((provider) =>
         provider.providerId === "custom_provider:openai"
@@ -542,4 +629,410 @@ it("shows discovery failures and allows a retry", async () => {
       "Models are already up to date.",
     ),
   );
+});
+
+const snapshotWithBuiltin: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    ...snapshot.providers,
+    {
+      providerId: "openrouter",
+      name: "OpenRouter",
+      kind: "builtin",
+      active: false,
+      enabled: true,
+      readOnly: true,
+      apiFormat: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      hasApiKey: false,
+      maskedApiKey: "sk-o****MPLE",
+      models: [{ modelId: "openai/gpt-5-mini", displayName: "GPT-5 Mini" }],
+    },
+  ],
+};
+
+it("lists a connection the builtin tree owns and tests it in place", async () => {
+  const onTest = vi.fn(async () => ({
+    success: true,
+    status: { state: "available" },
+  }));
+  const manager = createManager({ snapshot: snapshotWithBuiltin, onTest });
+
+  manager.handleInput("\u001b[A");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  const rendered = stripAnsi(manager.render(110).join("\n"));
+  expect(rendered).toContain("OpenRouter");
+  expect(rendered).toContain("https://openrouter.ai/api/v1");
+  expect(rendered).toContain("GPT-5 Mini");
+
+  manager.handleInput("t");
+  await vi.waitFor(() => expect(onTest).toHaveBeenCalledWith("openrouter"));
+});
+
+it("points a builtin-tree row at config.yaml instead of editing it here", () => {
+  const manager = createManager({ snapshot: snapshotWithBuiltin });
+
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("\u001b[B");
+  manager.handleInput("e");
+
+  const rendered = stripAnsi(manager.render(140).join("\n"));
+  expect(rendered).toContain("OpenRouter is defined in config.yaml");
+  expect(rendered).toContain("Press a to connect it as a provider you manage here");
+});
+
+it("connects a provider from the panel without leaving the catalogue behind", () => {
+  const onAddProvider = vi.fn();
+  const manager = createManager({ onAddProvider });
+
+  expect(stripAnsi(manager.render(110).join("\n"))).toContain("a add provider");
+  manager.handleInput("a");
+
+  expect(onAddProvider).toHaveBeenCalledOnce();
+});
+
+it("keeps the add-provider action out of hosts that cannot save one", () => {
+  const manager = createManager();
+
+  const rendered = stripAnsi(manager.render(110).join("\n"));
+  expect(rendered).not.toContain("a add provider");
+  expect(rendered).toContain("Select a custom connection and press r");
+});
+
+const snapshotWithSetupRows: KcodeProviderSnapshot = {
+  ...snapshot,
+  providers: [
+    ...snapshot.providers.slice(0, 2),
+    {
+      providerId: "openrouter",
+      name: "OpenRouter",
+      kind: "openrouter-setup",
+      active: false,
+      enabled: true,
+      readOnly: false,
+      apiFormat: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      hasApiKey: false,
+      models: [],
+    },
+    {
+      providerId: "deepseek",
+      name: "DeepSeek",
+      kind: "deepseek-setup",
+      active: false,
+      enabled: true,
+      readOnly: false,
+      apiFormat: "openai-completions",
+      baseUrl: "https://api.deepseek.com/v1",
+      hasApiKey: false,
+      models: [],
+    },
+    {
+      providerId: "local",
+      name: "Local",
+      kind: "local-setup",
+      active: false,
+      enabled: true,
+      readOnly: false,
+      apiFormat: "openai-completions",
+      baseUrl: "http://localhost:11434/v1",
+      hasApiKey: false,
+      models: [],
+    },
+    ...snapshot.providers.slice(2),
+  ],
+};
+
+describe("OpenRouter, DeepSeek, and Local setup", () => {
+  function setupManager(
+    overrides: Partial<ConstructorParameters<typeof TuiProviderManager>[0]> = {},
+  ) {
+    return createManager({ snapshot: snapshotWithSetupRows, ...overrides });
+  }
+
+  it("lists OpenRouter, DeepSeek, and Local as setup choices before they are saved", () => {
+    const manager = setupManager();
+    const rendered = stripAnsi(manager.render(120).join("\n"));
+
+    expect(rendered).toContain("OpenRouter");
+    expect(rendered).toContain("DeepSeek");
+    expect(rendered).toContain("Local");
+    expect(rendered).toContain("Not configured");
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "https://openrouter.ai/api/v1",
+    );
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "https://api.deepseek.com/v1",
+    );
+  });
+
+  it("saves an OpenRouter API key through the custom-provider candidate", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:openrouter" },
+    }));
+    const saved: KcodeProviderSnapshot = {
+      ...snapshot,
+      providers: [
+        ...snapshot.providers,
+        {
+          providerId: "custom_provider:openrouter",
+          name: "OpenRouter",
+          kind: "custom",
+          active: true,
+          enabled: true,
+          readOnly: false,
+          configRevision: "rev-2",
+          apiFormat: "openai-completions",
+          baseUrl: "https://openrouter.ai/api/v1",
+          hasApiKey: true,
+          maskedApiKey: "sk-o****cret",
+          models: [{ modelId: "openai/gpt-4.1-mini" }],
+        },
+      ],
+    };
+    const onRefresh = vi.fn(async () => saved);
+    const manager = setupManager({ onSaveCustom, onRefresh });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    const row = stripAnsi(manager.render(120).join("\n"));
+    expect(row).toContain("Enter to set an API key");
+
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(100).join("\n"))).toContain(
+      "Configure OpenRouter API Key",
+    );
+    manager.handleInput("sk-openrouter-secret");
+    expect(stripAnsi(manager.render(100).join("\n"))).not.toContain(
+      "sk-openrouter-secret",
+    );
+    manager.handleInput("\r");
+    manager.handleInput("openai/gpt-4.1-mini");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith({
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      apiKey: "sk-openrouter-secret",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "openai/gpt-4.1-mini",
+          displayName: "openai/gpt-4.1-mini",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "openai/gpt-4.1-mini",
+      saveAndUse: true,
+    });
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(110).join("\n"))).toContain(
+        "OpenRouter saved and selected.",
+      ),
+    );
+  });
+
+  it("keeps the OpenRouter form open when the connection test fails and redacts the key", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: false,
+      status: { state: "failed", lastErrorMessage: "401 sk-openrouter-secret" },
+    }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    manager.handleInput("sk-openrouter-secret");
+    manager.handleInput("\r");
+    manager.handleInput("openai/gpt-4.1-mini");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(120).join("\n"))).toContain("401"),
+    );
+    const failed = stripAnsi(manager.render(140).join("\n"));
+    expect(failed).toContain("OpenRouter was not saved");
+    expect(failed).not.toContain("sk-openrouter-secret");
+    expect(failed).toContain("sk-[redacted]");
+    expect(onSaveCustom).toHaveBeenCalledOnce();
+  });
+
+
+  it("saves a DeepSeek API key through the custom-provider candidate", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:deepseek" },
+    }));
+    const saved: KcodeProviderSnapshot = {
+      ...snapshot,
+      providers: [
+        ...snapshot.providers,
+        {
+          providerId: "custom_provider:deepseek",
+          name: "DeepSeek",
+          kind: "custom",
+          active: true,
+          enabled: true,
+          readOnly: false,
+          configRevision: "rev-ds",
+          apiFormat: "openai-completions",
+          baseUrl: "https://api.deepseek.com/v1",
+          hasApiKey: true,
+          maskedApiKey: "sk-d****cret",
+          models: [{ modelId: "deepseek-chat" }],
+        },
+      ],
+    };
+    const onRefresh = vi.fn(async () => saved);
+    const manager = setupManager({ onSaveCustom, onRefresh });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "Enter to set an API key",
+    );
+
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(100).join("\n"))).toContain(
+      "Configure DeepSeek API Key",
+    );
+    manager.handleInput("sk-deepseek-secret");
+    expect(stripAnsi(manager.render(100).join("\n"))).not.toContain(
+      "sk-deepseek-secret",
+    );
+    manager.handleInput("\r");
+    manager.handleInput("deepseek-chat");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith({
+      name: "DeepSeek",
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "sk-deepseek-secret",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "deepseek-chat",
+          displayName: "deepseek-chat",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "deepseek-chat",
+      saveAndUse: true,
+    });
+    await vi.waitFor(() =>
+      expect(stripAnsi(manager.render(110).join("\n"))).toContain(
+        "DeepSeek saved and selected.",
+      ),
+    );
+  });
+
+  it("saves a Local base URL without a key", async () => {
+    const onSaveCustom = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:local" },
+    }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    expect(stripAnsi(manager.render(120).join("\n"))).toContain(
+      "Enter to set a base URL",
+    );
+    manager.handleInput("\r");
+    const urlStep = stripAnsi(manager.render(110).join("\n"));
+    expect(urlStep).toContain("Configure Local API address");
+    expect(urlStep).toContain("http://localhost:11434/v1");
+
+    manager.handleInput("\r");
+    manager.handleInput("qwen3");
+    manager.handleInput("\r");
+    expect(stripAnsi(manager.render(110).join("\n"))).toContain(
+      "API Key (optional)",
+    );
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith({
+      name: "Local",
+      baseUrl: "http://localhost:11434/v1",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "qwen3",
+          displayName: "qwen3",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "qwen3",
+      saveAndUse: true,
+    });
+  });
+
+  it("saves a custom Local base URL together with a key", async () => {
+    const onSaveCustom = vi.fn(async () => ({ success: true }));
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    for (let index = 0; index < "http://localhost:11434/v1".length; index += 1) {
+      manager.handleInput("\u007f");
+    }
+    manager.handleInput("http://127.0.0.1:8080/v1");
+    manager.handleInput("\r");
+    manager.handleInput("llama");
+    manager.handleInput("\r");
+    manager.handleInput("local-secret");
+    expect(stripAnsi(manager.render(100).join("\n"))).not.toContain("local-secret");
+    manager.handleInput("\r");
+
+    await vi.waitFor(() => expect(onSaveCustom).toHaveBeenCalledOnce());
+    expect(onSaveCustom).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Local",
+        baseUrl: "http://127.0.0.1:8080/v1",
+        apiKey: "local-secret",
+        modelId: "llama",
+      }),
+    );
+  });
+
+  it("rejects a Local base URL that is not http or https", () => {
+    const onSaveCustom = vi.fn();
+    const manager = setupManager({ onSaveCustom });
+
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\u001b[B");
+    manager.handleInput("\r");
+    for (let index = 0; index < "http://localhost:11434/v1".length; index += 1) {
+      manager.handleInput("\u007f");
+    }
+    manager.handleInput("ftp://files.example/v1");
+    manager.handleInput("\r");
+
+    expect(stripAnsi(manager.render(100).join("\n"))).toContain(
+      "Base URL must use http or https.",
+    );
+    expect(onSaveCustom).not.toHaveBeenCalled();
+  });
 });

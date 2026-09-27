@@ -12,9 +12,7 @@ import { TuiComposerImagePreview } from './features/composer/image-preview.js';
 import { createTuiExternalTargetOpener } from '../host/open-external.js';
 import { readTuiClipboardText, writeTuiClipboardText } from '../host/clipboard-text.js';
 import { formatTuiActionFailure } from '../user-facing-failure.js';
-import type { McodeBusinessTelemetry } from '../analytics/business-telemetry.js';
 import type { TuiBackgroundTask } from '../runtime/port.js';
-import { TuiBusinessEventTracker } from '../analytics/tui-business-event-tracker.js';
 import type {
   CreateTuiChatControllerOptions,
   TuiChatController,
@@ -55,7 +53,6 @@ import {
 import { detectProcessTerminalCapabilities } from './platform/terminal-capabilities.js';
 import { createTuiTextClipboardWriter } from './platform/terminal-clipboard.js';
 import { TuiTerminalNotifications } from './platform/terminal-notifications.js';
-import { TuiTerminalTitle } from './platform/terminal-title.js';
 import {
   ProcessTerminal,
   type Component,
@@ -63,7 +60,7 @@ import {
   type TUI,
   type TuiMode,
 } from './engine/public.js';
-import { McodeInteractiveRenderer } from './renderer/index.js';
+import { KcodeInteractiveRenderer } from './renderer/index.js';
 import type { TuiRunProjection } from './state/run-projection.js';
 import type { TuiStateStore } from './state/index.js';
 import { TuiThemeController } from './theme/controller.js';
@@ -74,9 +71,9 @@ import type { LocalTranscriptCellKind } from './transcript/local-appender.js';
 import type { TranscriptView } from './transcript/view.js';
 import type { CreateTuiAppOptions } from '../types/tui-app.js';
 import { Editor } from './widgets/editor/editor.js';
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from '../product-context.js';
+import { KCODE_DEFAULT_AGENT_NAME } from '../product-context.js';
 import { createTuiAutomationResultWriter } from './automation/result-writer.js';
-import { MINIMAX_CODE_WELCOME_DESIGN } from './shell/welcome/design.js';
+import { KCODE_WELCOME_DESIGN } from './shell/welcome/design.js';
 
 // ---------------------------------------------------------------------------
 // Small numeric / utility helpers
@@ -96,7 +93,7 @@ export function createTuiChatControllerComposition(options: CreateTuiAppOptions)
   readonly writeAutomationResult?: CreateTuiChatControllerOptions['writeAutomationResult'];
   readonly workspaceRoots: TuiWorkspaceRoots;
 } {
-  const defaultAgentName = options.defaultAgentName ?? MINIMAX_CODE_DEFAULT_AGENT_NAME;
+  const defaultAgentName = options.defaultAgentName ?? KCODE_DEFAULT_AGENT_NAME;
   const writer = createTuiAutomationResultWriter({
     statusLineItems: options.statusLineItems,
     resultPath: options.automationResultPath,
@@ -120,7 +117,7 @@ export function createTuiChatControllerComposition(options: CreateTuiAppOptions)
  */
 export function createTuiApplicationRenderer(options: CreateTuiAppOptions) {
   const terminal = options.terminal ?? new ProcessTerminal();
-  const capabilities = options.terminalCapabilities ?? detectProcessTerminalCapabilities();
+  const capabilities = detectProcessTerminalCapabilities();
   const openExternalTarget =
     options.openExternalTarget ?? createTuiExternalTargetOpener(options.workspaceDir);
   const writeClipboardText =
@@ -133,7 +130,7 @@ export function createTuiApplicationRenderer(options: CreateTuiAppOptions) {
   const readClipboardText = options.readClipboardText ?? readTuiClipboardText;
   let themeController: TuiThemeController | undefined;
   const styleSearchMatch = (text: string): string => tuiChalk.hex(tuiColors.signal)(text);
-  const renderer = new McodeInteractiveRenderer({
+  const renderer = new KcodeInteractiveRenderer({
     terminal,
     initialMode: options.tuiMode ?? 'regular',
     logDirectory: options.runtimeLogDirectory,
@@ -170,9 +167,8 @@ export function createTuiApplicationRenderer(options: CreateTuiAppOptions) {
         return terminal.focused;
       },
     },
-    { settings: options.notifications, capabilities },
+    { settings: options.notifications },
   );
-  const terminalTitle = new TuiTerminalTitle(terminal, capabilities.isTTY);
   themeController = new TuiThemeController({
     ui: tui,
     colorLevel: capabilities.colorLevel,
@@ -186,7 +182,6 @@ export function createTuiApplicationRenderer(options: CreateTuiAppOptions) {
     renderer,
     tui,
     terminalNotifications,
-    terminalTitle,
     themeController,
     openExternalTarget,
     writeClipboardText,
@@ -339,7 +334,7 @@ export function createTuiApplicationWidgets(options: {
     },
     options.app.keybindings,
     {
-      tips: selectRandomTuiItems(MINIMAX_CODE_WELCOME_DESIGN.tipPool, 3),
+      tips: selectRandomTuiItems(KCODE_WELCOME_DESIGN.tipPool, 3),
       ...(changelog
         ? {
             changelogEntries: selectRandomTuiItems(
@@ -424,6 +419,8 @@ export function createTuiApplicationSurface(options: {
   readonly transcript: TranscriptStore;
   readonly transcriptView: TranscriptView;
   readonly widgets: ReturnType<typeof createTuiApplicationWidgets>;
+  /** Open-tab bar; omitted by callers that render no tabs (headless, ACP). */
+  readonly sessionTabs?: Component;
   readonly themeController: TuiThemeController;
   readonly liveRunId: (snapshot?: TuiChatSnapshot) => string | undefined;
   readonly shouldResumeDraftAfterLogin: () => boolean;
@@ -455,6 +452,7 @@ export function createTuiApplicationSurface(options: {
       activity,
       followUp,
       tasks,
+      ...(options.sessionTabs ? { tabs: options.sessionTabs } : {}),
       composer,
       status,
     },
@@ -493,38 +491,26 @@ export function createTuiApplicationSurface(options: {
   return { layout, surfaceHost, fullscreenLayout: surfaceHost, themeRendering, interactionSurface };
 }
 
-// ---------------------------------------------------------------------------
-// Telemetry + small identity helpers
-// ---------------------------------------------------------------------------
-
 /**
- * Build the business-event tracker. Returns `undefined` when no telemetry
- * sink was provided so the caller can skip wiring.
+ * Sync the OS terminal title with the active session title. Skips writes
+ * when the title did not change and when the TUI is suspended, to avoid
+ * flicker and to keep the title stable across process suspension.
  */
-export function createTuiBusinessEventTracker(options: {
-  readonly telemetry?: McodeBusinessTelemetry;
-  readonly workspaceDir: string;
-  readonly controller: TuiChatController;
-  readonly featureFlow: TuiFeatureFlow;
-  readonly stateStore: TuiStateStore;
-  readonly transcript: TranscriptStore;
-}): TuiBusinessEventTracker | undefined {
-  if (!options.telemetry) return undefined;
-  return new TuiBusinessEventTracker(options.telemetry, {
-    chatType: () => {
-      const sessionId = options.controller.snapshot().session?.sessionId;
-      const sessionState = sessionId
-        ? options.stateStore.snapshot().sessions.get(sessionId)
-        : undefined;
-      return sessionState?.execution.subagents.size ? 'agent_team' : 'chat';
-    },
-    userMessageCount: () =>
-      options.transcript.snapshot().filter((cell) => cell.kind === 'user').length,
-    skillCommandNames: () =>
-      new Set(
-        options.featureFlow.skillCommands().map((command) => command.name.toLocaleLowerCase()),
-      ),
-  });
+export function createTuiTerminalTitleSync(options: {
+  readonly terminal: Terminal;
+  readonly isActive: () => boolean;
+}) {
+  let lastTitle: string | undefined;
+  return (sessionTitle: string | undefined): void => {
+    if (!options.isActive()) return;
+    const title =
+      sessionTitle?.trim() && sessionTitle.toLocaleLowerCase() !== 'new session'
+        ? sessionTitle.trim()
+        : 'Kinetick Code';
+    if (title === lastTitle) return;
+    options.terminal.setTitle(title);
+    lastTitle = title;
+  };
 }
 
 /**
@@ -579,7 +565,9 @@ export function createTuiApplicationSessionFeatures(options: {
     },
     reloadSessionProjection: async (sessionId) => {
       if (options.controller.snapshot().session?.sessionId !== sessionId) return;
-      await options.controller.loadSessionProjection(sessionId);
+      // A rewind rewrote this Session's history, so its pane is rebuilt rather than
+      // adopted with the cells of the turns that are gone.
+      await options.controller.loadSessionProjection(sessionId, { rebuild: true });
       options.onChanged();
     },
   });

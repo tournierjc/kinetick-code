@@ -146,7 +146,7 @@ async function fetchArchive(
   let response: Response;
   try {
     response = await fetchImpl(url, {
-      headers: { 'User-Agent': 'MiniMax-Code' },
+      headers: { 'User-Agent': 'Kinetick-Code' },
       signal: requestSignal(signal, DOWNLOAD_TIMEOUT_MS),
     });
   } catch (error) {

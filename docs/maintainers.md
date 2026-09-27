@@ -22,7 +22,7 @@ Use these labels independently:
 | Category | Labels and meaning |
 | --- | --- |
 | Type | `bug`: reported malfunction; `enhancement`: requested improvement; `documentation`: missing or incorrect docs; `question`: usage or project-policy question |
-| Product | `desktop`: Desktop app; `cli`: standalone mcode, including TUI, headless, ACP and its source builds/tooling |
+| Product | `desktop`: Desktop app; `cli`: standalone kcode, including TUI, headless, ACP and its source builds/tooling |
 | Triage | `needs-triage`: awaiting maintainer assessment; `needs-info`: a maintainer has asked the reporter for specific missing information |
 
 1. Start with [needs-triage](https://github.com/MiniMax-AI/minimax-code/issues?q=is%3Aissue+is%3Aopen+label%3Aneeds-triage) and [unlabelled issues](https://github.com/MiniMax-AI/minimax-code/issues?q=is%3Aissue+is%3Aopen+no%3Alabel). Templates add a type and `needs-triage`; reports created through other routes may need both added manually. A type label describes the report and does not confirm a defect or commit to implementation.

@@ -55,7 +55,7 @@ export interface ExecEventProjectorOptions {
   readonly nowMs?: () => number;
 }
 
-/** Projects internal Runtime delivery into the versioned mcode exec JSONL contract. */
+/** Projects internal Runtime delivery into the versioned kcode exec JSONL contract. */
 export class ExecEventProjector {
   private sequence = 0;
   private started = false;

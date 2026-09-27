@@ -1,5 +1,6 @@
 import type { Agent, AgentMessage, StreamFn } from '@earendil-works/pi-agent-core';
 import { streamSimple, type CacheRetention, type SimpleStreamOptions } from '@earendil-works/pi-ai';
+import { withClearedCredentialHeaders } from '@mavis/shared';
 import { LLM_REQUEST_TIMEOUT_MS } from './defaults.js';
 import type {
   PiAfterLlmReplacementCommit,
@@ -14,10 +15,15 @@ export function composeStreamFn(resolved: LLMModelConfig): StreamFn {
   // Order matters: each wrapper only fills the option it owns, while
   // explicit per-call options from upstream wrappers still win. The host
   // ceiling is the exception and therefore the innermost link: it has to see
-  // the fully accumulated options in order to shrink them.
+  // the fully accumulated options in order to shrink them. Clearing a
+  // credential header of an endpoint that needs no authentication sits below
+  // even that, because it must see every header the request would carry.
   const callerHeaders =
     resolved.headers && Object.keys(resolved.headers).length > 0 ? resolved.headers : undefined;
-  const hostClamped = withHostMaxOutputTokens(resolved.streamFn, resolved.hostMaxOutputTokens);
+  const baseStream = resolved.unauthenticatedEndpoint
+    ? withUnauthenticatedEndpointHeaders(resolved.streamFn)
+    : resolved.streamFn;
+  const hostClamped = withHostMaxOutputTokens(baseStream, resolved.hostMaxOutputTokens);
   const cacheWrapped = withCacheRetention(hostClamped, resolved.cacheRetention);
   const maxTokensWrapped =
     typeof resolved.maxTokens === 'number' && resolved.maxTokens > 0
@@ -535,6 +541,29 @@ function withHeaders(inner: StreamFn | undefined, headers: Record<string, string
     return base(model, context, {
       ...(options ?? {}),
       headers: mergedHeaders,
+    });
+  }) as StreamFn;
+}
+
+/**
+ * Keeps the placeholder key of an endpoint that needs no authentication off the
+ * wire.
+ *
+ * The resolver hands such a model a key because the provider SDKs will not build
+ * a client without one; the header that would carry it is cleared here, on the
+ * request's own options, which is the last header source pi-ai merges — a `null`
+ * value is what its SDKs read as "remove this default header".
+ */
+function withUnauthenticatedEndpointHeaders(inner: StreamFn | undefined): StreamFn {
+  const base = inner ?? streamSimple;
+  return ((model, context, options) => {
+    const headers = withClearedCredentialHeaders(
+      options?.headers as Readonly<Record<string, string>> | undefined,
+    );
+    return base(model, context, {
+      ...(options ?? {}),
+      // pi-ai types these as strings; a null is forwarded to the SDK untouched.
+      headers: headers as Record<string, string>,
     });
   }) as StreamFn;
 }

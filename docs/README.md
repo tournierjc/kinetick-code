@@ -4,13 +4,14 @@
 
 ## Get started
 
-- [Official CLI quick start](https://agent.minimax.io/docs/cli/quick-start): installation, account regions, first tasks, and sessions.
 - [Install from source](installation.md): prerequisites, build, project usage, updates, and removal.
+- [Install a GitHub release archive](installation.md#install-a-github-release-archive): this repository's release channel.
+- [Official CLI quick start](https://agent.minimax.io/docs/cli/quick-start): MiniMax's upstream product docs (not this fork's builds).
+- [Fork release process](releasing.md): tags, CI gates, and GitHub Releases for this repository.
 - [Examples](examples.md): code fixes, model selection, search, and image input.
-- [Real TUI demo](demo.md): a 20-second replay, still image, and reproduction steps.
 - [Status line configuration](../packages/tui/docs/status-line-config.md): the default status line and optional machine-readable mode.
 - [Capabilities and service boundaries](tui-capabilities.md): accounts, tools, plugins, sandboxing, and network behavior.
-- [TUI usage telemetry](telemetry.md): opt-in settings, sent fields, destinations, and retention boundary.
+- [Network egress policy](egress-policy.md): the default-deny guard, its allowlist, and its escape hatches.
 
 ## Contribute
 

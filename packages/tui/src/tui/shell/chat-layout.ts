@@ -24,6 +24,11 @@ export interface TuiChatLayoutParts {
   goal?: Component;
   followUp: Component;
   tasks?: Component;
+  /**
+   * Open-tab bar. Renders nothing while a feature panel owns the screen, so a
+   * panel keeps the complete visible area it is documented to occupy.
+   */
+  tabs?: Component;
   composer: Component;
   status: Component;
 }
@@ -72,13 +77,22 @@ export class TuiChatLayout implements Component {
         this.fullscreenBodyMouseRange = undefined;
       },
     };
-    const goalSection = this.createFullscreenFooterSection(0);
-    const followUpSection = this.createFullscreenFooterSection(1);
-    const tasksSection = this.createFullscreenFooterSection(2);
-    const activitySection = this.createFullscreenFooterSection(3);
-    const composerSection = this.createFullscreenFooterSection(4);
-    const statusSection = this.createFullscreenFooterSection(5);
+    const tabsSection = this.createFullscreenFooterSection(0);
+    const goalSection = this.createFullscreenFooterSection(1);
+    const followUpSection = this.createFullscreenFooterSection(2);
+    const tasksSection = this.createFullscreenFooterSection(3);
+    const activitySection = this.createFullscreenFooterSection(4);
+    const composerSection = this.createFullscreenFooterSection(5);
+    const statusSection = this.createFullscreenFooterSection(6);
     const footerLayout = new VStack([
+      {
+        // The tab bar sits directly above the Composer, where the reading order
+        // of the frame stays: transcript, tabs, inputs, status.
+        component: tabsSection,
+        basis: 'auto',
+        shrink: 1,
+        minSize: 0,
+      },
       {
         component: goalSection,
         basis: 'auto',
@@ -163,6 +177,7 @@ export class TuiChatLayout implements Component {
     this.parts.goal?.invalidate();
     this.parts.followUp.invalidate();
     this.parts.tasks?.invalidate();
+    this.parts.tabs?.invalidate();
     this.parts.composer.invalidate();
     this.parts.status.invalidate();
     this.pendingFullscreenFrame = undefined;
@@ -197,6 +212,9 @@ export class TuiChatLayout implements Component {
     const followUp = interactionActive ? [] : renderPart(this.parts.followUp);
     const goal = !interactionActive && this.parts.goal ? renderPart(this.parts.goal) : [];
     const notice = surface === 'welcome' && this.parts.notice ? renderPart(this.parts.notice) : [];
+    // The tab bar stays visible while a panel is open: with several Sessions
+    // running, the bar is how the user finds the one waiting for an answer.
+    const tabs = this.parts.tabs ? renderPart(this.parts.tabs) : [];
     const status = this.renderStatus(
       frame,
       activity.length +
@@ -204,6 +222,7 @@ export class TuiChatLayout implements Component {
         followUp.length +
         goal.length +
         notice.length +
+        tabs.length +
         (interactionActive
           ? Math.max(
               'fullscreenViewport' in this.parts.interaction &&
@@ -224,6 +243,7 @@ export class TuiChatLayout implements Component {
                 1,
                 (this.terminal.rows || 24) -
                   activity.length -
+                  tabs.length -
                   status.length -
                   (surface === 'conversation' ? 2 : 0),
               ),
@@ -249,12 +269,13 @@ export class TuiChatLayout implements Component {
         this.viewportLayoutKey = JSON.stringify([...viewportLayout, 0]);
         return this.fitDocumentFrame(
           this.viewport() === 'fixed'
-            ? [interaction, activity, composer, status]
-            : [interaction, goal, followUp, tasks, activity, composer, status],
+            ? [interaction, tabs, activity, composer, status]
+            : [interaction, tabs, goal, followUp, tasks, activity, composer, status],
         );
       }
       const tailEntries = [
         ...(notice.length > 0 ? [notice] : []),
+        tabs,
         goal,
         followUp,
         tasks,
@@ -277,9 +298,10 @@ export class TuiChatLayout implements Component {
 
     const footerEntries =
       interactionActive && this.viewport() === 'fixed'
-        ? [interaction, activity, composer, status]
+        ? [interaction, tabs, activity, composer, status]
         : [
             interaction,
+            tabs,
             goal,
             followUp,
             tasks,
@@ -375,17 +397,18 @@ export class TuiChatLayout implements Component {
     const fullInteraction =
       interactionMounted === false || viewportInteraction ? [] : renderPart(this.parts.interaction);
     const interactionActive = interactionMounted ?? fullInteraction.length > 0;
+    const tabs = this.parts.tabs ? renderPart(this.parts.tabs) : [];
     if (interactionActive) {
       const status = this.renderStatus(
         frame,
         // Keep search, selection, preview/error and actions ahead of custom status blocks.
-        activity.length + (viewportInteraction ? 4 : Math.max(1, fullInteraction.length)),
+        activity.length + tabs.length + (viewportInteraction ? 4 : Math.max(1, fullInteraction.length)),
       );
       const interaction = viewportInteraction
         ? insetLines(
             viewportInteraction.renderViewport(
               frame.contentWidth,
-              Math.max(1, (this.terminal.rows || 24) - activity.length - status.length),
+              Math.max(1, (this.terminal.rows || 24) - activity.length - tabs.length - status.length),
             ),
             frame.horizontalPadding,
           )
@@ -399,7 +422,7 @@ export class TuiChatLayout implements Component {
       ];
       return {
         body: [...prelude, ...interaction],
-        footerSections: [[], [], [], activity, [], status],
+        footerSections: [tabs, [], [], [], activity, [], status],
         bodyMouseTarget: this.parts.interaction,
         bodyMouseRange: { start: prelude.length, end: prelude.length + interaction.length },
         horizontalPadding: frame.horizontalPadding,
@@ -412,7 +435,7 @@ export class TuiChatLayout implements Component {
     const notice = surface === 'welcome' && this.parts.notice ? renderPart(this.parts.notice) : [];
     const status = this.renderStatus(
       frame,
-      goal.length + followUp.length + activity.length + composer.length + notice.length + 1,
+      goal.length + followUp.length + activity.length + composer.length + notice.length + tabs.length + 1,
     );
     const tasks = this.renderTasks(
       frame,
@@ -428,7 +451,8 @@ export class TuiChatLayout implements Component {
           tasks.length -
           activity.length -
           composer.length -
-          status.length,
+          status.length -
+          tabs.length,
       );
       const welcome = isHeightAwareComponent(this.parts.welcome)
         ? insetLines(
@@ -438,7 +462,7 @@ export class TuiChatLayout implements Component {
         : renderPart(this.parts.welcome);
       return {
         body: [...welcome, ...notice],
-        footerSections: [goal, followUp, tasks, activity, composer, status],
+        footerSections: [tabs, goal, followUp, tasks, activity, composer, status],
         horizontalPadding: frame.horizontalPadding,
       };
     }
@@ -450,7 +474,7 @@ export class TuiChatLayout implements Component {
         ...joinWelcomeAndTranscript(welcome, transcript),
         ...(transcript.length > 0 ? [''] : []),
       ],
-      footerSections: [goal, followUp, tasks, activity, composer, status],
+      footerSections: [tabs, goal, followUp, tasks, activity, composer, status],
       horizontalPadding: frame.horizontalPadding,
     };
   }

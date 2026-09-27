@@ -33,6 +33,11 @@ export function createTuiSessionLifecycleBridge(runtime: CreateTuiAppOptions['ru
       sessionId: string,
       reason: 'clear' | 'resume_other',
     ): Promise<void> {
+      // A tab/UI switch (`resume_other`) only changes which Session is on screen.
+      // The previous Session stays open and its Runtime turn must keep running —
+      // abortLocalPluginHookSessionTurn always includes the root session id, so
+      // calling it here would stop that work with user_stop.
+      if (reason === 'resume_other') return;
       await abortLocalPluginHookSessionTurn(sessionId, async (executionSessionId) => {
         await runtime.abortSession({ id: executionSessionId, reason: 'user_stop' });
       });

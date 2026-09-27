@@ -1,5 +1,5 @@
 import type { TuiIncidentSink, TuiObservability } from '../observability/index.js';
-import type { McodeAuthPort } from '../auth/application.js';
+import type { KcodeAuthPort } from '../auth/application.js';
 import type { TuiRuntime, TuiWorkspaceRoot } from '../runtime/port.js';
 import type { TuiCommandFlow } from '../tui/controller/product/command-flow.js';
 import type {
@@ -21,7 +21,6 @@ import type { EditTuiDraftInExternalEditor } from '../host/external-editor.js';
 import type { TuiTextClipboardReader, TuiTextClipboardWriter } from '../host/clipboard-text.js';
 import type { TuiExternalTargetOpener } from '../host/open-external.js';
 import type { TuiTranscriptExporter } from '../host/transcript-export.js';
-import type { McodeBusinessTelemetry } from '../analytics/business-telemetry.js';
 import type { TuiNotificationSettings } from '../tui/platform/terminal-notifications.js';
 import type { TerminalCapabilities } from '../tui/platform/terminal-capabilities.js';
 import type { MavisRegion } from '@mavis/config';
@@ -62,7 +61,10 @@ export interface CreateTuiAppOptions extends TuiUpdateOptions {
   customStatusLine?: TuiCustomStatusLineConfig;
   /** Whether the idle conversation composer may show contextual Tips. Defaults to true. */
   showTips?: boolean;
-  /** Ordered terminal title items from tui.terminalTitle; null or [] disables updates. */
+  /**
+   * Accepted from `tui.terminalTitle`. The running TUI sets the terminal title
+   * to the session title, or "Kinetick Code" when the session is untitled.
+   */
   terminalTitle?: readonly string[] | null;
   notifications?: TuiNotificationSettings;
   /** Internal result-channel path; ignored unless statusLineItems enables build-mode. */
@@ -70,8 +72,7 @@ export interface CreateTuiAppOptions extends TuiUpdateOptions {
   productFeatures?: Partial<TuiProductFeatures>;
   observability?: TuiObservability;
   incidentReporter?: TuiIncidentSink;
-  businessTelemetry?: McodeBusinessTelemetry;
-  auth?: McodeAuthPort;
+  auth?: KcodeAuthPort;
   externalEditorCommand?: string;
   editDraftInExternalEditor?: EditTuiDraftInExternalEditor;
   readClipboardText?: TuiTextClipboardReader;

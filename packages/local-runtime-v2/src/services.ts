@@ -532,6 +532,7 @@ export async function createRuntimeServices(
       listProviderPresets: modelSystem.listProviderPresets,
       oauth: modelSystem.oauth,
       favorites: new ModelFavoritesPreference(options.db),
+      copilotOAuth: modelSystem.copilotOAuth,
     },
   });
   if (owners.cron)
@@ -1178,6 +1179,7 @@ async function initializeSessionApplications(
       }
     },
     conversationMutationPort: input.sessionSystem.conversationMutationState,
+    pin: input.pinService,
     conversationMutationWorkflow: createProductionConversationMutationWorkflow({
       sessionFork: input.sessionSystem.fork,
       forkState: createForkState({

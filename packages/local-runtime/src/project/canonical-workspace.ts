@@ -1,6 +1,9 @@
 import path from 'node:path';
 
-import { LEGACY_DATA_DIR_BASENAME, NEW_DATA_DIR_BASENAME } from '@mavis/config/data-dir';
+import {
+  LEGACY_DATA_DIR_BASENAMES,
+  NEW_DATA_DIR_BASENAME,
+} from '@mavis/config/data-dir';
 
 import type { LocalSessionRecord } from '../sessions/controller.js';
 import { validateAgentName } from '../agent/contract.js';
@@ -111,8 +114,9 @@ export function normalizeAbsolutePath(value: string | undefined): string | undef
 }
 
 /**
- * Match the one-way read alias from the historical `.mavis[-profile]` data
- * directory to the current `.minimax[-profile]` data directory.
+ * Match the one-way read alias from historical `.mavis[-profile]` /
+ * `.minimax[-profile]` data directories to the current `.kinetick[-profile]`
+ * data directory.
  *
  * The alias is deliberately narrower than a general path migration: both
  * paths must be under the same parent, use the same profile suffix, contain
@@ -120,6 +124,19 @@ export function normalizeAbsolutePath(value: string | undefined): string | undef
  * This is a lexical read-only comparison; it must not call realpath, migrate
  * data, or backfill the session record.
  */
+
+function isPrimaryDataDirBase(base: string, windows: boolean): boolean {
+  return windows
+    ? base.toLowerCase() === NEW_DATA_DIR_BASENAME
+    : base === NEW_DATA_DIR_BASENAME;
+}
+
+function isLegacyDataDirBase(base: string, windows: boolean): boolean {
+  return LEGACY_DATA_DIR_BASENAMES.some((legacy) =>
+    windows ? base.toLowerCase() === legacy : base === legacy,
+  );
+}
+
 export function isLegacySessionDefaultWorkspaceDir(
   workspaceDir: string | undefined,
   currentSessionDefaultWorkspaceDir: string | undefined,
@@ -128,11 +145,9 @@ export function isLegacySessionDefaultWorkspaceDir(
   const current = parseSessionDefaultWorkspacePath(currentSessionDefaultWorkspaceDir, sessionId);
   const legacy = parseSessionDefaultWorkspacePath(workspaceDir, sessionId);
   if (!current || !legacy || current.windows !== legacy.windows) return false;
-  const sameDataDirBase = current.windows
-    ? current.dataDirBase.toLowerCase() === NEW_DATA_DIR_BASENAME &&
-      legacy.dataDirBase.toLowerCase() === LEGACY_DATA_DIR_BASENAME
-    : current.dataDirBase === NEW_DATA_DIR_BASENAME &&
-      legacy.dataDirBase === LEGACY_DATA_DIR_BASENAME;
+  const sameDataDirBase =
+    isPrimaryDataDirBase(current.dataDirBase, current.windows) &&
+    isLegacyDataDirBase(legacy.dataDirBase, current.windows);
   if (!sameDataDirBase) {
     return false;
   }
@@ -166,11 +181,9 @@ export function isAgentInternalDefaultWorkspaceDir(
   const legacy = parseAgentWorkspacePath(workspace, agentName);
   const active = parseAgentWorkspacePath(current, agentName);
   if (!legacy || !active || legacy.windows !== active.windows) return false;
-  const sameDataDirBase = windows
-    ? active.dataDirBase.toLowerCase() === NEW_DATA_DIR_BASENAME &&
-      legacy.dataDirBase.toLowerCase() === LEGACY_DATA_DIR_BASENAME
-    : active.dataDirBase === NEW_DATA_DIR_BASENAME &&
-      legacy.dataDirBase === LEGACY_DATA_DIR_BASENAME;
+  const sameDataDirBase =
+    isPrimaryDataDirBase(active.dataDirBase, windows) &&
+    isLegacyDataDirBase(legacy.dataDirBase, windows);
   return (
     sameDataDirBase &&
     pathsEqual(active.parentDir, legacy.parentDir, windows) &&
@@ -217,7 +230,7 @@ function parseAgentWorkspacePath(
     return undefined;
   }
   const dataDirPart = parts.at(-4);
-  const match = dataDirPart?.match(/^\.(minimax|mavis)(?:-(.+))?$/i);
+  const match = dataDirPart?.match(/^\.(kinetick|minimax|mavis)(?:-(.+))?$/i);
   if (!match?.[1]) return undefined;
   return {
     windows,
@@ -228,7 +241,7 @@ function parseAgentWorkspacePath(
 }
 
 /**
- * Parser-only: lexically parses absolute `<parent>/.{mavis|minimax}[-profile]/sessions/<sessionId>/workspace`
+ * Parser-only: lexically parses absolute `<parent>/.{kinetick|minimax|mavis}[-profile]/sessions/<sessionId>/workspace`
  * candidates and extracts `windows`, `parentDir`, `dataDirBase`, and `profileSuffix`.
  * It validates the exact suffix shape and supplied `sessionId`; the caller compares alias
  * direction and parent/profile equality in `isLegacySessionDefaultWorkspaceDir`.
@@ -263,7 +276,7 @@ function parseSessionDefaultWorkspacePath(
   }
 
   const dataDirPart = parts.at(-4);
-  const dataDirMatch = dataDirPart?.match(/^\.(minimax|mavis)(?:-(.+))?$/i);
+  const dataDirMatch = dataDirPart?.match(/^\.(kinetick|minimax|mavis)(?:-(.+))?$/i);
   if (!dataDirMatch) return undefined;
   const dataDirBase = dataDirMatch[1];
   if (!dataDirBase) return undefined;
