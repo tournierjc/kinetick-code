@@ -39,7 +39,10 @@ export function createTuiSessionLifecycleBridge(runtime: CreateTuiAppOptions['ru
       // calling it here would stop that work with user_stop.
       if (reason === 'resume_other') return;
       await abortLocalPluginHookSessionTurn(sessionId, async (executionSessionId) => {
-        await runtime.abortSession({ id: executionSessionId, reason: 'user_stop' });
+        // `session_leave`, not `user_stop`: switching Sessions or running `/clear`
+        // still stops the live Turn and pauses the Goal/Queue, but it is not a stop
+        // request and must not tear down background work left running there.
+        await runtime.abortSession({ id: executionSessionId, reason: 'session_leave' });
       });
       await endLocalPluginHookSession(sessionId, reason);
     },
