@@ -133,6 +133,7 @@ export function createTuiApplicationRenderer(options: CreateTuiAppOptions) {
   const renderer = new KcodeInteractiveRenderer({
     terminal,
     initialMode: options.tuiMode ?? 'regular',
+    clearScrollbackOnStart: options.clearScrollbackOnStart,
     logDirectory: options.runtimeLogDirectory,
     incidentReporter: options.incidentReporter,
     altScreen: {
