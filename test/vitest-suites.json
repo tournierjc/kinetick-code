@@ -46,6 +46,7 @@
       "packages/agent-core/test/unit/event-bridge/converters.test.ts",
       "packages/agent-core/test/unit/image-dimensions.test.ts",
       "packages/agent-modules/mcp/test/connection-pool-abort.test.ts",
+      "packages/agent-modules/mcp/test/stdio-env.test.ts",
       "packages/agent-modules/mcp/test/connection-pool-metrics.test.ts",
       "packages/agent-modules/mcp/test/connection-pool-server-override.test.ts",
       "packages/agent-modules/mcp/test/name-registry.test.ts",
