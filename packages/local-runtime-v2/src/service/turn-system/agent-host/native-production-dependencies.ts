@@ -226,8 +226,11 @@ function createPermissionGateOptions<TAgent extends AgentExecutionSnapshot>(
   return {
     ...options.permission,
     ...(logger ? { logger } : {}),
-    enforceBuiltinTools:
-      options.executor.cliProductPolicy === true && options.executor.tuiProductPolicy !== true,
+    // This distribution has no second checker for catalog tools stamped
+    // `builtin` or `builtin-matrix`. TUI and CLI both run the shared engine,
+    // including deny and ask rules. Native bash/read/write/edit/grep/glob
+    // already reach that engine because they carry no catalog source.
+    enforceBuiltinTools: true,
   };
 }
 

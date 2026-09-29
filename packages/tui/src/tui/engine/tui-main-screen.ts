@@ -177,6 +177,8 @@ export class TuiMainScreen extends TuiBase implements TUI {
 	override stop(options: TuiStopOptions = {}): void {
 		this.renderingMainOnStop = true;
 		try {
+			// Ordinary stop must retain the latest transcript even when output is held.
+			// Mode switches already captured the current render state before stop.
 			// Flush the main document and exit 1049 before returning terminal ownership.
 			this.cancelResize();
 			if (!this.stopped && (this.overlayScreenActive || this.resizePending || (!options.preserveScreen && this.hasPendingRender()))) {

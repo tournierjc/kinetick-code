@@ -72,7 +72,7 @@ const MINIAPP_FAILURE_CATALOG = {
     stage: 'workspace',
     recovery: 'edit_workspace',
     message: 'package.json does not reference the Mini App manifest correctly.',
-    hint: 'For a new package, use mcode.schemaVersion 2 with mcode.miniApp set to ./miniapp/miniapp.json. Preserve an existing V1 mcode.liveboard declaration or transitional V2 mcode.miniApp declaration when it points to ./liveboard/liveboard.json.',
+    hint: 'For a new package, use kcode.schemaVersion 2 with kcode.miniApp set to ./miniapp/miniapp.json. Preserve an existing V1 kcode.liveboard declaration or transitional V2 kcode.miniApp declaration when it points to ./liveboard/liveboard.json.',
   },
   MINIAPP_MANIFEST_INVALID: {
     lifecycleCode: 'PREPARATION_FAILED',

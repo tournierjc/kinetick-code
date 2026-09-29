@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { open, realpath } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { isRuntimeBoundaryEnvName } from '@mavis/shared/runtime-boundary-env';
 import type { LocalMcpServerConfig } from './contracts.js';
 import { normalizeServerName, readRecord } from './runtime/config.js';
 
@@ -137,6 +138,9 @@ function expand(value: unknown, env: NodeJS.ProcessEnv): string {
   return value.replace(
     /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/gu,
     (_match, name: string, fallback?: string) => {
+      if (isRuntimeBoundaryEnvName(name)) {
+        throw new Error(`Project MCP cannot reference runtime environment variable: ${name}.`);
+      }
       const resolved = env[name] ?? fallback;
       if (resolved === undefined) throw new Error(`Missing environment variable: ${name}.`);
       return resolved;

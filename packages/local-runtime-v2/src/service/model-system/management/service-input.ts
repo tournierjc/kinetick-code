@@ -1,5 +1,9 @@
 import type { LocalModelConfig, ModelProviderTestApi, UserModelInputView } from '../contracts.js';
 import { LocalModelProviderError } from '../contracts.js';
+import {
+  providerFamilyServesModel,
+  type ProviderFamily,
+} from '../catalog/provider-families.js';
 import { isModelProviderApi } from '../identity.js';
 import {
   isMiniMaxM3ModelId,
@@ -92,6 +96,7 @@ export function modelsFromInputs(
   models: UserModelInputView[],
   existingModels?: Record<string, LocalModelConfig>,
   implicitCustomProviderThinking = false,
+  family?: ProviderFamily,
 ): Record<string, LocalModelConfig> {
   const out: Record<string, LocalModelConfig> = {};
   for (const model of models) {
@@ -100,7 +105,7 @@ export function modelsFromInputs(
       throw new LocalModelProviderError(400, 'model_id must not be empty', 'VALIDATION_ERROR');
     }
     const existing = existingModels?.[modelId];
-    out[modelId] = modelFromInput(model, existing, implicitCustomProviderThinking);
+    out[modelId] = modelFromInput(model, existing, implicitCustomProviderThinking, family);
   }
   return out;
 }
@@ -109,8 +114,11 @@ function modelFromInput(
   model: UserModelInputView,
   existing: LocalModelConfig | undefined,
   implicitCustomProviderThinking: boolean,
+  family?: ProviderFamily,
 ): LocalModelConfig {
-  const effortOptions = normalizeModelThinkingEffortOptions(model.effortOptions);
+  const effortOptions =
+    normalizeModelThinkingEffortOptions(model.effortOptions) ??
+    providerFamilyEffortOptions(family, model);
   const defaultThinkingConfig = defaultThinkingConfigForInput(
     model,
     existing,
@@ -145,6 +153,24 @@ function defaultThinkingConfigForInput(
   return { mode: 'switchable', default_value: 'true' };
 }
 
+/**
+ * The reasoning levels the endpoint publishes, used only when the caller supplied
+ * none.
+ *
+ * A `models.dev` entry says a model reasons; it does not say which levels the
+ * endpoint accepts, so a preset would otherwise leave the level unselectable and
+ * `--effort` refuses to run. A model that declares `reasoning: false`, and a
+ * generation the family excludes (DeepSeek V3 has no thinking mode), get nothing.
+ */
+function providerFamilyEffortOptions(
+  family: ProviderFamily | undefined,
+  model: UserModelInputView,
+): string[] | undefined {
+  if (!family?.effortOptions || model.reasoning === false) return undefined;
+  if (!providerFamilyServesModel(family, model.modelId)) return undefined;
+  return [...family.effortOptions];
+}
+
 function modelMetadataFields(model: UserModelInputView): Partial<LocalModelConfig> {
   const fields: Partial<LocalModelConfig> = {};
   const configurationSource = normalizeModelConfigurationSource(model.configurationSource);
@@ -156,6 +182,7 @@ function modelMetadataFields(model: UserModelInputView): Partial<LocalModelConfi
   if (model.toolCall !== undefined) fields.tool_call = model.toolCall;
   if (model.temperature !== undefined) fields.temperature = model.temperature;
   if (model.modalities) fields.modalities = model.modalities as LocalModelConfig['modalities'];
+  if (model.cost) fields.cost = model.cost;
   if (limit) fields.limit = limit;
   return fields;
 }
@@ -206,8 +233,9 @@ export function mergeModelsFromInputs(
   existing: Record<string, LocalModelConfig> | undefined,
   models: UserModelInputView[],
   implicitCustomProviderThinking = false,
+  family?: ProviderFamily,
 ): Record<string, LocalModelConfig> {
-  const normalized = modelsFromInputs(models, existing, implicitCustomProviderThinking);
+  const normalized = modelsFromInputs(models, existing, implicitCustomProviderThinking, family);
   return Object.fromEntries(models.map((input) => mergeModelInput(input, existing, normalized)));
 }
 

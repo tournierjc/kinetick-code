@@ -1,6 +1,6 @@
-import type { McodeAuthApplication } from '../auth/application.js';
+import type { KcodeAuthApplication } from '../auth/application.js';
 import { markTuiAuthorizationUrl } from '../auth/authorization-url.js';
-import { createDefaultMcodeAuthApplication } from '../auth/factory.js';
+import { createDefaultKcodeAuthApplication } from '../auth/factory.js';
 import {
   createTuiExternalTargetOpener,
   type TuiExternalTargetOpener,
@@ -9,8 +9,8 @@ import { prepareTuiDataDir } from '../runtime/data-dir.js';
 import type { MavisRegion } from '@mavis/config';
 
 interface TuiAuthCommandApplication {
-  login: McodeAuthApplication['login'];
-  logout: McodeAuthApplication['logout'];
+  login: KcodeAuthApplication['login'];
+  logout: KcodeAuthApplication['logout'];
 }
 
 export interface RunTuiAuthCommandOptions {
@@ -71,8 +71,8 @@ export async function runTuiLogout(options: RunTuiAuthCommandOptions = {}): Prom
 async function createAuthApplication(
   region?: MavisRegion,
   prepareDataDirFn: typeof prepareTuiDataDir = prepareTuiDataDir,
-): Promise<McodeAuthApplication> {
-  return createDefaultMcodeAuthApplication({
+): Promise<KcodeAuthApplication> {
+  return createDefaultKcodeAuthApplication({
     dataDir: await prepareDataDirFn(),
     ...(region ? { region } : {}),
   });

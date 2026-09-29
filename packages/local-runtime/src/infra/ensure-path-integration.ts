@@ -1,6 +1,6 @@
 /**
  * Add `<dataDir>/bin` to the user's shell or user-level PATH so that
- * `mavis`, `minimax`, and `mavis-trash` are available in new terminal
+ * `mavis`, `kcode`, and `mavis-trash` are available in new terminal
  * sessions.
  *
  * Best-effort: failures are swallowed — PATH integration must never block
@@ -11,7 +11,12 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const PATH_MARKER = '# Added by MiniMax Code';
+// Persisted in the user's shell profile: the current marker writes the fork
+// name, and every spelling an earlier release used is still recognized so an
+// existing managed block is never duplicated.
+const PATH_MARKER = '# Added by Kinetick Code';
+const LEGACY_PATH_MARKERS = ['# Added by MiniMax Code'] as const;
+const PATH_MARKERS = [PATH_MARKER, ...LEGACY_PATH_MARKERS];
 
 export function ensurePathIntegration(dataDir: string): void {
   const binDir = join(dataDir, 'bin');
@@ -42,7 +47,7 @@ function ensurePosixShellPath(binDir: string): void {
   for (const rc of rcFiles) {
     try {
       const content = existsSync(rc) ? readFileSync(rc, 'utf-8') : '';
-      if (content.includes(PATH_MARKER)) continue;
+      if (PATH_MARKERS.some((marker) => content.includes(marker))) continue;
       appendFileSync(rc, `\n${PATH_MARKER}\n${exportLine}\n`);
     } catch {
       // Individual shell config failures must not prevent updating the next one.

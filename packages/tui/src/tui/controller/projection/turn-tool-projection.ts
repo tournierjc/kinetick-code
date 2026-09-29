@@ -1,11 +1,11 @@
 import type { TuiToolCall } from '../../../runtime/port.js';
 import type { TranscriptCellStatus } from '../../transcript/model.js';
-import type { TranscriptStore } from '../../transcript/store.js';
+import type { TranscriptProjectionTarget } from '../../transcript/store.js';
 import { isExplicitBackgroundBashToolPayload } from '../../transcript/tool-evidence.js';
 import { boundToolText, mergeToolDetail, retainedToolText } from './tool-payload-budget.js';
 
 export class TuiToolProjection {
-  constructor(private readonly transcript: TranscriptStore) {}
+  constructor(private readonly transcript: TranscriptProjectionTarget) {}
 
   applyLive(
     turnId: string,

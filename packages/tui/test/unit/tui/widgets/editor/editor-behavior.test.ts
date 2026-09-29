@@ -65,18 +65,18 @@ describe('Editor behavior', () => {
   });
 
   it('overrides placeholder per frame without changing draft, history or submitted text', () => {
-    const { editor } = createEditor({ paddingX: 1, placeholder: 'Ask Mcode to do anything' });
+    const { editor } = createEditor({ paddingX: 1, placeholder: 'Ask Kcode to do anything' });
     editor.focused = true;
     const before = editor.captureDraft();
     const rendered = editor.render(80, 'Ask a side question…').join('\n');
 
     expect(rendered).toContain(CURSOR_MARKER);
     expect(stripTerminalSequences(rendered)).toContain('Ask a side question…');
-    expect(stripTerminalSequences(rendered)).not.toContain('Ask Mcode to do anything');
+    expect(stripTerminalSequences(rendered)).not.toContain('Ask Kcode to do anything');
     expect(editor.captureDraft()).toEqual(before);
     expect(editor.getHistoryEntries()).toEqual([]);
     expect(stripTerminalSequences(editor.render(80).join('\n'))).toContain(
-      'Ask Mcode to do anything',
+      'Ask Kcode to do anything',
     );
 
     const submitted: string[] = [];
@@ -136,7 +136,7 @@ describe('Editor behavior', () => {
   });
 
   it('renders a display-only placeholder until the user starts typing', () => {
-    const placeholder = 'Ask Mcode to do anything';
+    const placeholder = 'Ask Kcode to do anything';
     const { editor } = createEditor({ placeholder });
     editor.focused = true;
 
@@ -151,7 +151,7 @@ describe('Editor behavior', () => {
   });
 
   it('truncates the placeholder inside narrow editor bounds', () => {
-    const { editor } = createEditor({ placeholder: 'Ask Mcode to do anything' });
+    const { editor } = createEditor({ placeholder: 'Ask Kcode to do anything' });
 
     expect(editor.render(12).every((line) => visibleWidth(line) <= 12)).toBe(true);
   });

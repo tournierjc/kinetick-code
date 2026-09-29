@@ -49,6 +49,8 @@ const VIDEO_PREVIEW_MIME_TYPES = new Map<string, string>([
   ['.ogv', 'video/ogg'],
   ['.webm', 'video/webm'],
 ]);
+// Remote-control protocol headers: these names belong to the MiniMax
+// remote-control service contract, so the product rename does not change them.
 const RC_REQUEST_SOURCE_HEADER = 'X-MCode-Request-Source';
 const RC_REQUEST_SOURCE_VALUE = 'remote-control';
 const RC_FILE_CONTENT_MAX_BYTES_HEADER = 'X-MCode-Remote-Control-File-Content-Max-Bytes';

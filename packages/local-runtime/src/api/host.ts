@@ -55,10 +55,6 @@ import type { LocalCronRuntime } from "../cron/index.js";
 import { SqliteLocalCronStore } from "../cron/index.js";
 import { createCuScreenshotPrunerHook } from "../cu/cu-screenshot-pruner.js";
 import {
-  createLLMFailureReportHook,
-  type DesktopErrorReporter,
-} from "../error-reporting/index.js";
-import {
   createGlobalEventSource,
   type GlobalEventSubscriber,
 } from "../events/global-events.js";
@@ -334,7 +330,6 @@ export class LocalRuntimeApiHost {
     completion: LocalBashCompletion,
   ) => void;
   public readonly observeLLMRequest: PiLLMRequestObserver;
-  private readonly errorReporter: DesktopErrorReporter | undefined;
   private readonly configUpdater: (
     body: Record<string, unknown>,
   ) => Promise<LocalConfigUpdateResult>;
@@ -471,12 +466,7 @@ export class LocalRuntimeApiHost {
     this.isContextWindowUsageEnabled =
       options.isContextWindowUsageEnabled ?? (() => false);
     this.fetchImpl = options.fetchImpl;
-    this.errorReporter = options.errorReporter;
-    this.llmRequestFailureHook =
-      options.llmRequestFailureHook ??
-      (this.errorReporter
-        ? createLLMFailureReportHook(this.errorReporter)
-        : undefined);
+    this.llmRequestFailureHook = options.llmRequestFailureHook;
     this.configUpdater = options.configUpdater ?? updateLocalConfigFile;
     this.legacyRuntime = options.legacyOpencodeRuntime;
     this.legacyOpencodeEnabled = options.legacyOpencodeEnabled;
@@ -591,7 +581,6 @@ export class LocalRuntimeApiHost {
         authContextGetter: this.authContextGetter,
         routingContextGetter: this.routingContextGetter,
         fetchImpl: this.fetchImpl,
-        ...(this.errorReporter ? { errorReporter: this.errorReporter } : {}),
         ...(this.llmRequestFailureHook
           ? { llmRequestFailureHook: this.llmRequestFailureHook }
           : {}),
@@ -1455,7 +1444,6 @@ export class LocalRuntimeApiHost {
       () => this.questionnaireAutoReplyScheduler.close(),
       () => this.globalEvents.close(),
       () => drainBackgroundTasks(this),
-      () => this.errorReporter?.close(),
     ];
     for (const close of cleanups) {
       try {

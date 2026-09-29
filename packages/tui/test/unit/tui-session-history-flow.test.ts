@@ -5,7 +5,7 @@ import { TuiOverlayRegularFeaturePresenter } from '../../src/tui/shell/regular-f
 import { TuiSurfaceHost, type TuiFeatureScreen } from '../../src/tui/shell/surface-host.js';
 import { VirtualTerminal } from '../pi-084-upstream/virtual-terminal.js';
 
-import type { TuiSessionInputSummary } from '../../src/runtime/port.js';
+import type { TuiSessionForkOptions, TuiSessionInputSummary } from '../../src/runtime/port.js';
 import { TuiSessionMutationFlow } from '../../src/tui/controller/product/session-mutation-flow.js';
 import { stripAnsi } from '../../src/tui/rendering/text.js';
 
@@ -18,7 +18,13 @@ const SUMMARY: TuiSessionInputSummary = {
   fileChangeCount: 1,
 };
 
-function createHarness(realHost?: TuiSurfaceHost) {
+function createHarness(
+  realHost?: TuiSurfaceHost,
+  overrides: {
+    hasLiveRun?: () => boolean;
+    getSessionForkOptions?: () => Promise<TuiSessionForkOptions>;
+  } = {},
+) {
   const listSessionInputSummaries = vi.fn(async () => [SUMMARY]);
   const getSessionRewindPreview = vi.fn(async () => ({
     turns: [
@@ -41,6 +47,21 @@ function createHarness(realHost?: TuiSurfaceHost) {
     hasMore: false,
   }));
   const editSessionMessage = vi.fn();
+  const getSessionForkOptions = vi.fn(
+    overrides.getSessionForkOptions ??
+      (async () => ({
+        canFork: true,
+        suggestedTitle: '2 - History test',
+        sourceTitle: 'History test',
+        worktreeVisible: false,
+        worktreeEligible: false,
+      })),
+  );
+  const forkSession = vi.fn(async (input: { sessionId: string; clientRequestId: string }) => ({
+    session: { sessionId: 'session-clone', title: '2 - History test' },
+    sourceDisplayMessageId: input.sessionId,
+  }));
+  const activateSessionById = vi.fn(async () => undefined);
   const pushedScreens: Array<TuiFeatureScreen & {
     id: string;
     handleInput(data: string): void;
@@ -64,6 +85,8 @@ function createHarness(realHost?: TuiSurfaceHost) {
     setChatFocus: vi.fn(),
   };
   const editor = { setText: vi.fn() };
+  const setHint = vi.fn();
+  const append = vi.fn();
   const refreshProjection = vi.fn(async () => undefined);
   const reloadSessionProjection = vi.fn(async () => undefined);
   const setEditTranscriptBoundary = vi.fn();
@@ -74,6 +97,8 @@ function createHarness(realHost?: TuiSurfaceHost) {
       rewindSession,
       listMessagePage,
       editSessionMessage,
+      getSessionForkOptions,
+      forkSession,
     } as never,
     controller: {
       snapshot: () => ({
@@ -81,16 +106,16 @@ function createHarness(realHost?: TuiSurfaceHost) {
         sessions: [],
       }),
     } as never,
-    sessionFlow: { activateSessionById: vi.fn() } as never,
+    sessionFlow: { activateSessionById } as never,
     refreshProjection,
     reloadSessionProjection,
     surfaceHost: surfaceHost as never,
     editor: editor as never,
-    setHint: vi.fn(),
-    append: vi.fn(),
+    setHint,
+    append,
     setEditTranscriptBoundary,
     onChanged: vi.fn(),
-    hasLiveRun: () => false,
+    hasLiveRun: overrides.hasLiveRun ?? (() => false),
   });
   return {
     flow,
@@ -99,6 +124,9 @@ function createHarness(realHost?: TuiSurfaceHost) {
     rewindSession,
     listMessagePage,
     editSessionMessage,
+    getSessionForkOptions,
+    forkSession,
+    activateSessionById,
     pushedScreens,
     closeHandles,
     surfaceHost,
@@ -106,6 +134,8 @@ function createHarness(realHost?: TuiSurfaceHost) {
     refreshProjection,
     reloadSessionProjection,
     setEditTranscriptBoundary,
+    setHint,
+    append,
   };
 }
 
@@ -270,5 +300,66 @@ describe('TuiSessionMutationFlow history explorer', () => {
       }),
     );
     expect(harness.pushedScreens).toHaveLength(2);
+  });
+});
+
+describe('TuiSessionMutationFlow clone', () => {
+  it('copies the Session at the latest reply without asking for a boundary', async () => {
+    const harness = createHarness();
+
+    harness.flow.startClone();
+    await vi.waitFor(() => expect(harness.pushedScreens).toHaveLength(1));
+
+    // No boundary argument: the runtime resolves the latest assistant reply.
+    expect(harness.getSessionForkOptions).toHaveBeenCalledWith(SESSION_ID, undefined);
+    const card = stripAnsi(harness.pushedScreens[0]?.render(80).join('\n') ?? '');
+    expect(card).toContain('Confirm copy');
+    expect(card).toContain('Includes the conversation up to the latest reply.');
+    expect(card).not.toContain('From');
+
+    harness.pushedScreens[0]?.handleInput('\r');
+    await vi.waitFor(() => expect(harness.forkSession).toHaveBeenCalledTimes(1));
+    expect(harness.forkSession).toHaveBeenCalledWith({
+      sessionId: SESSION_ID,
+      clientRequestId: expect.stringMatching(/^tui-clone_/u),
+      useSuggestedTitle: true,
+      createIsolatedWorktree: false,
+    });
+    await vi.waitFor(() =>
+      expect(harness.activateSessionById).toHaveBeenCalledWith('session-clone'),
+    );
+  });
+
+  it('keeps the draft and stays out of the pipeline while a turn is running', () => {
+    const harness = createHarness(undefined, { hasLiveRun: () => true });
+
+    harness.flow.startClone();
+
+    expect(harness.editor.setText).toHaveBeenCalledWith('/clone');
+    expect(harness.getSessionForkOptions).not.toHaveBeenCalled();
+    expect(harness.forkSession).not.toHaveBeenCalled();
+    expect(harness.pushedScreens).toHaveLength(0);
+    expect(harness.setHint).toHaveBeenCalledWith(
+      'Wait for the current response or press Esc to interrupt before copying this Session.',
+    );
+  });
+
+  it('reports why a Session cannot be copied yet', async () => {
+    const harness = createHarness(undefined, {
+      getSessionForkOptions: async () => ({
+        canFork: false,
+        unavailableReason: 'no complete reply yet',
+        worktreeVisible: false,
+        worktreeEligible: false,
+      }),
+    });
+
+    harness.flow.startClone();
+
+    await vi.waitFor(() =>
+      expect(harness.append).toHaveBeenCalledWith('Copy unavailable: no complete reply yet', 'warning'),
+    );
+    expect(harness.pushedScreens).toHaveLength(0);
+    expect(harness.forkSession).not.toHaveBeenCalled();
   });
 });

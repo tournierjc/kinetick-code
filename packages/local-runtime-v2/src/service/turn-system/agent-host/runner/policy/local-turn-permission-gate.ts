@@ -100,7 +100,11 @@ export interface LocalTurnPermissionGateOptions {
   };
   readonly logger?: PiTurnRunnerLogger;
   readonly mutations?: LocalTurnPermissionMutationOwner;
-  /** Optional isolated-host override; product hosts keep Desktop's built-in tool policy. */
+  /**
+   * When true, catalog tools stamped `builtin` or `builtin-matrix` use this
+   * gate. Product hosts set it. A false value is only for a host that owns
+   * those tools in another checker.
+   */
   readonly enforceBuiltinTools?: boolean;
   /**
    * Resolves whether a Session is a temporary side Session (`/btw` / Peek).
@@ -188,8 +192,8 @@ export class LocalTurnPermissionGate {
     if (sideSession?.block) return { ...sideSession.block, blockedBy: 'permission' };
     const sideApprovalRequired = sideSession?.approvalRequired === true;
     if (shouldSkipPermissionCheck(this.options, input)) {
-      // Desktop's built-in tool policy owns these tools elsewhere; the
-      // side-Session confirmation is the only gate-level requirement here.
+      // A host that sets enforceBuiltinTools false owns these catalog tools
+      // in another checker. Side-Session confirmation still applies here.
       if (!sideApprovalRequired) return undefined;
       const blocked = await this.resolveSideSessionApproval(input, request);
       return blocked ? { ...blocked, blockedBy: 'permission' } : undefined;

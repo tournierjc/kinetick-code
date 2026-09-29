@@ -6,7 +6,7 @@ import {
 import { formatTuiKeybinding, type TuiKeybindingRegistry } from '../../shell/keybindings.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 
-export const MINIMAX_CODE_EXTERNAL_EDITOR_SETUP_HINT = `Set MCODE_EDITOR, VISUAL, or EDITOR to use ${formatTuiKeybinding('composer.external-editor')}; GUI editors need --wait.`;
+export const KCODE_EXTERNAL_EDITOR_SETUP_HINT = `Set MCODE_EDITOR, VISUAL, or EDITOR to use ${formatTuiKeybinding('composer.external-editor')}; GUI editors need --wait.`;
 
 interface ExternalEditorDraft {
   getExpandedText(): string;
