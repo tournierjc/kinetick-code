@@ -3,8 +3,10 @@ import type {
   LocalWebFetchRetrievalOutcome,
   LocalWebFetchToolInput,
 } from '@mavis/agent-tools/desktop';
+import { isMetadataOrLinkLocalHostname } from '../assets/remote-source.js';
 
 const WEB_FETCH_USER_AGENT = 'MiniMaxAgent';
+const MAX_WEB_FETCH_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const TEXT_CONTENT_TYPE_PATTERNS = [
@@ -58,12 +60,44 @@ export class LocalWebFetchClient implements LocalWebFetchAdapter {
     const method = input.method ?? 'GET';
     const scoped = createScopedAbortSignal(signal, this.timeoutMs);
     try {
-      const res = await this.fetchImpl(url.href, {
-        method,
-        headers: { 'User-Agent': WEB_FETCH_USER_AGENT },
-        redirect: 'follow',
-        signal: scoped.signal,
-      });
+      let current = url;
+      let res: Response | undefined;
+      for (let redirectCount = 0; redirectCount <= MAX_WEB_FETCH_REDIRECTS; redirectCount += 1) {
+        const blocked = metadataOrLinkLocalReason(current);
+        if (blocked) {
+          return failure(blocked, undefined, undefined, 'invalid_request');
+        }
+        res = await this.fetchImpl(current.href, {
+          method,
+          headers: { 'User-Agent': WEB_FETCH_USER_AGENT },
+          redirect: 'manual',
+          signal: scoped.signal,
+        });
+        if (!isRedirectStatus(res.status)) break;
+        const location = res.headers.get('location');
+        await res.body?.cancel();
+        if (!location || redirectCount === MAX_WEB_FETCH_REDIRECTS) {
+          return failure(
+            'web_fetch refused a redirect without a safe http(s) target.',
+            undefined,
+            undefined,
+            'invalid_request',
+          );
+        }
+        const next = normalizeHttpUrl(new URL(location, current).href);
+        if (!next) {
+          return failure(
+            'web_fetch refused a redirect without a safe http(s) target.',
+            undefined,
+            undefined,
+            'invalid_request',
+          );
+        }
+        current = next;
+      }
+      if (!res) {
+        return failure('web_fetch network request failed.', undefined, undefined, 'network_error');
+      }
       const contentType = res.headers.get('content-type') ?? undefined;
       const retryAfter = res.headers.get('retry-after') ?? undefined;
       if (method === 'HEAD') {
@@ -72,7 +106,7 @@ export class LocalWebFetchClient implements LocalWebFetchAdapter {
           content: `HTTP ${res.status} ${res.statusText}`,
           status: res.status,
           statusText: res.statusText,
-          finalUrl: res.url || url.href,
+          finalUrl: res.url || current.href,
           ...(contentType ? { contentType } : {}),
           ...(retryAfter ? { retryAfter } : {}),
           bytes: 0,
@@ -97,7 +131,7 @@ export class LocalWebFetchClient implements LocalWebFetchAdapter {
           content: body.text,
           status: res.status,
           statusText: res.statusText,
-          finalUrl: res.url || url.href,
+          finalUrl: res.url || current.href,
           ...(contentType ? { contentType } : {}),
           ...(retryAfter ? { retryAfter } : {}),
           bytes: body.bytes,
@@ -110,7 +144,7 @@ export class LocalWebFetchClient implements LocalWebFetchAdapter {
         content: body.text,
         status: res.status,
         statusText: res.statusText,
-        finalUrl: res.url || url.href,
+        finalUrl: res.url || current.href,
         ...(contentType ? { contentType } : {}),
         ...(retryAfter ? { retryAfter } : {}),
         bytes: body.bytes,
@@ -326,6 +360,16 @@ function createScopedAbortSignal(
       upstream?.removeEventListener('abort', abort);
     },
   };
+}
+
+function metadataOrLinkLocalReason(url: URL): string | undefined {
+  return isMetadataOrLinkLocalHostname(url.hostname)
+    ? 'web_fetch refuses link-local and metadata addresses.'
+    : undefined;
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
 function normalizeHttpUrl(value: string): URL | undefined {
