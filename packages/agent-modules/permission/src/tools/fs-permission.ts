@@ -616,7 +616,10 @@ function isWellKnownSystemReadAllowed(resolvedPath: string): boolean {
  *   Linux:   /tmp
  *   Windows: C:\Users\<user>\AppData\Local\Temp
  */
-const RESOLVED_TMPDIR = path.resolve(os.tmpdir());
+const RESOLVED_TMPDIR = resolveExistingPath(path.resolve(os.tmpdir()));
+/** macOS `/tmp` and `/var` are symlinks into `/private`. Compare the real directory. */
+const RESOLVED_POSIX_TMP =
+  process.platform === 'win32' ? undefined : resolveExistingPath('/tmp');
 
 /**
  * Check if a resolved path is within the system temp directory.
@@ -635,13 +638,15 @@ const RESOLVED_TMPDIR = path.resolve(os.tmpdir());
  *     POSIX-style /tmp to fall back to.
  */
 export function isTempDirectory(resolvedPath: string): boolean {
-  if (resolvedPath === RESOLVED_TMPDIR || resolvedPath.startsWith(RESOLVED_TMPDIR + path.sep)) {
+  const canonical = resolveExistingPath(path.resolve(resolvedPath));
+  if (canonical === RESOLVED_TMPDIR || canonical.startsWith(RESOLVED_TMPDIR + path.sep)) {
     return true;
   }
-  if (process.platform !== 'win32') {
-    if (resolvedPath === '/tmp' || resolvedPath.startsWith('/tmp/')) {
-      return true;
-    }
+  if (
+    RESOLVED_POSIX_TMP &&
+    (canonical === RESOLVED_POSIX_TMP || canonical.startsWith(RESOLVED_POSIX_TMP + path.sep))
+  ) {
+    return true;
   }
   return false;
 }
@@ -797,23 +802,23 @@ export function isInternalWhitelistedPath(filePath: string, context: PathCheckCo
  * - Single-level glob: `/path/*` (matches direct children of /path)
  */
 export function matchPathRule(filePath: string, ruleContent: string): boolean {
-  const resolved = path.resolve(filePath);
+  const resolved = resolveExistingPath(path.resolve(filePath));
 
   // Directory glob: /path/**
   if (ruleContent.endsWith('/**')) {
-    const dir = path.resolve(ruleContent.slice(0, -3));
+    const dir = resolveExistingPath(path.resolve(ruleContent.slice(0, -3)));
     return resolved.startsWith(dir + path.sep) || resolved === dir;
   }
 
   // Single-level glob: /path/*
   if (ruleContent.endsWith('/*') && !ruleContent.endsWith('**')) {
-    const dir = path.resolve(ruleContent.slice(0, -2));
+    const dir = resolveExistingPath(path.resolve(ruleContent.slice(0, -2)));
     const parent = path.dirname(resolved);
     return parent === dir;
   }
 
-  // Exact match
-  return resolved === path.resolve(ruleContent);
+  // Exact match. A rule spelled through a directory symlink matches the target.
+  return resolved === resolveExistingPath(path.resolve(ruleContent));
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,7 +1054,9 @@ export function isPathAllowed(
 
   if (
     (toolName === 'write' || toolName === 'edit') &&
-    context.trustedExactWritePaths?.some((trustedPath) => isSameResolvedPath(trustedPath, resolved))
+    context.trustedExactWritePaths?.some((trustedPath) =>
+      isSameResolvedPath(resolveExistingPath(path.resolve(trustedPath)), resolved),
+    )
   ) {
     return {
       allowed: true,

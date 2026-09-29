@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { isPathAllowed, pathInWorkingPath } from '../../../src/tools/fs-permission.js';
+import type { PermissionRule } from '../../../src/types.js';
 
 const roots: string[] = [];
 
@@ -45,6 +46,36 @@ describe.skipIf(process.platform === 'win32')('filesystem permission symlink bou
 
     expect(pathInWorkingPath(link, workspace)).toBe(false);
     expect(isPathAllowed(link, [], { workingDirectory: workspace }, 'write').allowed).toBe(false);
+  });
+
+  it('matches an allow rule and a trusted write through a directory symlink', () => {
+    const root = tempRoot();
+    const real = path.join(root, 'real');
+    const alias = path.join(root, 'alias');
+    const elsewhere = path.join(root, 'elsewhere');
+    mkdirSync(real);
+    mkdirSync(elsewhere);
+    symlinkSync(real, alias);
+    const viaAlias = path.join(alias, 'plan.md');
+    const viaReal = path.join(real, 'plan.md');
+    writeFileSync(viaReal, 'plan');
+    const allowRule: PermissionRule = {
+      source: 'session',
+      ruleBehavior: 'allow',
+      ruleValue: { toolName: 'write', ruleContent: viaAlias },
+    };
+
+    expect(
+      isPathAllowed(viaReal, [allowRule], { workingDirectory: elsewhere }, 'write').allowed,
+    ).toBe(true);
+    expect(
+      isPathAllowed(
+        viaAlias,
+        [],
+        { workingDirectory: elsewhere, trustedExactWritePaths: [viaReal] },
+        'write',
+      ).allowed,
+    ).toBe(true);
   });
 
   it('still allows a real file inside the workspace', () => {
