@@ -1402,6 +1402,7 @@
     "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/local-cu-screenshot-pruner.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/output-safety-event-writer.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/policy/input-review-runner-options.ts",
+    "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/policy/local-turn-permission-gate.test.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/policy/local-turn-permission-gate.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/policy/process-local-tool-result-policy.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/runner/policy/side-session-approval.ts",

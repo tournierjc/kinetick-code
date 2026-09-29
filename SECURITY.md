@@ -60,9 +60,7 @@ Severities describe impact if the stated condition is met. They are not a claim 
 
 *Fix:* document the default as unsandboxed host execution, and state that an enabled sandbox is a filesystem control. If network isolation is a product promise, compile a real network policy.
 
-**M2. TUI turns skip the shared permission engine for tools stamped `builtin` or `builtin-matrix`.** `enforceBuiltinTools` is true only for the CLI product policy (`packages/local-runtime-v2/src/service/turn-system/agent-host/native-production-dependencies.ts`). `shouldSkipPermissionCheck` then returns before `decisions.check` (`local-turn-permission-gate.ts`). Native bash, read, write, edit, grep, and glob are built with `toRuntimeTool`, which does not set `source`, so those tools still hit `LocalPermissionFacade` on the TUI. MCP tools projected as `builtin` or `builtin-matrix` do carry that source and skip the engine on the TUI. The gate comment says a desktop policy owns those tools elsewhere; this tree does not contain a second checker for them. Side-session approval still runs.
-
-*Fix:* set `enforceBuiltinTools` for the TUI, or stamp native tools and route every catalog source through the same facade.
+**M2. TUI turns run the shared permission engine for `builtin` and `builtin-matrix` tools. Addressed.** `enforceBuiltinTools` is now true for every product host in this tree (`packages/local-runtime-v2/src/service/turn-system/agent-host/native-production-dependencies.ts`). Catalog MCP tools stamped `builtin` or `builtin-matrix` therefore reach `decisions.check` on the TUI, including deny and ask rules and the unknown-tool path fallback. Native bash, read, write, edit, grep, and glob still have no catalog `source` and already hit `LocalPermissionFacade`. A host can still set `enforceBuiltinTools` false when it owns those tools in another checker; this distribution does not. Residual risk: a tool name with no registered checker and no path intent still allows by default, which is the engine's existing fallback and now matches the CLI.
 
 **M3. Filesystem permission checks are lexical.** `validatePath` uses `path.resolve` and rejects `..` segments (`packages/agent-modules/permission/src/tools/fs-permission.ts`). It does not `realpath` the target before the allow decision. A symlink inside an allowed spelling can point outside the workspace when the tool later opens it. The sandbox resolver does realpath workspace roots when the sandbox is on. Host `rg` and unsandboxed bash do not get that protection.
 
@@ -139,7 +137,7 @@ These are properties of the current design, not defects hidden in a single funct
 2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2).
 3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3).
 4. Make the sandbox default and its network behavior match what the UI claims (M1).
-5. Run the TUI permission engine for builtin MCP tools (M2) and realpath filesystem checks (M3).
+5. Run the TUI permission engine for builtin MCP tools (M2). Done: TUI and CLI both enforce builtin catalog tools. Realpath filesystem checks (M3) remain open.
 6. Apply the existing public-address fetch profile to `web_fetch` and skill archives (M4).
 
 ### Method and limits
