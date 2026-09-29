@@ -36,6 +36,10 @@
     "./agent": {
       "types": "./src/service/agent/public.ts",
       "import": "./dist/service/agent/public.js"
+    },
+    "./project-mcp-trust": {
+      "types": "./src/service/mcp/project-stdio-trust.ts",
+      "import": "./dist/service/mcp/project-stdio-trust.js"
     }
   },
   "jscpd": {

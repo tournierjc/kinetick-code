@@ -220,6 +220,32 @@ function isReservedHostname(hostname: string): boolean {
   );
 }
 
+const METADATA_HOST_NAMES = new Set([
+  'metadata',
+  'metadata.google.internal',
+  'metadata.google.com',
+  'instance-data',
+]);
+
+/** Link-local and cloud metadata names. Loopback and other private ranges are not included. */
+export function isMetadataOrLinkLocalHostname(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/gu, '').toLowerCase();
+  if (
+    !normalized ||
+    METADATA_HOST_NAMES.has(normalized) ||
+    normalized.endsWith('.metadata.google.internal')
+  ) {
+    return true;
+  }
+  const family = isIP(normalized);
+  if (family === 4) {
+    const octets = normalized.split('.').map(Number);
+    return octets[0] === 169 && octets[1] === 254;
+  }
+  if (family === 6) return /^fe[89ab]/u.test(normalized);
+  return false;
+}
+
 function isPublicAddress(input: RemoteAssetAddress): boolean {
   return input.family === 4 ? isPublicIpv4(input.address) : isPublicIpv6(input.address);
 }

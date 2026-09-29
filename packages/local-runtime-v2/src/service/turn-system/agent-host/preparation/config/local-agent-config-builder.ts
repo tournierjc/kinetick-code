@@ -27,7 +27,11 @@ import {
   savedSessionModel,
   type LocalConversationRuntimeConfig,
 } from '../../../../model-system/index.js';
-import { INSTRUCTIONS_CONTEXT_PREAMBLE } from '../prompt-blocks.js';
+import {
+  buildUntrustedProjectInstructionsBlock,
+  PROJECT_INSTRUCTIONS_PREAMBLE,
+  USER_INSTRUCTIONS_PREAMBLE,
+} from '../prompt-blocks.js';
 import {
   createLocalStaticPromptReader,
   type LocalStaticPromptReader,
@@ -762,11 +766,15 @@ function buildIdentityPrompt(scope: {
   const { agent, layers, profile, interactiveSurface } = scope;
   const persona = (profile?.persona ?? agent.persona)?.trim();
   const globalInstructions = layers.globalInstructions.trim();
-  const projectInstructions = layers.projectInstructions.trim();
-  // The preamble only renders when at least one instruction layer is present, so
-  // an empty workspace never claims that context follows.
-  const instructionsPreamble =
-    globalInstructions || projectInstructions ? INSTRUCTIONS_CONTEXT_PREAMBLE : '';
+  const projectInstructions = buildUntrustedProjectInstructionsBlock(layers.projectInstructions);
+  // Each preamble renders only for the layer it describes, so an empty workspace
+  // never claims that untrusted repository instructions follow.
+  const instructionsPreamble = [
+    globalInstructions ? USER_INSTRUCTIONS_PREAMBLE : '',
+    projectInstructions ? PROJECT_INSTRUCTIONS_PREAMBLE : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const corePrompt = (profile?.corePrompt ?? agent.systemPrompt).trim();
   const hasIdentity = [
     persona,

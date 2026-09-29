@@ -12,6 +12,7 @@ import {
   isReservedProjectMcpName,
   type ProjectMcpDocument,
 } from './project-config.js';
+import { isProjectStdioTrusted } from './project-stdio-trust.js';
 
 interface ProjectSnapshot {
   document: ProjectMcpDocument;
@@ -22,6 +23,9 @@ interface ProjectSnapshot {
   abort: AbortController;
 }
 
+const UNTRUSTED_STDIO_REASON =
+  'Project stdio MCP is not trusted. Review .mcp.json and run `kcode mcp trust` in this workspace.';
+
 /** Caller serializes resolve/clear with the MCP owner's mutation queue. */
 export class ProjectMcpRuntime {
   private readonly snapshots = new Map<string, ProjectSnapshot>();
@@ -30,7 +34,10 @@ export class ProjectMcpRuntime {
     { snapshot: ProjectSnapshot; name: string }
   >();
 
-  constructor(private readonly pool?: McpConnectionPool) {}
+  constructor(
+    private readonly pool?: McpConnectionPool,
+    private readonly dataDir: () => string = () => '',
+  ) {}
 
   async resolve(context?: LocalMcpRuntimeContext): Promise<Record<string, LocalMcpServerConfig>> {
     if (!context?.workspaceRoot || !context.sessionId) return {};
@@ -56,7 +63,14 @@ export class ProjectMcpRuntime {
         builtin: false,
         configured: true,
       };
-      snapshot.servers[entry.name] = config;
+      const stdio = isProjectStdioConfig(config);
+      const trusted =
+        !stdio || (await isProjectStdioTrusted(this.dataDir(), document.root, document.digest));
+      const effective = stdio && !trusted ? { ...config, enabled: false } : config;
+      snapshot.servers[entry.name] = effective;
+      if (stdio && !trusted) {
+        snapshot.statuses.set(entry.name, { status: 'error', error: UNTRUSTED_STDIO_REASON });
+      }
       snapshot.keys.set(
         entry.name,
         `project:${projectMcpDigest(JSON.stringify([context.sessionId, document.root, document.digest, entry.name]))}`,
@@ -160,6 +174,15 @@ function projectStatus(
   entry: ProjectMcpDocument['entries'][number],
 ): { status: ProjectMcpPreview['servers'][number]['status']; error?: string } {
   if (entry.error) return { status: 'error', error: entry.error };
+  const recorded = snapshot.statuses.get(entry.name);
+  if (recorded?.error) return recorded;
   if (entry.config?.enabled === false) return { status: 'disabled' };
-  return snapshot.statuses.get(entry.name) ?? { status: 'configured' };
+  return recorded ?? { status: 'configured' };
+}
+
+function isProjectStdioConfig(config: LocalMcpServerConfig): boolean {
+  if (config.type === 'http' || config.type === 'sse' || config.type === 'streamable-http') {
+    return false;
+  }
+  return config.type === 'stdio' || typeof config.command === 'string';
 }

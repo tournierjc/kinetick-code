@@ -40,6 +40,27 @@ describe('session server launch contract', () => {
     expect(runServer).toHaveBeenCalledWith({ host: '0.0.0.0', port: 9430 });
   });
 
+  it('forwards an explicit session server token', async () => {
+    const { command, runServer } = program();
+    await command.parseAsync(
+      ['--server', '--server-token', 'operator-supplied-token'],
+      { from: 'user' },
+    );
+    expect(runServer).toHaveBeenCalledWith({
+      host: DEFAULT_TUI_SERVER_HOST,
+      port: DEFAULT_TUI_SERVER_PORT,
+      token: 'operator-supplied-token',
+    });
+  });
+
+  it('rejects a short session server token', async () => {
+    const { command, runServer } = program();
+    await expect(
+      command.parseAsync(['--server', '--server-token', 'short'], { from: 'user' }),
+    ).rejects.toThrow('Session server token must be');
+    expect(runServer).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['a prompt argument', ['--server', 'hello']],
     ['--model', ['--server', '--model', 'provider/model']],
@@ -66,6 +87,25 @@ describe('session server launch contract', () => {
       command.parseAsync(['--server', flag, value], { from: 'user' }),
     ).rejects.toThrow('expected a port between 1 and 65535');
     expect(runServer).not.toHaveBeenCalled();
+  });
+
+  it('forwards mcp trust to the injected runner', async () => {
+    const launchTui = vi.fn(async () => undefined);
+    const runMcpTrust = vi.fn(async () => undefined);
+    const command = createTuiProgram({
+      version: 'test',
+      launchTui,
+      runExec: vi.fn(),
+      runLogin: vi.fn(),
+      runLogout: vi.fn(),
+      runUpdate: vi.fn(),
+      runMcpTrust,
+    })
+      .exitOverride()
+      .configureOutput({ writeErr: () => undefined, writeOut: () => undefined });
+    await command.parseAsync(['mcp', 'trust', '/work/repo'], { from: 'user' });
+    expect(runMcpTrust).toHaveBeenCalledWith('/work/repo');
+    expect(launchTui).not.toHaveBeenCalled();
   });
 
   it('keeps the default launch contract without --server', async () => {

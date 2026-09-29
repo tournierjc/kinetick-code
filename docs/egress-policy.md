@@ -88,6 +88,8 @@ presets usable, so strict mode costs freshness, not function.
 - IP literals are matched only against the loopback test.
 - The guard is not a sandbox: it constrains where the process connects, not what
   a tool does with data once a host is allowed.
+- The process sandbox is off by default and, when enabled, does not restrict
+  the network. See [Process sandbox](tui-capabilities.md#process-sandbox).
 
 ## Verification
 

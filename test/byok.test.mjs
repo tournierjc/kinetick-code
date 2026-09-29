@@ -22,10 +22,13 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { withoutProxyEnvironment } from "./offline-environment.mjs";
 
 const cli = process.env.MCODE_TEST_CLI ?? fileURLToPath(new URL("../dist/cli.js", import.meta.url));
+// Release installers on a slow macOS runner can spend a full 90s inside these
+// fixtures. v0.6.7 Node 25 timed out at 90.3s while the same commit passed elsewhere.
+const runtimeFixtureTimeoutMs = 180000;
 // This fixture validates BYOK transport and real Runtime persistence, not model quality.
 test(
   "BYOK runs without managed login and resumes its saved conversation",
-  { timeout: 90000 },
+  { timeout: runtimeFixtureTimeoutMs },
   async (t) => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "minimax-code-byok-"));
     const dataDir = path.join(fixtureDir, "data");
@@ -897,7 +900,7 @@ function cancellationTest(cancellation) {
 
 test(
   "connects and runs a local endpoint that needs no authentication",
-  { timeout: 90000 },
+  { timeout: runtimeFixtureTimeoutMs },
   async (t) => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "kinetick-code-no-auth-"));
     const dataDir = path.join(fixtureDir, "data");
