@@ -48,9 +48,7 @@ Severities describe impact if the stated condition is met. They are not a claim 
 
 *Fix:* require an explicit trust or enable step before the first stdio connect, and build the child environment from a stripped base the way bash Layer A does.
 
-**H3. Repository instructions are injected as overriding system text.** Workspace `AGENTS.md` and the profile-global instructions file are read (32 KiB budget) and prefixed with `INSTRUCTIONS_CONTEXT_PREAMBLE`, which tells the model those instructions override default behavior (`packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/prompt-blocks.ts`, `packages/local-runtime/src/project/instructions.ts`). Native bash, read, write, and edit still pass through the permission engine. The preamble still raises the chance that untrusted repo text steers the model into approved or auto-approved tool use. Sandbox is off by default, so a granted shell is a host shell.
-
-*Fix:* label project instructions as untrusted context, state in the base prompt that they cannot override permissions, secrets, or the harness, and keep the override wording for user-authored settings only.
+**H3. Repository instructions are untrusted context. Addressed.** Workspace `AGENTS.md` is still read (32 KiB budget) and injected, but it is wrapped as `<untrusted_project_instructions>` and prefixed so the model treats it as repository content that cannot override permissions, secrets, tool policy, harness rules, or explicit user requests (`packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/prompt-blocks.ts`). The same boundary is stated in the harness section of the base prompt. User settings from the data directory may change working style, and they carry the same exception. Native bash, read, write, and edit still pass through the permission engine. Residual risk: this is a prompt boundary, not a mechanical one. A model can still be steered toward a tool call the user then approves. Sandbox remains off by default, so a granted shell is a host shell.
 
 #### Medium
 
@@ -135,7 +133,7 @@ These are properties of the current design, not defects hidden in a single funct
 
 1. Authenticate `kcode --server`, including the loopback case on multi-user machines (H1). Done: bearer token on every request, private token file, docs updated. TLS is still absent.
 2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2).
-3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3).
+3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3). Done: workspace instructions are labeled untrusted and cannot override permissions, secrets, or harness rules. This remains a prompt boundary.
 4. Make the sandbox default and its network behavior match what the UI claims (M1).
 5. Run the TUI permission engine for builtin MCP tools (M2) and realpath filesystem checks (M3).
 6. Apply the existing public-address fetch profile to `web_fetch` and skill archives (M4).
