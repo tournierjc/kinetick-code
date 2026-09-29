@@ -4,7 +4,7 @@ import {
   TuiMainScreen,
   type Component,
 } from "../../src/tui/engine/public.js";
-import { McodeInteractiveRenderer } from "../../src/tui/renderer/interactive-renderer.js";
+import { KcodeInteractiveRenderer } from "../../src/tui/renderer/interactive-renderer.js";
 import { TuiChatLayout } from "../../src/tui/shell/chat-layout.js";
 import { TuiWelcome } from "../../src/tui/shell/welcome/component.js";
 import { TuiTaskPanel } from "../../src/tui/shell/task-panel.js";
@@ -1132,7 +1132,7 @@ describe("main-buffer geometry across deferred frames", () => {
     async (initial, intermediate, final) => {
       const terminal = new RecordingTerminal(100, initial);
       const f = fixture(terminal);
-      const owner = new McodeInteractiveRenderer({ terminal });
+      const owner = new KcodeInteractiveRenderer({ terminal });
       owner.ui.addChild(f.layout);
       for (let i = 0; i < 80; i++) f.store.upsert(step(i));
       owner.start();
@@ -1181,7 +1181,7 @@ describe("mode switch with a pending main frame", () => {
     }
     const terminal = new HeldTerminal(100, 24);
     const f = fixture(terminal);
-    const owner = new McodeInteractiveRenderer({ terminal });
+    const owner = new KcodeInteractiveRenderer({ terminal });
     owner.ui.addChild(f.layout);
     for (let i = 0; i < 80; i++) f.store.upsert(step(i));
     owner.start();
