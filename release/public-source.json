@@ -1388,6 +1388,7 @@
     "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/index.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/inline-media.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/local-agent-preparation-service.ts",
+    "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/prompt-blocks.test.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/prompt-blocks.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/session-agent-execution-snapshot.ts",
     "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/session-read.ts",

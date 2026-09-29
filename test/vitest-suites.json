@@ -108,6 +108,7 @@
       "packages/agent-core/test/unit/pi-turn-runner/llm-retry.test.ts",
       "packages/agent-core/test/unit/pi-turn-runner/unauthenticated-endpoint.test.ts",
       "packages/local-runtime-v2/src/service/turn-system/agent-host/execution/executor.test.ts",
+      "packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/prompt-blocks.test.ts",
       "packages/local-runtime-v2/src/services.test.ts",
       "packages/local-runtime-v2/src/application/session/pin-application.test.ts",
       "packages/local-runtime-v2/src/application/session/query-application.test.ts",
