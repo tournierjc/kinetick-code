@@ -680,8 +680,16 @@ test('main release gate publishes only a version with no GitHub release', t => {
     { match: '/commits/v1.2.4', body: { sha: 'b'.repeat(40) } },
   ]);
   const movedOutput = path.join(root, 'moved-output.txt');
-  assert.throws(() => runMainReleaseGate({ root, repo: 'tournierjc/kinetick-code', head, gh: moved.gh, outputPath: movedOutput }), /Refusing to move/);
+  assert.throws(() => runMainReleaseGate({ root, repo: 'tournierjc/kinetick-code', head, gh: moved.gh, outputPath: movedOutput }), /does not contain/);
   assert.equal(readFileSync(movedOutput, 'utf8'), 'publish=false\n');
+
+  // Squash-merge pattern: the tag names the pre-merge version commit that HEAD
+  // contains; the tag push owns publication, so this main push stops green.
+  const movedOutput2 = path.join(root, 'moved-output-2.txt');
+  const squash = runMainReleaseGate({ root, repo: 'tournierjc/kinetick-code', head, gh: moved.gh, outputPath: movedOutput2, commitIsAncestorOfHead: (a, h) => a === 'b'.repeat(40) && h === head });
+  assert.equal(squash.publish, false);
+  assert.match(squash.reason, /contains \(squash-merged version commit\)/);
+  assert.equal(readFileSync(movedOutput2, 'utf8'), 'publish=false\n');
 
   const draft = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', body: { tag_name: 'v1.2.4', draft: true } }]);
   assert.throws(() => runMainReleaseGate({ root, repo: 'tournierjc/kinetick-code', head, gh: draft.gh, outputPath: path.join(root, 'draft-output.txt') }), /does not delete releases/);
@@ -735,6 +743,24 @@ test('publication creates one annotated tag and will not overwrite a release or 
 
   const moved = fakeReleaseGh([{ match: '/commits/v1.2.4', body: { sha: other } }]);
   assert.throws(() => ensureAnnotatedReleaseTag({ ...target, gh: moved.gh }), /Refusing to move/);
+
+  // Publication is idempotent under the squash-merge pattern: the tag names
+  // the version commit HEAD contains, so the tag run publishes and this one
+  // skips without touching the tag.
+  const squashTag = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', body: { sha: other } },
+  ]);
+  assert.deepEqual(prepareCliReleasePublication({ ...target, gh: squashTag.gh, commitIsAncestorOfHead: (a, h) => a === other && h === commit }), {
+    action: 'skip', reason: 'Tag v1.2.4 points at ' + other + ', which HEAD ' + commit + ' contains (squash-merged version commit); the tagged commit\'s own run publishes this version, so this run publishes nothing.',
+  });
+  assert.equal(squashTag.calls.some(call => call.args.includes('POST')), false);
+  // A foreign tag (outside HEAD's history) still refuses at publication.
+  const foreignTag = fakeReleaseGh([
+    { match: '/releases/tags/v1.2.4', notFound: true },
+    { match: '/commits/v1.2.4', body: { sha: other } },
+  ]);
+  assert.throws(() => prepareCliReleasePublication({ ...target, gh: foreignTag.gh, commitIsAncestorOfHead: () => false }), /Refusing to move/);
   const draft = fakeReleaseGh([{ match: '/releases/tags/v1.2.4', body: { tag_name: 'v1.2.4', draft: true } }]);
   assert.throws(() => prepareCliReleasePublication({ ...target, gh: draft.gh }), /does not delete releases/);
   assert.throws(() => prepareCliReleasePublication({ ...target, version: '1.2.5', gh: published.gh }), /must match the package version/);

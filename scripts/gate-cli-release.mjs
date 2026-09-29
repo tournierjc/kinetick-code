@@ -52,9 +52,15 @@ export function readGithubTagCommit(gh, repo, tag) {
 
 // A push to main publishes only when this package version has no GitHub
 // release. An existing release — including one created earlier by a tag push —
-// stops the run before the build. Tags are immutable: a tag that already
-// names a different commit fails the run instead of being moved.
-export function mainReleaseDecision({ tag, head, release, tagCommit }) {
+// stops the run before the build.
+//
+// Tags are immutable. A tag that names a commit outside HEAD's history is a
+// foreign tag and fails the run, never moved. A tag pointing at a commit that
+// HEAD contains is the squash-merge pattern: release-cli.mjs tags the version
+// commit on the PR branch, the merge lands it as a content-identical squash
+// commit, and the tag push has already published (or is publishing) that
+// version. The main run is then a duplicate and stops green.
+export function mainReleaseDecision({ tag, head, release, tagCommit, commitIsAncestorOfHead }) {
   versionFromTag(tag);
   if (typeof head !== 'string' || !shaPattern.test(head)) throw new Error('HEAD must be a full commit SHA.');
   if (release?.draft) {
@@ -66,10 +72,16 @@ export function mainReleaseDecision({ tag, head, release, tagCommit }) {
   }
   if (release) return { publish: false, reason: `GitHub release ${tag} is already published; not creating another.` };
   if (tagCommit != null && tagCommit !== head) {
+    if (commitIsAncestorOfHead(tagCommit, head)) {
+      return {
+        publish: false,
+        reason: `Tag ${tag} points at ${tagCommit}, which HEAD ${head} contains (squash-merged version commit); its own run publishes this version, so this main push is a duplicate and stops.`,
+      };
+    }
     return {
       publish: false,
       fail: true,
-      reason: `Tag ${tag} points at ${tagCommit}, not ${head}. Refusing to move an existing tag. Re-run publication for the tagged commit, or remove the unpublished tag before retrying.`,
+      reason: `Tag ${tag} points at ${tagCommit}, which HEAD ${head} does not contain. Refusing to move an existing tag. Re-run publication for the tagged commit, or remove the unpublished tag before retrying.`,
     };
   }
   return {
@@ -80,16 +92,16 @@ export function mainReleaseDecision({ tag, head, release, tagCommit }) {
   };
 }
 
-export function decideMainCliRelease({ root, repo, head, gh }) {
+export function decideMainCliRelease({ root, repo, head, gh, commitIsAncestorOfHead = () => false }) {
   const version = cliBuildVersion(root, null);
   const tag = `v${version}`;
   const release = readGithubRelease(gh, repo, tag);
   const tagCommit = release ? null : readGithubTagCommit(gh, repo, tag);
-  return { version, tag, head, ...mainReleaseDecision({ tag, head, release, tagCommit }) };
+  return { version, tag, head, ...mainReleaseDecision({ tag, head, release, tagCommit, commitIsAncestorOfHead }) };
 }
 
-export function runMainReleaseGate({ root, repo, head, gh, outputPath }) {
-  const decision = decideMainCliRelease({ root, repo, head, gh });
+export function runMainReleaseGate({ root, repo, head, gh, outputPath, commitIsAncestorOfHead }) {
+  const decision = decideMainCliRelease({ root, repo, head, gh, commitIsAncestorOfHead });
   if (outputPath) appendFileSync(outputPath, `publish=${decision.publish ? 'true' : 'false'}\n`);
   if (decision.fail) throw new Error(decision.reason);
   return decision;
@@ -130,13 +142,21 @@ export function ensureAnnotatedReleaseTag({ tag, version, commit, repo, gh }) {
   return { created: true, tagObject: tagObject.sha };
 }
 
-export function prepareCliReleasePublication({ tag, version, commit, repo, gh }) {
+export function prepareCliReleasePublication({ tag, version, commit, repo, gh, commitIsAncestorOfHead = () => false }) {
   assertReleaseTarget({ tag, version, commit, repo });
   const release = readGithubRelease(gh, repo, tag);
   if (release?.draft) {
     throw new Error(`GitHub release ${tag} is a draft. Leaving it untouched. Finish or remove that draft before retrying; this workflow does not delete releases.`);
   }
   if (release) return { action: 'skip', reason: `GitHub release ${tag} is already published; leaving it untouched.` };
+  const tagCommit = readGithubTagCommit(gh, repo, tag);
+  // Squash-merge pattern: the tag names the pre-merge version commit that HEAD
+  // contains. The tag push owns publication (its run builds and publishes from
+  // the tagged commit); publishing this HEAD too would ship a second archive
+  // for one tag. Stop green and let the tag run publish.
+  if (tagCommit != null && tagCommit !== commit && commitIsAncestorOfHead(tagCommit, commit)) {
+    return { action: 'skip', reason: `Tag ${tag} points at ${tagCommit}, which HEAD ${commit} contains (squash-merged version commit); the tagged commit's own run publishes this version, so this run publishes nothing.` };
+  }
   return { action: 'create', ...ensureAnnotatedReleaseTag({ tag, version, commit, repo, gh }) };
 }
 

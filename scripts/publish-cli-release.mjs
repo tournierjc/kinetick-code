@@ -39,7 +39,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const repo = process.env.GH_REPO;
   if (!repo) throw new Error('GH_REPO is required to publish a CLI release.');
   const ghApi = (args, options = {}) => execFileSync('gh', args, { encoding: 'utf8', input: options.input, stdio: ['pipe', 'pipe', 'pipe'] });
-  const prepared = prepareCliReleasePublication({ tag, version, commit: revision, repo, gh: ghApi });
+  const commitIsAncestorOfHead = (ancestor, head) => {
+    try {
+      execFileSync('git', ['merge-base', '--is-ancestor', ancestor, head], { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const prepared = prepareCliReleasePublication({ tag, version, commit: revision, repo, gh: ghApi, commitIsAncestorOfHead });
   if (prepared.action === 'skip') {
     console.log(prepared.reason);
     process.exit(0);
