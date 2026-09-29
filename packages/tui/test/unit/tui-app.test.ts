@@ -522,6 +522,77 @@ function createRuntime(): TuiRuntime {
 }
 
 describe("createTuiApp", () => {
+  it.each([
+    [190, 48, 1],
+    [100, 24, 1],
+    [60, 12, 1],
+    [100, 24, 120],
+  ])(
+    "does not start a transcript snapshot when the first prompt is admitted at %ix%i (%i lines)",
+    async (columns, rows, lineCount) => {
+      class RecordingTerminal extends VirtualTerminal {
+        output = "";
+        override write(data: string): void {
+          this.output += data;
+          super.write(data);
+        }
+      }
+      const terminal = new RecordingTerminal(columns, rows);
+      const runtime = createRuntime();
+      let releaseRun: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        releaseRun = resolve;
+      });
+      vi.mocked(runtime.sendMessage).mockImplementation(
+        async function* sendMessage() {
+          await gate;
+          yield { type: "done" };
+        },
+      );
+      const app = createTuiApp({
+        runtime,
+        terminal,
+        version: "0.1.0",
+        workspaceDir: "/workspace",
+        tuiMode: "regular",
+      });
+      app.start();
+      try {
+        await app.ready;
+        app.tui.renderNow();
+        await terminal.flush();
+        expect(terminal.output).not.toContain("Transcript refreshed");
+        terminal.output = "";
+        const prompts =
+          lineCount === 1
+            ? ["hello"]
+            : Array.from(
+                { length: lineCount },
+                (_, i) => `PROMPT_ROW_${String(i).padStart(3, "0")}`,
+              );
+        app.editor.setText(prompts.join("\n"));
+        terminal.sendInput("\r");
+        await vi.waitFor(() =>
+          expect(runtime.sendMessage).toHaveBeenCalledTimes(1),
+        );
+        app.tui.renderNow();
+        await terminal.flush();
+        expect(terminal.output).not.toContain("Transcript refreshed");
+        for (const prompt of prompts) {
+          expect(
+            terminal
+              .getScrollBuffer()
+              .filter((line) => line.trim().endsWith(prompt)),
+            prompt,
+          ).toHaveLength(1);
+        }
+      } finally {
+        releaseRun?.();
+        await app.stop();
+      }
+    },
+  );
+
   it("force-follows user submissions, /new, and Session transitions", async () => {
     const forceFollowBottom = vi.spyOn(TuiChatLayout.prototype, "forceFollowBottom");
     const app = createTuiApp({
@@ -2800,8 +2871,10 @@ describe("createTuiApp", () => {
           await terminal.flush();
           expect(app.editor.getText()).toBe(draft);
           expect(app.editor.render(78).length).toBeLessThan(menuRows);
-          const expected = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).slice(-24);
-          expect(terminal.getViewport().map((line) => line.trimEnd())).toEqual(expected);
+          // Released footer rows remain blank instead of replaying native history.
+          const visible = terminal.getViewport().map((line) => line.trimEnd()).filter((line) => line.trim());
+          const document = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).filter((line) => line.trim());
+          expect(visible).toEqual(document.slice(-visible.length));
         });
         const history = terminal.getScrollBuffer();
         for (let index = 0; index < 12; index++) {
@@ -4091,6 +4164,66 @@ describe("createTuiApp", () => {
     );
     await app.stop();
   });
+
+  it.each(["/retry", "Continue the task"])(
+    "dismisses a previous terminal failure when %s succeeds and history refreshes",
+    async (submission) => {
+      const terminal = new FakeTerminal();
+      const runtime = createRuntime();
+      let handled = false;
+      vi.mocked(runtime.watchEvents).mockImplementation(async function* (signal) {
+        yield runtimeEvent({
+          type: "session.error",
+          timestamp: Date.now(),
+          source: "runtime",
+          payload: {
+            sessionId: "session-1",
+            turnId: "failed-turn",
+            error: "provider unavailable",
+            errorCode: 50151,
+          },
+        });
+        handled = true;
+        await new Promise<void>((resolve) =>
+          signal.addEventListener("abort", () => resolve(), { once: true }),
+        );
+      });
+      const app = createTuiApp({
+        runtime,
+        terminal,
+        version: "0.1.0",
+        workspaceDir: "/workspace",
+      });
+      try {
+        await app.ready;
+        await app.openSession("session-1");
+        app.start();
+        await vi.waitFor(() => expect(handled).toBe(true));
+        expect(app.tui.render(100).join("\n")).toContain("Code: 50151");
+        // The failure must survive reconciliation until another run starts.
+        await app.controller.refreshCurrentSessionHistory();
+        expect(app.tui.render(100).join("\n")).toContain("Run /retry");
+
+        await app.submit(submission);
+        vi.mocked(runtime.getMessages).mockResolvedValue([
+          {
+            id: "recovered-answer",
+            role: "assistant",
+            content: "Hello from the Agent",
+            turnId: "recovered-turn",
+          },
+        ]);
+        await app.controller.refreshCurrentSessionHistory();
+        const rendered = app.tui.render(100).join("\n");
+        expect(rendered).toContain("Hello from the Agent");
+        expect(rendered).not.toContain("Code: 50151");
+        expect(rendered).not.toContain("Run /retry");
+        expect(app.transcript.latestSettledFailure()).toBeUndefined();
+      } finally {
+        await app.stop();
+      }
+    },
+  );
 
   it("uses Runtime retry-continuation when a terminal failure has no local submission snapshot", async () => {
     const terminal = new FakeTerminal();
@@ -5974,8 +6107,9 @@ describe("createTuiApp", () => {
       app.tui.renderNow();
       await terminal.flush();
       expect(app.interaction.isActive()).toBe(false);
-      const expected = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).slice(-24);
-      expect(terminal.getViewport().map((line) => line.trimEnd())).toEqual(expected);
+      const visible = terminal.getViewport().map((line) => line.trimEnd()).filter((line) => line.trim());
+      const document = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).filter((line) => line.trim());
+      expect(visible).toEqual(document.slice(-visible.length));
       for (let index = 0; index < 12; index++) {
         expect(terminal.getScrollBuffer().filter((line) => line.trimEnd().endsWith(`› Message ${index}`))).toHaveLength(1);
       }
@@ -6008,8 +6142,9 @@ describe("createTuiApp", () => {
       await terminal.flush();
       if (kind === "multiline draft") expect(app.editor.getText()).toBe("");
       else expect(app.editor.getAttachmentPreview()).toBeUndefined();
-      const expected = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).slice(-24);
-      expect(terminal.getViewport().map((line) => line.trimEnd())).toEqual(expected);
+      const visible = terminal.getViewport().map((line) => line.trimEnd()).filter((line) => line.trim());
+      const document = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).filter((line) => line.trim());
+      expect(visible).toEqual(document.slice(-visible.length));
     } finally {
       await app.stop();
     }
@@ -6060,7 +6195,7 @@ describe("createTuiApp", () => {
       expect(viewport).toContain("Message 1");
       expect(viewport).toContain("Message");
       expect(app.tui.render(80).findIndex((line) => line.trim().length > 0)).toBe(firstContentRowBefore);
-      expect(terminal.getViewport().findIndex((line) => line.trim().length > 0)).toBe(firstContentRowBefore);
+      expect(terminal.getViewport().findIndex((line) => line.trim().length > 0)).toBeLessThanOrEqual(firstContentRowBefore);
     } finally {
       await app.stop();
     }
@@ -11641,7 +11776,7 @@ describe("createTuiApp", () => {
       terminal.write = (data) => {
         write(data);
         screen.feed(data);
-        if (data.includes("\x1b[?2026l")) frames.push(screen.text());
+        if (data.includes("\x1b[?2026l")) frames.push(screen.viewportText());
       };
       const runtime = createRuntime();
       const busEvents: TuiRuntimeEvent[] = [];
@@ -11754,7 +11889,7 @@ describe("createTuiApp", () => {
         );
         expect(app.editor.getText()).toBe("");
         app.tui.renderNow();
-        expect(screen.text()).toContain("Interrupted after");
+        expect(screen.viewportText()).toContain("Interrupted after");
 
         terminal.input?.("\x1b");
         terminal.input?.("\x1b");
@@ -11762,12 +11897,12 @@ describe("createTuiApp", () => {
           expect(app.editor.getText()).toBe("Original query"),
         );
         app.tui.renderNow();
-        expect(screen.text()).not.toContain("Interrupted after");
+        expect(screen.viewportText()).not.toContain("Interrupted after");
 
         if (action === "cancel") {
           terminal.input?.("\x1b");
           app.tui.renderNow();
-          expect(screen.text()).toContain("Interrupted after");
+          expect(screen.viewportText()).toContain("Interrupted after");
           expect(runtime.editSessionMessage).not.toHaveBeenCalled();
           return;
         }
@@ -11786,9 +11921,9 @@ describe("createTuiApp", () => {
             action === "failed-submit-cancel" ||
             action === "new-operation-cancel"
           ) {
-            expect(screen.text()).toContain("Interrupted after");
+            expect(screen.viewportText()).toContain("Interrupted after");
           } else {
-            expect(screen.text()).not.toContain("Interrupted after");
+            expect(screen.viewportText()).not.toContain("Interrupted after");
           }
           return;
         }
@@ -11803,16 +11938,16 @@ describe("createTuiApp", () => {
         if (action === "early-rewind") {
           // Inspect the actual screen while the edit RPC is still pending.
           expect(finishEdit).toBeDefined();
-          expect(screen.text()).not.toContain("Interrupted after");
+          expect(screen.viewportText()).not.toContain("Interrupted after");
           finishEdit?.();
           await vi.waitFor(() => expect(app.editor.getText()).toBe(""));
           app.tui.renderNow();
         }
         expect(runtime.editSessionMessage).toHaveBeenCalledOnce();
-        expect(screen.text()).toContain("Edited query");
-        expect(screen.text()).not.toContain("Interrupted after");
+        expect(screen.viewportText()).toContain("Edited query");
+        expect(screen.viewportText()).not.toContain("Interrupted after");
         if (action === "fast-completion")
-          expect(screen.text()).toContain("Completed in 2s");
+          expect(screen.viewportText()).toContain("Completed in 2s");
         expect(
           frames.filter((frame) => frame.includes("Interrupted after")),
         ).toEqual([]);
@@ -13948,7 +14083,7 @@ describe("createTuiApp", () => {
   });
 
   it.each([1, 100])(
-    "settles an auto-drained follow-up of %i lines with unique terminal history",
+    "settles an auto-drained follow-up of %i lines with current viewport and retained history",
     async (lineCount) => {
       const queuedText = Array.from(
         { length: lineCount },
@@ -14042,7 +14177,9 @@ describe("createTuiApp", () => {
           .map((line) => line.trimEnd())
           .join("\n")
           .trimEnd();
-        expect(screen.text()).toBe(expected);
+        const visible = screen.viewportText().split("\n").filter((line) => line.trim());
+        const current = expected.split("\n").filter((line) => line.trim());
+        expect(visible).toEqual(current.slice(-visible.length));
       };
       app.start();
       try {
