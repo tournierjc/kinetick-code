@@ -287,7 +287,7 @@ reach only loopback, your providers, and `MCODE_ALLOWED_ORIGINS`. See
 
 | Task | Capabilities |
 | --- | --- |
-| **Edit and verify code** | Read files, inspect diffs, run shell commands and tests, and control tool execution with permissions and sandboxing. |
+| **Edit and verify code** | Read files, inspect diffs, run shell commands and tests, and approve tool execution. The process sandbox is off by default; when it is on, it limits filesystem access and does not restrict the network. |
 | **Choose your model** | Use a MiniMax account / Token Plan, or custom providers with OpenAI- or Anthropic-compatible API formats — including OpenRouter, DeepSeek, GitHub Copilot, and local keyless endpoints, all set up from `/provider`. |
 | **Search and work with media** | Use built-in search, `mcode-tools` media tools, MCP, and managed connectors, subject to account access and service credits. |
 | **Run many Sessions at once** | Session tabs with live status, background turns that keep streaming while you switch away, pinned Sessions, project grouping, and `/clone`. |
