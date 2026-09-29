@@ -163,10 +163,9 @@ interface TurnExecutionContext {
 /**
  * Starts the user-stop cascade for an explicit stop only.
  *
- * `session_leave` (TUI `/clear`) deliberately does NOT
- * cascade: it pauses the old Session's Goal and Queue, but
+ * `session_leave` (TUI `/clear` and Session switching) deliberately does NOT
+ * cascade: it pauses the old Session's Goal and Queue exactly like today, but
  * leaving a conversation must not kill the background build still running in it.
- * Switching Sessions in the tab bar does not abort the previous turn at all.
  */
 async function beginUserStopCascade(
   options: TurnExecutionServiceOptions,

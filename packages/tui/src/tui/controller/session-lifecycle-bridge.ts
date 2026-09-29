@@ -37,9 +37,9 @@ export function createTuiSessionLifecycleBridge(runtime: CreateTuiAppOptions['ru
       // The previous Session stays open and its Runtime turn must keep running.
       if (reason === 'resume_other') return;
       await abortLocalPluginHookSessionTurn(sessionId, async (executionSessionId) => {
-        // `/clear` stops the live Turn and pauses the Goal and Queue. It is
-        // `session_leave`, not `user_stop`, so it does not cascade-cancel
-        // background work owned by that conversation.
+        // `session_leave`, not `user_stop`: switching Sessions or running `/clear`
+        // still stops the live Turn and pauses the Goal/Queue, but it is not a stop
+        // request and must not tear down background work left running there.
         await runtime.abortSession({ id: executionSessionId, reason: 'session_leave' });
       });
       await endLocalPluginHookSession(sessionId, reason);

@@ -195,15 +195,6 @@ Remove `L024` when the selected Pi baseline natively matches legacy-terminal `Ct
 
 ## L044: Keep terminal backpressure off the input loop
 
-- Product contract: slow or paused POSIX terminal output must not block input or cancellation during long Regular-mode history reconstruction.
-- Minimal difference: `terminal.ts` serializes POSIX TTY output through asynchronous, bounded `fs.write` operations, preserves partial UTF-8 writes, and reports output failures through the existing stdout error path. Controls share the same queue. `tui.ts` defers subsequent frames until output drains and then renders the latest model once. Ordinary stop queues any deferred final frame before terminal cleanup; mode switches preserve their previously captured render state. Mandatory final resize replay remains ordered before cleanup.
-- Host integration: the observed terminal forwards the output state; shutdown, suspension and external-editor handoff drain queued output before another process owns the terminal. Input draining starts its idle window after keyboard-disable output is sent, and editor handoff rechecks shutdown after the drain.
-- Evidence: terminal-output regressions cover held/partial writes, input dispatch, control ordering, transient and permanent failures, frame coalescing, final transcript preservation, keyboard input draining and editor handoff/shutdown races; application tests cover shutdown/suspend drains. A local macOS PTY with 10,000 synthetic history rows and a paused consumer no longer blocks the input loop while reconstructing history.
-- Boundary: history reconstruction still transmits the complete ordered document. A stalled connection can delay visible output; it no longer synchronously stalls the JavaScript event loop. Windows and non-TTY output retain their existing writer. Native remote SSH and native Windows acceptance remain separate.
-- Removal condition: the upstream terminal writer provides ordered asynchronous POSIX TTY writes and its render scheduler observes output backpressure.
-
-## L044: Keep terminal backpressure off the input loop
-
 > L045 supersedes this entry's native-history reconstruction and clearing policy; the original behavior below is retained as historical context.
 
 - Product contract: slow or paused POSIX terminal output must not block input or cancellation during long Regular-mode history reconstruction.
