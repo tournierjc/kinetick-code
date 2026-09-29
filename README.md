@@ -43,6 +43,10 @@ Understand a project, make changes, and run tests from your terminal. Use your M
   <img src="docs/assets/tui-demo.png" alt="Kinetick Code TUI: a live session with the Session tab bar, Plan Mode, and a running task" width="784">
 </p>
 
+Give a blinking pocket pet a focus timer, then ask for a long-press pause and a celebration when the timer ends. The [Pocket Pet example](examples/pocket-pet) runs locally in the browser, with no frontend dependencies and no extra hardware. The finished page needs no model account. Asking Kinetick Code to edit the starter uses the provider you already configured; model calls may incur charges.
+
+<p align="center"><a href="docs/demo.md">Recording notes →</a> · <a href="examples/pocket-pet">Build it yourself →</a></p>
+
 ## Quick start
 
 ### 1. Install KCode
@@ -295,6 +299,16 @@ Start the TUI in a copy of the example project and enter:
 > Read clamp.mjs and clamp.test.mjs. Run node --test to reproduce the failure, fix clamp without changing the tests, then run the tests again.
 
 The [small, reproducible project](examples/clamp) is a good first task. [More examples](docs/examples.md) cover switching models, calling real search, and using your own image inputs.
+
+To try a visual change instead, copy the [Pocket Pet](examples/pocket-pet) starter out of a checkout of this repository:
+
+```bash
+node examples/pocket-pet/setup.mjs ../my-pocket-pet
+cd ../my-pocket-pet
+node serve.mjs
+```
+
+Open `http://127.0.0.1:4173`. In a second terminal, run `kcode` in `my-pocket-pet` and paste the [first prompt](examples/pocket-pet/README.md#first-request), then the [follow-up](examples/pocket-pet/README.md#change-the-requirement). Refresh the browser after each change. To open the finished page first, from the repository root run `node examples/pocket-pet/serve.mjs finished` and add `?demo=1` for the labeled 10-second mode.
 
 ## Build from source
 
