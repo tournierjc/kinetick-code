@@ -45,6 +45,7 @@ export const LEGACY_RUNTIME_ENV_KEYS = [
   'MAVIS_PORT',
   'MINIMAX_DATA_DIR',
   'MAVIS_DATA_DIR',
+  'KINETICK_DATA_DIR',
   'MAVIS_PROFILE',
   'MAVIS_SKIP_PID_PORT',
   'MAVIS_MANAGED_RUNTIME',
@@ -165,6 +166,22 @@ export function stripRuntimeBoundaryKeysFrom(
   const present = Object.keys(env).filter((key) => env[key] !== undefined);
   stripRuntimeBoundaryKeys(env, mode);
   return present.filter((key) => !(key in env));
+}
+
+/** True when `name` is a runtime identity or parent-token variable that must not reach a child. */
+export function isRuntimeBoundaryEnvName(name: string): boolean {
+  const normalizedKey = name.toUpperCase();
+  return (
+    normalizedKey.startsWith('__MAVIS_RUNTIME_') ||
+    normalizedKey.startsWith('__MAVIS_PARENT_') ||
+    normalizedKey.startsWith('__MAVIS_ORIGIN_XDG_') ||
+    normalizedKey.startsWith('AGENTARCHON_') ||
+    normalizedKey.startsWith('AGENT_ARCHON_') ||
+    normalizedKey === 'MAVIS_AGENT' ||
+    normalizedKey === 'MAVIS_SESSION' ||
+    RUNTIME_BOUNDARY_KEY_NAMES.has(normalizedKey) ||
+    AGENT_RUNTIME_BOUNDARY_KEY_NAMES.has(normalizedKey)
+  );
 }
 
 export function findLegacyRuntimeEnvKeys(env: NodeJS.ProcessEnv = process.env): string[] {

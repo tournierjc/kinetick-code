@@ -102,6 +102,14 @@ it("reads only the workspace file and never rewrites it", async () => {
   await writeFile(path, "not json");
   expect((await readProjectMcpConfig(root)).error).toContain("Cannot read");
 });
+it("rejects references to runtime boundary environment variables", async () => {
+  vi.stubEnv("MAVIS_ACCESS_TOKEN", "parent-token");
+  const doc = await parse({
+    local: { command: "node", env: { TOKEN: "${MAVIS_ACCESS_TOKEN}" } },
+  });
+  expect(doc.entries[0]?.error).toContain("MAVIS_ACCESS_TOKEN");
+  expect(JSON.stringify(doc)).not.toContain("parent-token");
+});
 it("rejects symlinks outside the project", async () => {
   const root = await mkdtemp(join(tmpdir(), "project-mcp-root-"));
   roots.push(root);

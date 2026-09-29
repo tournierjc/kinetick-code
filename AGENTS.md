@@ -63,3 +63,16 @@ Source export reads committed `HEAD` and rejects uncommitted tracked changes. Du
 ## Boundaries
 
 Do not reference internal hosts, generated IDL, or private services; `check:source` catches known patterns but does not replace publication review. Do not restore paths listed in `scripts/lib/retired-sources.mjs` or remove supported capabilities to make standalone checks pass. Do not commit account data, sessions, logs, credentials, or real user content; use temporary data directories and synthetic test inputs. Documentation and commit messages are written in English; preserve the required languages of localized product strings and bundled runtime prompts. See `CONTRIBUTING.md`.
+
+## Cursor Cloud specific instructions
+
+Cloud agent images can place a `node` binary on `PATH` that is older than `package.json` `engines` (`>=22.19 <23 || >=24.2 <27`). The environment installs Node.js 24 with nvm and pnpm 9.12.0 with Corepack. Put that Node first before install, build, test, or CLI commands:
+
+```bash
+export NVM_DIR="$HOME/.nvm"
+. "$NVM_DIR/nvm.sh"
+nvm use 24
+export PATH="$NVM_DIR/versions/node/$(nvm version 24)/bin:$PATH"
+```
+
+`pnpm install --frozen-lockfile` and `pnpm build` produce `dist/cli.js`. Run the product with `pnpm kcode`. Offline development does not need a provider key. `pnpm verify` is the full Linux gate list. `pnpm kcode --version`, `pnpm test:smoke`, and `pnpm kcode --server` (then `GET /health` and `GET /sessions`) exercise the built CLI. Point `MINIMAX_DATA_DIR` at a temporary directory for manual runs; the default user data directory is `~/.kinetick`.
