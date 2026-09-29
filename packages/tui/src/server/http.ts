@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 
+import { assertSessionServerToken, authorizationMatchesSessionToken } from './token.js';
 import type {
   ListTuiSessionPageInput,
   TuiMessage,
@@ -32,6 +33,8 @@ export interface ServeTuiServerHttpOptions {
   readonly version: string;
   readonly host: string;
   readonly port: number;
+  /** Bearer token required on every request, including `/` and `/health`. */
+  readonly token: string;
   readonly signal?: AbortSignal;
   readonly logger?: TuiServerLogger;
 }
@@ -46,9 +49,16 @@ export type StartTuiServerHttpOptions = Omit<ServeTuiServerHttpOptions, 'signal'
 export async function startTuiServerHttp(
   options: StartTuiServerHttpOptions,
 ): Promise<TuiServerHandle> {
+  assertSessionServerToken(options.token);
   const logger = options.logger ?? console;
   const server = createServer((request, response) => {
-    void handleTuiServerRequest(options.runtime, options.version, request, response).catch(
+    void handleTuiServerRequest(
+      options.runtime,
+      options.version,
+      options.token,
+      request,
+      response,
+    ).catch(
       (error) => {
         if (response.headersSent) response.destroy();
         else sendJson(response, 500, { error: toErrorMessage(error) });
@@ -69,7 +79,7 @@ export async function startTuiServerHttp(
   const port = typeof address === 'object' && address ? address.port : options.port;
   if (!TUI_SERVER_LOOPBACK_HOSTS.has(options.host)) {
     logger.warn(
-      `Session server is bound to ${options.host}; every client that can reach this address can read your Sessions and run turns on them.`,
+      `Session server is bound to ${options.host}. Requests without the bearer token are refused. Anyone who obtains the token can read your Sessions and run turns.`,
     );
   }
   logger.info(`Kinetick Code session server listening on http://${host}:${port}`);
@@ -110,9 +120,15 @@ export async function serveTuiServerHttp(options: ServeTuiServerHttpOptions): Pr
 async function handleTuiServerRequest(
   runtime: TuiServerRuntime,
   version: string,
+  token: string,
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
+  if (!authorizationMatchesSessionToken(request.headers.authorization, token)) {
+    sendUnauthorized(response);
+    request.resume();
+    return;
+  }
   const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
   const segments = url.pathname.split('/').filter((segment) => segment.length > 0);
   const method = request.method ?? 'GET';
@@ -1028,6 +1044,19 @@ class InvalidTuiServerBodyError extends Error {}
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function sendUnauthorized(response: ServerResponse): void {
+  if (response.headersSent) {
+    response.destroy();
+    return;
+  }
+  response.writeHead(401, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'www-authenticate': 'Bearer',
+  });
+  response.end(JSON.stringify({ error: 'unauthorized' }));
 }
 
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {

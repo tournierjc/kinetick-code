@@ -1,6 +1,8 @@
 import JSZip from 'jszip';
 import yaml from 'js-yaml';
 
+import { readRemoteAssetSource } from '../../assets/remote-source.js';
+
 import { LocalSkillHubInstallError } from '../hub-errors.js';
 import {
   resolveRemoteArchiveCandidates,
@@ -58,7 +60,6 @@ export type SkillArchiveFile = {
   readString: () => Promise<string>;
 };
 
-const REMOTE_SKILL_ARCHIVE_TIMEOUT_MS = 30_000;
 const REMOTE_SKILL_ARCHIVE_MAX_BYTES = 10 * 1024 * 1024;
 const REMOTE_SKILL_MARKDOWN_MAX_BYTES = 1024 * 1024;
 const RETRYABLE_REMOTE_CODES = new Set([
@@ -155,7 +156,7 @@ async function scanFirstRemoteSkillArchive(
   for (const archive of archives) {
     try {
       const resolvedArchive = await withResolvedGithubSha(archive, options.fetch);
-      const candidates = await scanRemoteSkillArchive(resolvedArchive, options.fetch);
+      const candidates = await scanRemoteSkillArchive(resolvedArchive);
       return {
         candidates,
         repoInfo: resolvedArchive.repoInfo,
@@ -186,68 +187,35 @@ async function scanFirstRemoteSkillArchive(
 
 async function scanRemoteSkillArchive(
   archive: RemoteSkillArchiveCandidate,
-  fetchImpl: typeof fetch,
 ): Promise<ScannedSkillCandidate[]> {
   return scanSkillFiles(
-    await loadZipSkillFiles(await downloadRemoteSkillArchive(archive.archiveUrl, fetchImpl)),
+    await loadZipSkillFiles(await downloadRemoteSkillArchive(archive.archiveUrl)),
     archive.scanHintSubPath ?? archive.repoInfo.hint_sub_path,
     archive.exactHintSubPath,
   );
 }
 
-async function downloadRemoteSkillArchive(archiveUrl: string, fetchImpl: typeof fetch) {
-  let response: Response;
+async function downloadRemoteSkillArchive(archiveUrl: string) {
   try {
-    response = await fetchImpl(archiveUrl, {
-      method: 'GET',
-      headers: { 'User-Agent': 'MiniMaxAgent' },
-      signal: AbortSignal.timeout(REMOTE_SKILL_ARCHIVE_TIMEOUT_MS),
+    const source = await readRemoteAssetSource({
+      url: archiveUrl,
+      maxBytes: REMOTE_SKILL_ARCHIVE_MAX_BYTES,
     });
+    return source.buffer;
   } catch (err) {
+    if (err instanceof Error && err.message === 'asset_too_large') {
+      throw new LocalSkillHubInstallError(
+        'Remote skill archive is too large.',
+        'LOCAL_SKILL_HUB_REMOTE_ARCHIVE_TOO_LARGE',
+        413,
+      );
+    }
     throw new LocalSkillHubInstallError(
-      `Failed to download remote skill archive: ${formatError(err)}`,
+      'Failed to download remote skill archive.',
       'LOCAL_SKILL_HUB_REMOTE_DOWNLOAD_FAILED',
       502,
     );
   }
-  if (!response.ok) {
-    throw new LocalSkillHubInstallError(
-      `Failed to download remote skill archive: ${response.status}`,
-      'LOCAL_SKILL_HUB_REMOTE_DOWNLOAD_FAILED',
-      502,
-    );
-  }
-
-  const lengthHeader = response.headers.get('content-length');
-  const declaredLength = lengthHeader ? Number.parseInt(lengthHeader, 10) : undefined;
-  if (declaredLength !== undefined && declaredLength > REMOTE_SKILL_ARCHIVE_MAX_BYTES) {
-    throw new LocalSkillHubInstallError(
-      'Remote skill archive is too large.',
-      'LOCAL_SKILL_HUB_REMOTE_ARCHIVE_TOO_LARGE',
-      413,
-    );
-  }
-
-  let body: ArrayBuffer;
-  try {
-    body = await response.arrayBuffer();
-  } catch (err) {
-    throw new LocalSkillHubInstallError(
-      `Failed to download remote skill archive: ${formatError(err)}`,
-      'LOCAL_SKILL_HUB_REMOTE_DOWNLOAD_FAILED',
-      502,
-    );
-  }
-
-  const buffer = Buffer.from(body);
-  if (buffer.byteLength > REMOTE_SKILL_ARCHIVE_MAX_BYTES) {
-    throw new LocalSkillHubInstallError(
-      'Remote skill archive is too large.',
-      'LOCAL_SKILL_HUB_REMOTE_ARCHIVE_TOO_LARGE',
-      413,
-    );
-  }
-  return buffer;
 }
 
 function shouldFallbackToGitClone(
