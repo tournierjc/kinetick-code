@@ -24,7 +24,7 @@ describe('createTuiSessionLifecycleBridge.preparePluginHookSessionSwitch', () =>
 
     expect(abortSession).toHaveBeenCalledWith({
       id: 'session-cleared',
-      reason: 'user_stop',
+      reason: 'session_leave',
     });
   });
 });

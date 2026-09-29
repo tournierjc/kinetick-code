@@ -106,11 +106,12 @@ notices for those tasks no longer automatically wake the conversation. Their
 terminal results remain unread so the next turn can inspect them through the
 background-task reminder and `task_output`.
 
-Leaving a conversation with `/clear` or a session switch still stops its current
-turn and pauses its Goal and queued instructions, but leaves background work
-running. This pause also applies when unconsumed steering must fall back to the
-queue after a history-write failure. A stop rejected because it names an older
-turn does not cancel the current turn's background work.
+`/clear` stops the current turn and pauses its Goal and queued instructions, but
+leaves background work running. Switching Sessions in the tab bar does not stop
+the previous turn: that Session stays open and keeps streaming. The same queue
+pause applies when unconsumed steering must fall back to the queue after a
+history-write failure. A stop rejected because it names an older turn does not
+cancel the current turn's background work.
 
 Only locally owned running tasks are canceled; tasks held by another runtime
 process are left alone. Child cleanup follows the task's owning child turn, so a
