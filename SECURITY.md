@@ -64,9 +64,7 @@ Severities describe impact if the stated condition is met. They are not a claim 
 
 *Fix:* resolve existing path prefixes with `realpath` before `isPathAllowed`, matching the protected-runtime read path.
 
-**M4. `web_fetch` and skill-archive download follow user-controlled URLs without a private-network check.** `LocalWebFetchClient` accepts any absolute `http:` or `https:` URL and follows redirects (`packages/local-runtime/src/web-fetch/local-web-fetch-client.ts`). The tool is permission-gated and its description says localhost and intranet are in scope. Remote skill install fetches `archiveUrl` with a timeout and a size cap (`packages/local-runtime/src/skills/remote/archive.ts`) and does not pin DNS or reject link-local and metadata addresses. Default egress mode `managed-deny` blocks a fixed managed-host list; other hosts, including `169.254.169.254` literals, stay reachable (`packages/shared/src/egress-guard.ts`, `isLoopbackHost` matches only `127.*`). `remote-source.ts` already has the stricter HTTPS, public-IP, and pinned-lookup checks.
-
-*Fix:* reuse that remote-source profile for agent-initiated and skill-hub fetches, or add an explicit “internal URL” approval that is separate from public web fetch.
+**M4. `web_fetch` blocks link-local and metadata targets, and skill archives use the public HTTPS profile. Addressed.** `LocalWebFetchClient` still accepts absolute `http:` and `https:` URLs, including documented loopback and other private intranet addresses, and it is still permission-gated (`packages/local-runtime/src/web-fetch/local-web-fetch-client.ts`). Each request and redirect hop now refuses link-local addresses (`169.254.0.0/16`, `fe80::/10`) and metadata hostnames. Remote skill archives download through `readRemoteAssetSource` (`packages/local-runtime/src/skills/remote/archive.ts`, `packages/local-runtime/src/assets/remote-source.ts`): HTTPS only, no userinfo, reserved names rejected, DNS answers must be public addresses, and the request is pinned to one of those addresses. Redirects are checked again. Residual risk: `web_fetch` does not pin DNS, so a public name can still rebind after the name check. Default egress remains a managed-host denylist; it is not a private-network firewall.
 
 **M5. Managed access-token projections are written privately and read without a mode check.** `writeLocalRuntimeAuthContext` creates the data directory at `0o700` and the file at `0o600` (`packages/config/src/local-runtime-auth-context.ts`). `readLocalRuntimeAuthContext` loads the JSON whenever it parses. OAuth `FileStore.assertPrivatePermissions` refuses group/other access on POSIX before use (`packages/oauth-core/src/credential-store/file-store.ts`). BYOK API keys in `config.yaml` follow the write-private, read-anyway pattern. Windows skips the POSIX mode check. Content-safety requests also accept `process.env.MAVIS_ACCESS_TOKEN` when the auth context has no token (`packages/local-runtime/src/content-safety/api-v2.ts`).
 
@@ -136,7 +134,7 @@ These are properties of the current design, not defects hidden in a single funct
 3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3). Done: workspace instructions are labeled untrusted and cannot override permissions, secrets, or harness rules. This remains a prompt boundary.
 4. Make the sandbox default and its network behavior match what the UI claims (M1).
 5. Run the TUI permission engine for builtin MCP tools (M2) and realpath filesystem checks (M3).
-6. Apply the existing public-address fetch profile to `web_fetch` and skill archives (M4).
+6. Apply the existing public-address fetch profile to `web_fetch` and skill archives (M4). Done: skill archives use the pinned public HTTPS profile. `web_fetch` still allows documented loopback and refuses link-local and metadata targets.
 
 ### Method and limits
 
