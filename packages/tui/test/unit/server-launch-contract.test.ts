@@ -40,6 +40,27 @@ describe('session server launch contract', () => {
     expect(runServer).toHaveBeenCalledWith({ host: '0.0.0.0', port: 9430 });
   });
 
+  it('forwards an explicit session server token', async () => {
+    const { command, runServer } = program();
+    await command.parseAsync(
+      ['--server', '--server-token', 'operator-supplied-token'],
+      { from: 'user' },
+    );
+    expect(runServer).toHaveBeenCalledWith({
+      host: DEFAULT_TUI_SERVER_HOST,
+      port: DEFAULT_TUI_SERVER_PORT,
+      token: 'operator-supplied-token',
+    });
+  });
+
+  it('rejects a short session server token', async () => {
+    const { command, runServer } = program();
+    await expect(
+      command.parseAsync(['--server', '--server-token', 'short'], { from: 'user' }),
+    ).rejects.toThrow('Session server token must be');
+    expect(runServer).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['a prompt argument', ['--server', 'hello']],
     ['--model', ['--server', '--model', 'provider/model']],

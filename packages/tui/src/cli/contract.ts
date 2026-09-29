@@ -4,6 +4,7 @@ import {
   DEFAULT_TUI_SERVER_HOST,
   DEFAULT_TUI_SERVER_PORT,
 } from '../server/http.js';
+import { assertSessionServerToken } from '../server/token.js';
 import type { TuiMode } from '../tui/engine/public.js';
 import { parseTuiStartupEnvironment } from './environment.js';
 import type { TuiBuildEnvironment } from '../auth/environment.js';
@@ -33,11 +34,14 @@ export interface RawTuiInteractiveOptions {
   readonly server?: boolean;
   readonly host?: string;
   readonly port?: number;
+  readonly serverToken?: string;
 }
 
 export interface TuiServerLaunchRequest {
   readonly host: string;
   readonly port: number;
+  /** Present when the operator supplied `--server-token`. Otherwise the server generates one. */
+  readonly token?: string;
 }
 
 export function applyInteractiveCliContract(
@@ -74,6 +78,12 @@ export function applyInteractiveCliContract(
       new Option('--port <port>', 'listen port for --server')
         .argParser(parseServerPort)
         .default(DEFAULT_TUI_SERVER_PORT),
+    )
+    .addOption(
+      new Option(
+        '--server-token <token>',
+        'bearer token for --server; generated and written to the data directory when omitted',
+      ),
     )
     .allowExcessArguments(false)
     .showHelpAfterError();
@@ -144,9 +154,12 @@ export function resolveServerLaunchRequest(
   if (conflicts.length > 0) {
     throw new Error(`--server cannot be combined with ${conflicts.join(', ')}.`);
   }
+  const token = commandOptions.serverToken?.trim();
+  if (token) assertSessionServerToken(token);
   return {
     host: commandOptions.host?.trim() || DEFAULT_TUI_SERVER_HOST,
     port: commandOptions.port ?? DEFAULT_TUI_SERVER_PORT,
+    ...(token ? { token } : {}),
   };
 }
 

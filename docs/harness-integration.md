@@ -179,14 +179,15 @@ HTTP, so an external application — a webapp, a mobile client, a dashboard —
 can browse, drive, and supervise what is in the data directory. The server
 reads Sessions, streams replies, starts turns, answers interactive prompts,
 and exposes the Runtime surface (queue, delegation, skills, models, goals).
-Like every other surface, it has no authentication: treat the bind address as
-a trust boundary.
+Every request must carry `Authorization: Bearer <token>`. Treat that token
+as the credential for the data directory the server is using.
 
 ### Starting the server
 
 ```bash
 kcode --server                             # http://127.0.0.1:8788, loopback only
 kcode --server --host 0.0.0.0 --port 9430  # accept connections from other machines
+kcode --server --server-token "$TOKEN"     # use a token you already store
 MINIMAX_DATA_DIR=/work/kcode kcode --server  # serve an isolated data directory
 ```
 
@@ -194,22 +195,31 @@ The process prints `Kinetick Code session server listening on
 http://<host>:<port>` and keeps serving until `SIGINT`, `SIGTERM`, or `SIGHUP`,
 which shut the server and the Runtime down. `--server` cannot be combined with
 a prompt, `--model`, `--session`, `--continue`, `--resume`, or `--tui-mode`;
-`--host` and `--port` only apply to `--server`. Like `exec`, the server reads
-and writes only its data directory: `MINIMAX_DATA_DIR` points it at an isolated
-one, and omitting it serves the user's own Sessions.
+`--host`, `--port`, and `--server-token` only apply to `--server`. Like `exec`,
+the server reads and writes only its data directory: `MINIMAX_DATA_DIR` points
+it at an isolated one, and omitting it serves the user's own Sessions.
 
-There is no authentication. The default bind keeps the server on the loopback
-interface; binding `0.0.0.0` or any non-loopback address prints a warning on
-startup, because every client that can reach the address can read all Sessions
-in the data directory and run turns on them. The write verbs (prompt, abort,
-permission replies, delete) make a non-loopback bind an execution surface:
-treat it as a local-network trust decision until authentication lands.
+When `--server-token` is omitted, the process generates a token and writes it
+to `<data-dir>/run/session-server.token` with mode `0600` on POSIX. The log
+line names that path and does not print the token. Send the file contents,
+without the trailing newline, as `Authorization: Bearer`. A token you pass
+with `--server-token` is written to the same file so a local client can find
+it; keep that flag out of shell history when you can.
+
+The default bind stays on the loopback interface. Binding `0.0.0.0` or any
+non-loopback address prints a warning, because the port is then reachable
+beyond this machine. Requests without the bearer token are refused, including
+`GET /` and `GET /health`. There is no TLS. Anyone who can read the token can
+read Sessions and run turns, so a non-loopback bind is still a decision to
+publish that credential on the network.
 
 ### Endpoint reference
 
 Read endpoints answer JSON with `content-type: application/json;
 charset=utf-8` and `cache-control: no-store`, and take their parameters in the
-query string. Write endpoints take a JSON body (max 4 MiB). `<base>` is the
+query string. Write endpoints take a JSON body (max 4 MiB). Every route
+requires the bearer token; a missing or wrong token is `401` with
+`{"error":"unauthorized"}` and `www-authenticate: Bearer`. `<base>` is the
 bind address — for example `http://127.0.0.1:8788` or, from another device on
 the LAN, `http://192.168.1.50:9430`.
 
@@ -310,6 +320,7 @@ branch on:
 
 | Status | When | Example body |
 | --- | --- | --- |
+| `401` | Missing or wrong bearer token. | `{"error":"unauthorized"}` |
 | `400` | An invalid query value (`limit=zero`, `allAgents=maybe`). | `{"error":"invalid limit: zero"}` |
 | `404` | Unknown Session id, or unknown path. | `{"error":"Session not found: mvs_missing"}` / `{"error":"not found"}` |
 | `405` | Any non-`GET` method. | `{"error":"only GET requests are supported"}` |
@@ -322,9 +333,12 @@ events is roughly:
 
 ```js
 const base = 'http://127.0.0.1:8788';
+const token = process.env.KCODE_SERVER_TOKEN;
 
 async function get(path) {
-  const response = await fetch(`${base}${path}`);
+  const response = await fetch(`${base}${path}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error);
   return body;
@@ -338,7 +352,9 @@ const { messages } = await get(
 for (const message of messages) console.log(`${message.role}: ${message.content}`);
 
 // Notifications: the event stream tells you when the agent needs a human.
-const events = await fetch(`${base}/events`);
+const events = await fetch(`${base}/events`, {
+  headers: { authorization: `Bearer ${token}` },
+});
 for await (const chunk of events.body) {
   const text = new TextDecoder().decode(chunk);
   if (text.includes('questionnaire.ask') || text.includes('permission.ask')) {
@@ -350,12 +366,14 @@ for await (const chunk of events.body) {
 The same walkthrough from Python:
 
 ```python
+import os
 import requests
 
 base = "http://127.0.0.1:8788"
-session = requests.get(f"{base}/sessions", params={"limit": 20}).json()["sessions"][0]
+headers = {"Authorization": f"Bearer {os.environ['KCODE_SERVER_TOKEN']}"}
+session = requests.get(f"{base}/sessions", params={"limit": 20}, headers=headers).json()["sessions"][0]
 page = requests.get(f"{base}/sessions/{session['sessionId']}/messages",
-                    params={"limit": 50}).json()
+                    params={"limit": 50}, headers=headers).json()
 for message in page["messages"]:
     print(message["role"], message["content"])
 ```
@@ -366,8 +384,10 @@ parse them.
 
 ### What the server does not do (yet)
 
-There is no authentication, no TLS, and no origin check: any client that can
-reach the bind address can read Sessions, run turns, and answer permissions.
+There is no TLS and no origin check. The bearer token is the access check:
+a client that presents it can read Sessions, run turns, and answer
+permissions. Loopback does not hide the port from other users on the same
+machine; the token file mode is what keeps those users out.
 There is no per-turn subscription endpoint that replays a turn started by
 another connection (`/events` carries Runtime events, not deltas), so a second
 device joining a live turn polls the transcript until it settles. Skill writes
@@ -406,7 +426,8 @@ scripted OpenAI-compatible provider on loopback):
 - `--server`: boots the Runtime without the TUI, answers `/`, `/health`,
   `/sessions`, `/sessions/<id>`, and `/sessions/<id>/messages`, and exits
   cleanly within a few seconds of `SIGTERM`. Every response quoted in section 3
-  is captured from that run.
+  is captured from that run. That capture predates bearer authentication;
+  current clients must send `Authorization: Bearer`.
 - Reaching it externally: a `--host 0.0.0.0` bind accepts requests over the
   machine's LAN address, and the non-loopback warning is printed at startup.
 - Error contract: the `400`/`404`/`405` bodies quoted in section 3 were
