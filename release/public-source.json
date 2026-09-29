@@ -3408,6 +3408,7 @@
     "release/dependency-licenses.json",
     "release/extraction.json",
     "release/public-source.json",
+    "release/server-client-parity.json",
     "scripts/build.mjs",
     "scripts/check-egress-guard.mjs",
     "scripts/check-standalone-boundary.mjs",
