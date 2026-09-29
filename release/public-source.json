@@ -1103,6 +1103,7 @@
     "packages/local-runtime-v2/src/service/sandbox/config-commit.ts",
     "packages/local-runtime-v2/src/service/sandbox/contracts.ts",
     "packages/local-runtime-v2/src/service/sandbox/deferred-port.ts",
+    "packages/local-runtime-v2/src/service/sandbox/effective-policy.test.ts",
     "packages/local-runtime-v2/src/service/sandbox/effective-policy.ts",
     "packages/local-runtime-v2/src/service/sandbox/index.ts",
     "packages/local-runtime-v2/src/service/sandbox/initialize.ts",
