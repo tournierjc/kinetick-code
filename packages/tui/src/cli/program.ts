@@ -46,6 +46,7 @@ export interface CreateTuiProgramOptions {
   runUpdate: () => Promise<void>;
   runProvider?: (request: KcodeProviderCliRequest, lane?: string) => Promise<void>;
   runPlugin?: (request: KcodePluginCliRequest, lane?: string) => Promise<void>;
+  runMcpTrust?: (directory: string) => Promise<void>;
   resolveLane?: typeof resolveTuiManagedBackendLane;
   allowStartupEnvironmentSelection?: boolean;
   commandContributions?: readonly TuiCliCommandContribution[];
@@ -87,6 +88,17 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
       program.opts<{ lane?: string }>().lane,
     );
   });
+
+  program
+    .command('mcp')
+    .description('Review workspace MCP servers')
+    .command('trust')
+    .description('Allow the current .mcp.json to run stdio commands')
+    .argument('[directory]', 'workspace directory', '.')
+    .action((directory: string) => {
+      if (!options.runMcpTrust) throw new Error('MCP trust is unavailable.');
+      return options.runMcpTrust(directory);
+    });
 
   program
     .command('init')

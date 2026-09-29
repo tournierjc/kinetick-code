@@ -46,9 +46,7 @@ Severities describe impact if the stated condition is met. They are not a claim 
 
 *Fix:* require a high-entropy startup secret on every request, refuse non-loopback binds unless that secret is set, and treat loopback as a single-user trust boundary in the docs.
 
-**H2. A workspace `.mcp.json` can start a process with the parent environment.** `ProjectMcpRuntime.resolve` loads `.mcp.json` from the workspace and enables servers unless `enabled` is false (`packages/local-runtime-v2/src/service/mcp/project-mcp.service.ts`). Turn tool listing calls the connection pool, and stdio transport spawns `command` with `{ ...process.env, ...config.env }` (`packages/agent-modules/mcp/src/runtime/transport/stdio.ts`). Path checks keep the config file inside the workspace and cap its size. They do not review the command. Opening a session in an untrusted tree can therefore execute repository-chosen code as the user and hand it the parent environment, including provider tokens that bash Layer A would have removed.
-
-*Fix:* require an explicit trust or enable step before the first stdio connect, and build the child environment from a stripped base the way bash Layer A does.
+**H2. Workspace stdio MCP requires an out-of-repo trust decision. Addressed.** `ProjectMcpRuntime.resolve` still loads `.mcp.json`, and HTTP servers still connect when discovery runs. A stdio entry stays disabled until `kcode mcp trust` records that file's digest in `<data-dir>/mcp-project-trust.json` (`packages/local-runtime-v2/src/service/mcp/project-stdio-trust.ts`). Editing the file changes the digest and stops the command until trust is repeated. Stdio children are built from the parent environment and then stripped with the same runtime-boundary list as bash Layer A, including after config and injected overlays (`packages/agent-modules/mcp/src/runtime/transport/stdio.ts`). Project config cannot expand those variable names into commands, arguments, headers, or URLs. Residual risk: a trusted stdio server is still code execution as the user, and HTTP project servers still connect without that extra trust step. User-level `mcp.json` in the data directory remains operator configuration.
 
 **H3. Repository instructions are injected as overriding system text.** Workspace `AGENTS.md` and the profile-global instructions file are read (32 KiB budget) and prefixed with `INSTRUCTIONS_CONTEXT_PREAMBLE`, which tells the model those instructions override default behavior (`packages/local-runtime-v2/src/service/turn-system/agent-host/preparation/prompt-blocks.ts`, `packages/local-runtime/src/project/instructions.ts`). Native bash, read, write, and edit still pass through the permission engine. The preamble still raises the chance that untrusted repo text steers the model into approved or auto-approved tool use. Sandbox is off by default, so a granted shell is a host shell.
 
@@ -136,7 +134,7 @@ These are properties of the current design, not defects hidden in a single funct
 ### Recommended order of work
 
 1. Authenticate `kcode --server`, including the loopback case on multi-user machines (H1).
-2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2).
+2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2). Done: `kcode mcp trust` plus runtime-boundary stripping. HTTP project servers still connect when used.
 3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3).
 4. Make the sandbox default and its network behavior match what the UI claims (M1).
 5. Run the TUI permission engine for builtin MCP tools (M2) and realpath filesystem checks (M3).

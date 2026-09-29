@@ -68,6 +68,25 @@ describe('session server launch contract', () => {
     expect(runServer).not.toHaveBeenCalled();
   });
 
+  it('forwards mcp trust to the injected runner', async () => {
+    const launchTui = vi.fn(async () => undefined);
+    const runMcpTrust = vi.fn(async () => undefined);
+    const command = createTuiProgram({
+      version: 'test',
+      launchTui,
+      runExec: vi.fn(),
+      runLogin: vi.fn(),
+      runLogout: vi.fn(),
+      runUpdate: vi.fn(),
+      runMcpTrust,
+    })
+      .exitOverride()
+      .configureOutput({ writeErr: () => undefined, writeOut: () => undefined });
+    await command.parseAsync(['mcp', 'trust', '/work/repo'], { from: 'user' });
+    expect(runMcpTrust).toHaveBeenCalledWith('/work/repo');
+    expect(launchTui).not.toHaveBeenCalled();
+  });
+
   it('keeps the default launch contract without --server', async () => {
     const { command, launchTui, runServer } = program();
     await command.parseAsync(['hello'], { from: 'user' });

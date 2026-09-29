@@ -219,11 +219,21 @@ kcode plugin remove <name>@local
 ## 5. Connect an authenticated project MCP server
 
 Choose a service you trust and review what you will send before starting a task.
-Enabled project servers connect automatically during tool discovery or calls;
-connecting exposes the canonical workspace root through MCP `roots/list`, even
-to a remote server. Tool calls send their arguments to that service. A tool
-permission prompt happens after connection and does not prevent this initial
-contact. This optional configuration leaves built-in search unchanged.
+Enabled HTTP project servers connect automatically during tool discovery or
+calls. A stdio server runs a local command and does not start until you trust
+that exact `.mcp.json` from outside the repository:
+
+```bash
+kcode mcp trust
+```
+
+Trust is stored in the data directory, not in the workspace. Editing
+`.mcp.json` changes its digest and requires `kcode mcp trust` again. Connecting
+exposes the canonical workspace root through MCP `roots/list`, even to a remote
+server. Tool calls send their arguments to that service. A tool permission
+prompt happens after connection and does not prevent this initial contact.
+Stdio children do not inherit runtime access tokens or data-directory
+selectors. This optional configuration leaves built-in search unchanged.
 
 Create `.mcp.json` in the workspace root you will launch KCode from:
 
