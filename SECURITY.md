@@ -25,6 +25,8 @@ Scan source, Git history, and build artifacts separately. A passing scan does no
 
 Static review of the published tree at `0.6.6` (`c1afb27` on `main`). The review covered first-party packages under `packages/`, release and CI tooling under `scripts/` and `.github/`, and the product integration points in vendored `third_party/sandbox-runtime` and `third_party/pi-mono` that the runtime actually calls. It did not include a live penetration test, a full line audit of vendored upstream trees, or dynamic testing of hosted MiniMax services.
 
+Remediation of H1–H3 and M1–M4 landed on `main` at `bf81ed7` and ships in `0.6.7`. M5–M8 and L1–L5 remain open. Each addressed finding below keeps its residual risk.
+
 The product is a local coding agent. Its security boundary is the operating-system user that launches it. A model, a repository file, a plugin, or an MCP server can ask that user to run tools. The controls below reduce how far untrusted text can go without a person or an OS sandbox in the way. They do not make an untrusted repository safe to open with full permissions.
 
 ### Threat model
@@ -121,12 +123,26 @@ These are properties of the current design, not defects hidden in a single funct
 
 ### Recommended order of work
 
+Completed in `0.6.7`:
+
 1. Authenticate `kcode --server`, including the loopback case on multi-user machines (H1). Done: bearer token on every request, private token file, docs updated. TLS is still absent.
 2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2). Done: `kcode mcp trust` plus runtime-boundary stripping. HTTP project servers still connect when used.
 3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3). Done: workspace instructions are labeled untrusted and cannot override permissions, secrets, or harness rules. This remains a prompt boundary.
 4. Make the sandbox default and its network behavior match what the UI claims (M1). Done: docs state that the sandbox is off by default and does not restrict the network. The default was not turned on.
 5. Run the TUI permission engine for builtin MCP tools (M2). Done: TUI and CLI both enforce builtin catalog tools. Realpath filesystem checks (M3) are done: permission checks follow existing symlinks before the workspace boundary.
 6. Apply the existing public-address fetch profile to `web_fetch` and skill archives (M4). Done: skill archives use the pinned public HTTPS profile. `web_fetch` still allows documented loopback and refuses link-local and metadata targets.
+
+Still open:
+
+1. Fail closed on POSIX when an auth or config file is group- or other-readable, and accept `MAVIS_ACCESS_TOKEN` only behind an explicit development flag (M5).
+2. Show plugin hook commands at install time and default `shell` off (M6).
+3. Map permission-checker exceptions to deny when the host cannot show a prompt, and keep them distinct from ordinary asks in auto mode (M7).
+4. Require a platform webhook secret on channel-bridge inbound routes and fail closed when it is unset (M8). This applies when a host mounts those routes.
+5. Escape skill catalog fields and wrap loaded skill bodies as untrusted data (L1).
+6. State the interactive bash secret-scrub default next to the permission prompt, and offer `scrub` as the managed default (L2).
+7. Emit a fixed redaction token for secrets on user-visible and log surfaces (L3).
+8. Bind HTML preview leases to the session and restrict CORS to the app origin (L4).
+9. Use one safe YAML parse helper for untrusted reads, with the same key rejection used on writes (L5).
 
 ### Method and limits
 
