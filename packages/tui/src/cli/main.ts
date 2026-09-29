@@ -52,6 +52,7 @@ export interface RunTuiCliDependencies {
   ) => Promise<void>;
   readonly runAcp?: (version: string, lane?: string) => Promise<void>;
   readonly runServer?: (request: TuiServerLaunchRequest, lane?: string) => Promise<void>;
+  readonly runMcpTrust?: (directory: string) => Promise<string>;
   readonly runLogin?: (
     region?: MavisRegion,
     openBrowser?: boolean,
@@ -139,6 +140,11 @@ export async function runTuiCli(dependencies: RunTuiCliDependencies = {}): Promi
       runServer: async (request, lane) => {
         const runServer = dependencies.runServer ?? defaultRunServer;
         await runServer(request, lane);
+        completedCommandExitMode = 'natural';
+      },
+      runMcpTrust: async (directory) => {
+        const runMcpTrust = dependencies.runMcpTrust ?? defaultRunMcpTrust;
+        processRef.stdout.write(`${await runMcpTrust(directory)}\n`);
         completedCommandExitMode = 'natural';
       },
       runLogin: async (region, openBrowser, lane) => {
@@ -258,6 +264,14 @@ async function defaultRunExec(
 async function defaultRunAcp(version: string, lane?: string): Promise<void> {
   const { runTuiAcpCommand } = await import('./run-acp-command.js');
   await runTuiAcpCommand(version, {}, lane);
+}
+
+async function defaultRunMcpTrust(directory: string): Promise<string> {
+  const { trustProjectStdioWorkspace } = await import(
+    '@mavis/local-runtime-v2/project-mcp-trust'
+  );
+  const { prepareTuiDataDir } = await import('../runtime/data-dir.js');
+  return trustProjectStdioWorkspace(await prepareTuiDataDir(), directory);
 }
 
 async function defaultRunServer(

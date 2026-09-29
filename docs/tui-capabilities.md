@@ -97,6 +97,24 @@ report a failed command. Stop failures and incomplete logs are reported separate
 An optional `description` supplies the TUI summary while execution and permission
 checks continue to use the original command.
 
+## Process sandbox
+
+The default is no process sandbox. `getDefaultSandboxSettings` returns
+`enabled: false` and filesystem mode `full_access`, and `full_access` is
+normalized back to sandbox disabled. In that state bash is a host shell of the
+user who started Kinetick Code. Permission checks still apply.
+
+Turning the sandbox on with `read_only`, `workspace_write`, or `delete_guard`
+is a filesystem cage when the sandbox backend is ready. An enabled sandbox
+whose backend is not ready fails closed and does not run the command on the
+host. Grep and glob spawn host `rg` and stay outside that cage.
+
+The sandbox does not restrict the network. A saved `sandbox.network` block,
+including `policy.mode: deny` and `deniedDomains`, is accepted so older config
+files still parse, then normalized to unrestricted network
+(`network.enforce: false`, `allowAll: true`). Outbound host policy is the
+separate egress guard in [Egress policy](egress-policy.md).
+
 ## Stopping a conversation and its background work
 
 An explicit user stop (Esc in the TUI) also cancels background Bash commands and

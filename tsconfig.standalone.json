@@ -178,6 +178,9 @@
       "@mavis/local-runtime-v2/process-local": [
         "./packages/local-runtime-v2/src/local/host-contract.ts"
       ],
+      "@mavis/local-runtime-v2/project-mcp-trust": [
+        "./packages/local-runtime-v2/src/service/mcp/project-stdio-trust.ts"
+      ],
       "@mavis/local-runtime-v2/session-system": [
         "./packages/local-runtime-v2/src/service/session-system/index.ts"
       ],
