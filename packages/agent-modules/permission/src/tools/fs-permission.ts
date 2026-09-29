@@ -529,8 +529,8 @@ export function isDangerousRemovalPath(inputPath: string, homeDir?: string): boo
  * Check if a path is within the working directory.
  */
 export function pathInWorkingPath(filePath: string, workingDirectory: string): boolean {
-  const resolved = path.resolve(filePath);
-  const normalizedWork = path.resolve(workingDirectory);
+  const resolved = resolveExistingPath(path.resolve(filePath));
+  const normalizedWork = resolveExistingPath(path.resolve(workingDirectory));
 
   return resolved === normalizedWork || resolved.startsWith(normalizedWork + path.sep);
 }
@@ -542,10 +542,10 @@ export function pathInAllowedWorkingPath(
   filePath: string,
   allowedPaths: readonly string[],
 ): boolean {
-  const resolved = path.resolve(filePath);
+  const resolved = resolveExistingPath(path.resolve(filePath));
 
   for (const allowed of allowedPaths) {
-    const normalizedAllowed = path.resolve(allowed);
+    const normalizedAllowed = resolveExistingPath(path.resolve(allowed));
     if (resolved === normalizedAllowed || resolved.startsWith(normalizedAllowed + path.sep)) {
       return true;
     }
@@ -650,15 +650,31 @@ export function isTempDirectory(resolvedPath: string): boolean {
 // Internal whitelist paths
 // ---------------------------------------------------------------------------
 
-/** Resolve existing parents too, so a directory alias cannot hide a protected read. */
-function resolveExistingPath(filePath: string): string {
+/**
+ * Canonicalize a path through existing directories and symlinks.
+ * A missing leaf keeps its final name under the real parent. A symlink leaf
+ * is followed even when the target does not exist yet, so a workspace link
+ * cannot hide a path outside the workspace.
+ */
+function resolveExistingPath(filePath: string, seen = new Set<string>()): string {
+  const absolute = path.resolve(filePath);
+  if (seen.has(absolute)) return absolute;
+  seen.add(absolute);
   try {
-    return fs.realpathSync(filePath);
+    return fs.realpathSync(absolute);
   } catch {
-    const parent = path.dirname(filePath);
-    return parent === filePath
-      ? filePath
-      : path.join(resolveExistingPath(parent), path.basename(filePath));
+    const parent = path.dirname(absolute);
+    if (parent === absolute) return absolute;
+    const resolvedParent = resolveExistingPath(parent, seen);
+    const joined = path.join(resolvedParent, path.basename(absolute));
+    try {
+      if (fs.lstatSync(joined).isSymbolicLink()) {
+        return resolveExistingPath(path.resolve(resolvedParent, fs.readlinkSync(joined)), seen);
+      }
+    } catch {
+      // The leaf does not exist.
+    }
+    return joined;
   }
 }
 
@@ -846,7 +862,10 @@ export function isPathAllowed(
     };
   }
 
-  const { resolved } = validation;
+  const lexical = validation.resolved;
+  // Boundary and safety checks use the symlink target, not the spelling
+  // inside an allowed directory.
+  const resolved = resolveExistingPath(lexical);
 
   // Filter rules for this tool, plus the `fs` umbrella that applies to all
   // filesystem tools (read / write / edit / glob / grep / list).
@@ -881,7 +900,10 @@ export function isPathAllowed(
       };
     }
 
-    if (matchPathRule(resolved, rule.ruleValue.ruleContent)) {
+    if (
+      matchPathRule(lexical, rule.ruleValue.ruleContent) ||
+      matchPathRule(resolved, rule.ruleValue.ruleContent)
+    ) {
       return {
         allowed: false,
         reason: { type: 'rule', rule },

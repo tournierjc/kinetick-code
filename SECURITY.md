@@ -64,9 +64,7 @@ Severities describe impact if the stated condition is met. They are not a claim 
 
 *Fix:* set `enforceBuiltinTools` for the TUI, or stamp native tools and route every catalog source through the same facade.
 
-**M3. Filesystem permission checks are lexical.** `validatePath` uses `path.resolve` and rejects `..` segments (`packages/agent-modules/permission/src/tools/fs-permission.ts`). It does not `realpath` the target before the allow decision. A symlink inside an allowed spelling can point outside the workspace when the tool later opens it. The sandbox resolver does realpath workspace roots when the sandbox is on. Host `rg` and unsandboxed bash do not get that protection.
-
-*Fix:* resolve existing path prefixes with `realpath` before `isPathAllowed`, matching the protected-runtime read path.
+**M3. Filesystem permission checks follow symlinks. Addressed.** `validatePath` still rejects `..` and returns a lexical absolute path (`packages/agent-modules/permission/src/tools/fs-permission.ts`). `isPathAllowed`, `pathInWorkingPath`, and `pathInAllowedWorkingPath` now canonicalize that path with `realpath`, including a symlink leaf whose target does not exist yet. A link inside the workspace that points outside is outside the workspace boundary. Deny rules match either the original spelling or the target. Residual risk: host `rg` and a shell that the user has already approved can still follow links after the permission decision. The sandbox, when enabled, realpaths workspace roots separately.
 
 **M4. `web_fetch` and skill-archive download follow user-controlled URLs without a private-network check.** `LocalWebFetchClient` accepts any absolute `http:` or `https:` URL and follows redirects (`packages/local-runtime/src/web-fetch/local-web-fetch-client.ts`). The tool is permission-gated and its description says localhost and intranet are in scope. Remote skill install fetches `archiveUrl` with a timeout and a size cap (`packages/local-runtime/src/skills/remote/archive.ts`) and does not pin DNS or reject link-local and metadata addresses. Default egress mode `managed-deny` blocks a fixed managed-host list; other hosts, including `169.254.169.254` literals, stay reachable (`packages/shared/src/egress-guard.ts`, `isLoopbackHost` matches only `127.*`). `remote-source.ts` already has the stricter HTTPS, public-IP, and pinned-lookup checks.
 
@@ -139,7 +137,7 @@ These are properties of the current design, not defects hidden in a single funct
 2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2).
 3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3).
 4. Make the sandbox default and its network behavior match what the UI claims (M1).
-5. Run the TUI permission engine for builtin MCP tools (M2) and realpath filesystem checks (M3).
+5. Run the TUI permission engine for builtin MCP tools (M2). Realpath filesystem checks (M3) are done: permission checks follow existing symlinks before the workspace boundary.
 6. Apply the existing public-address fetch profile to `web_fetch` and skill archives (M4).
 
 ### Method and limits

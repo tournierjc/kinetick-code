@@ -271,6 +271,7 @@
     "packages/agent-modules/permission/src/written-files-registry.ts",
     "packages/agent-modules/permission/test/unit/permission/bash-policy-regressions.test.ts",
     "packages/agent-modules/permission/test/unit/permission/cloud-classify-client.test.ts",
+    "packages/agent-modules/permission/test/unit/permission/fs-symlink-boundary.test.ts",
     "packages/agent-modules/plugin-hooks/package.json",
     "packages/agent-modules/plugin-hooks/src/command-invocation.ts",
     "packages/agent-modules/plugin-hooks/src/contracts.ts",
