@@ -1,0 +1,14 @@
+{
+  "description": "Canonical list of HTTP endpoints the kinetic-android app consumes from `kcode --server`. kinetic_parity_check.py (Banctol, cron 22h) verifies every entry is served by packages/tui/src/server/http.ts. Adding a server route that is not listed here is flagged as an Android feature candidate.",
+  "generatedBy": "manual; keep in sync with KcodeClient.kt",
+  "verifiedAgainst": "5db6c1edb2e749346b5283bbe0b17cb3fc85ae8c",
+  "endpoints": [
+    "/events",
+    "/health",
+    "/mcp",
+    "/permissions",
+    "/sessions",
+    "/skills",
+    "/status"
+  ]
+}
