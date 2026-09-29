@@ -42,9 +42,7 @@ Severities describe impact if the stated condition is met. They are not a claim 
 
 #### High
 
-**H1. Session HTTP server has no authentication.** `kcode --server` serves sessions, prompts, permission replies, and related routes from `packages/tui/src/server/http.ts`. The default bind is `127.0.0.1:8788`. There is no request secret. Any process that can open that address can read sessions and run turns, including approving permissions. `--host` accepts non-loopback addresses; the process logs a warning and continues. Loopback still does not separate users on a shared machine. This is already described in [Harness integration](docs/harness-integration.md). ACP over stdio does not have this exposure.
-
-*Fix:* require a high-entropy startup secret on every request, refuse non-loopback binds unless that secret is set, and treat loopback as a single-user trust boundary in the docs.
+**H1. Session HTTP server requires a bearer token. Addressed.** `kcode --server` still serves sessions, prompts, and permission replies from `packages/tui/src/server/http.ts`, including on `127.0.0.1:8788`. Every request, including `GET /` and `GET /health`, must send `Authorization: Bearer`. A missing or wrong token is `401` and does not reach the runtime. When `--server-token` is omitted, the process generates 32 random bytes and writes them to `<data-dir>/run/session-server.token` with mode `0600` on POSIX. The startup log names that path and does not print the token. Non-loopback binds still warn. Residual risk: there is no TLS, and anyone who can read the token file or the token itself can drive the agent. ACP over stdio does not use this listener. See [Harness integration](docs/harness-integration.md).
 
 **H2. A workspace `.mcp.json` can start a process with the parent environment.** `ProjectMcpRuntime.resolve` loads `.mcp.json` from the workspace and enables servers unless `enabled` is false (`packages/local-runtime-v2/src/service/mcp/project-mcp.service.ts`). Turn tool listing calls the connection pool, and stdio transport spawns `command` with `{ ...process.env, ...config.env }` (`packages/agent-modules/mcp/src/runtime/transport/stdio.ts`). Path checks keep the config file inside the workspace and cap its size. They do not review the command. Opening a session in an untrusted tree can therefore execute repository-chosen code as the user and hand it the parent environment, including provider tokens that bash Layer A would have removed.
 
@@ -135,7 +133,7 @@ These are properties of the current design, not defects hidden in a single funct
 
 ### Recommended order of work
 
-1. Authenticate `kcode --server`, including the loopback case on multi-user machines (H1).
+1. Authenticate `kcode --server`, including the loopback case on multi-user machines (H1). Done: bearer token on every request, private token file, docs updated. TLS is still absent.
 2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2).
 3. Demote repository `AGENTS.md` from overriding instructions to untrusted context (H3).
 4. Make the sandbox default and its network behavior match what the UI claims (M1).
