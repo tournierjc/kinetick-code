@@ -1,3 +1,7 @@
+import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
@@ -5,6 +9,10 @@ import {
   startTuiServerHttp,
   type TuiServerHandle,
 } from '../../src/server/http.js';
+import {
+  createSessionServerToken,
+  writeSessionServerTokenFile,
+} from '../../src/server/token.js';
 import type { TuiServerRuntime } from '../../src/server/runtime.js';
 import type {
   ListTuiSessionPageInput,
@@ -60,6 +68,23 @@ function createFakeRuntime(): RecordedRuntime {
   return recorded;
 }
 
+const SERVER_TOKEN = 'test-session-token-0123456789';
+
+describe('session server token file', () => {
+  it('writes a private token file and accepts a generated token', async () => {
+    const token = createSessionServerToken();
+    const directory = await mkdtemp(join(tmpdir(), 'kcode-server-token-'));
+    const filePath = await writeSessionServerTokenFile(directory, token);
+    expect(await readFile(filePath, 'utf8')).toBe(`${token}\n`);
+    if (process.platform !== 'win32') {
+      const file = await stat(filePath);
+      const parent = await stat(join(directory, 'run'));
+      expect(file.mode & 0o077).toBe(0);
+      expect(parent.mode & 0o077).toBe(0);
+    }
+  });
+});
+
 describe('session server HTTP contract', () => {
   let handle: TuiServerHandle | undefined;
   let recorded: RecordedRuntime | undefined;
@@ -81,6 +106,7 @@ describe('session server HTTP contract', () => {
       version: 'test-version',
       host: options.host ?? '127.0.0.1',
       port: options.port ?? 0,
+      token: SERVER_TOKEN,
       logger: { info: () => undefined, warn: () => undefined },
     });
     return handle;
@@ -88,7 +114,9 @@ describe('session server HTTP contract', () => {
 
   async function get(path: string, init?: RequestInit): Promise<Response> {
     const server = handle!;
-    return fetch(`http://127.0.0.1:${server.port}${path}`, init);
+    const headers = new Headers(init?.headers);
+    if (!headers.has('authorization')) headers.set('authorization', `Bearer ${SERVER_TOKEN}`);
+    return fetch(`http://127.0.0.1:${server.port}${path}`, { ...init, headers });
   }
 
   it('reports a positive bound port and the default port constant', async () => {
@@ -224,6 +252,7 @@ describe('session server HTTP contract', () => {
       version: 'test-version',
       host: '0.0.0.0',
       port: 0,
+      token: SERVER_TOKEN,
       logger: {
         info: () => undefined,
         warn: (message) => warnings.push(message),
@@ -231,7 +260,20 @@ describe('session server HTTP contract', () => {
     });
     handle = server;
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('every client that can reach this address');
+    expect(warnings[0]).toContain('Anyone who obtains the token');
+  });
+
+  it('refuses requests that omit or mismatch the bearer token', async () => {
+    const server = await start();
+    const missing = await fetch(`http://127.0.0.1:${server.port}/sessions`);
+    expect(missing.status).toBe(401);
+    expect(missing.headers.get('www-authenticate')).toBe('Bearer');
+    expect(await missing.json()).toEqual({ error: 'unauthorized' });
+    const wrong = await fetch(`http://127.0.0.1:${server.port}/health`, {
+      headers: { authorization: 'Bearer not-the-session-token' },
+    });
+    expect(wrong.status).toBe(401);
+    expect(recorded!.sessionPageInputs).toHaveLength(0);
   });
 
   it('stops serving after close()', async () => {
@@ -293,6 +335,7 @@ describe('session server HTTP contract', () => {
       version: 'test-version',
       host: '127.0.0.1',
       port: 0,
+      token: SERVER_TOKEN,
       logger: { info: () => undefined, warn: () => undefined },
     });
     void calls;

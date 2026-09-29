@@ -156,17 +156,21 @@ it — the server answers JSON, so a webapp, a mobile app, or a dashboard can
 read what the agent has been doing:
 
 ```bash
-kcode --server --host 0.0.0.0 --port 9430   # accept connections from your network
-curl http://127.0.0.1:9430/sessions
-curl "http://127.0.0.1:9430/sessions/<session-id>/messages?limit=50"
+kcode --server                                 # http://127.0.0.1:8788
+TOKEN=$(tr -d '\n' < ~/.kinetick/run/session-server.token)
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8788/sessions
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8788/sessions/<session-id>/messages?limit=50"
 ```
 
 `GET /sessions` lists Sessions (most recently updated first) and
 `GET /sessions/<id>/messages` replays a transcript, both with `limit` and
-cursor pagination; `GET /health` is the liveness check. The server is read-only
-today: it cannot start turns or modify Sessions, and it has no authentication,
-so the default bind stays on `127.0.0.1` — binding `0.0.0.0` exposes every
-Session in the data directory to anyone who can reach the port. Defaults are
+cursor pagination; `GET /health` is the liveness check. Every request needs
+`Authorization: Bearer`. Omit `--server-token` and the process writes a
+generated token to `<data-dir>/run/session-server.token` (mode `0600` on
+POSIX) and logs that path. The default bind stays on `127.0.0.1`. A
+non-loopback `--host` publishes the port; clients without the token are
+refused, and anyone who can read the token can drive the agent. Defaults are
 `127.0.0.1:8788`; use `MINIMAX_DATA_DIR` to serve an isolated data directory.
 
 Section 3 of [harness integration](docs/harness-integration.md) has the full
