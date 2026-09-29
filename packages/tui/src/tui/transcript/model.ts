@@ -160,6 +160,8 @@ export interface TranscriptInspectionReport {
 
 export interface TranscriptCell {
   id: string;
+  /** Retained output identity when an optimistic cell is admitted under a new store id. */
+  scrollbackId?: string;
   kind: TranscriptCellKind;
   status: TranscriptCellStatus;
   content: string;
@@ -196,6 +198,8 @@ export interface TranscriptToolPayloadBudget {
 
 export interface CreateTranscriptCellInput {
   id: string;
+  /** Retained output identity when an optimistic cell is admitted under a new store id. */
+  scrollbackId?: string;
   kind: TranscriptCellKind;
   status: TranscriptCellStatus;
   content: string;
