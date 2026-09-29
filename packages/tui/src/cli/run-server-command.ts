@@ -1,6 +1,7 @@
 import type { Readable, Writable } from 'node:stream';
 
 import { serveTuiServerHttp, type TuiServerLogger } from '../server/http.js';
+import { createSessionServerToken, writeSessionServerTokenFile } from '../server/token.js';
 import { prepareTuiDataDir } from '../runtime/data-dir.js';
 import type {
   CreatedTuiRuntime,
@@ -58,6 +59,12 @@ export async function runTuiServerCommand(
     const createRuntime = dependencies.createRuntime ?? lifecycle.createTuiRuntime;
     shutdownRuntime ??= lifecycle.shutdownTuiRuntime;
     const dataDir = await (dependencies.prepareDataDir ?? prepareTuiDataDir)();
+    const logger = dependencies.logger ?? console;
+    const token = request.token ?? createSessionServerToken();
+    const tokenPath = await writeSessionServerTokenFile(dataDir, token);
+    logger.info(
+      `Session server bearer token written to ${tokenPath}. Send it as Authorization: Bearer.`,
+    );
     runtime = await createRuntime({
       dataDir,
       workspaceDir: (dependencies.workspaceDir ?? (() => process.cwd()))(),
@@ -70,8 +77,9 @@ export async function runTuiServerCommand(
       version,
       host: request.host,
       port: request.port,
+      token,
       signal: controller.signal,
-      ...(dependencies.logger ? { logger: dependencies.logger } : {}),
+      logger,
     });
   } finally {
     processRef.off('SIGINT', cancel);

@@ -3000,6 +3000,7 @@
     "packages/tui/src/runtime/tool-preview.ts",
     "packages/tui/src/server/http.ts",
     "packages/tui/src/server/runtime.ts",
+    "packages/tui/src/server/token.ts",
     "packages/tui/src/tui/agent-team/model.ts",
     "packages/tui/src/tui/agent-team/panel.ts",
     "packages/tui/src/tui/agent-team/summary.ts",
