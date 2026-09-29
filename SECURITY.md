@@ -25,7 +25,7 @@ Scan source, Git history, and build artifacts separately. A passing scan does no
 
 Static review of the published tree at `0.6.6` (`c1afb27` on `main`). The review covered first-party packages under `packages/`, release and CI tooling under `scripts/` and `.github/`, and the product integration points in vendored `third_party/sandbox-runtime` and `third_party/pi-mono` that the runtime actually calls. It did not include a live penetration test, a full line audit of vendored upstream trees, or dynamic testing of hosted MiniMax services.
 
-Remediation of H1–H3 and M1–M4 landed on `main` at `bf81ed7` and ships in `0.6.7`. M5–M8 and L1–L5 remain open. Each addressed finding below keeps its residual risk.
+Remediation of H1–H3 and M1–M4 landed on `main` at `bf81ed7` and ships in `0.6.8`. M5–M8 and L1–L5 remain open. Each addressed finding below keeps its residual risk.
 
 The product is a local coding agent. Its security boundary is the operating-system user that launches it. A model, a repository file, a plugin, or an MCP server can ask that user to run tools. The controls below reduce how far untrusted text can go without a person or an OS sandbox in the way. They do not make an untrusted repository safe to open with full permissions.
 
@@ -123,7 +123,7 @@ These are properties of the current design, not defects hidden in a single funct
 
 ### Recommended order of work
 
-Completed in `0.6.7`:
+Completed in `0.6.8`:
 
 1. Authenticate `kcode --server`, including the loopback case on multi-user machines (H1). Done: bearer token on every request, private token file, docs updated. TLS is still absent.
 2. Stop auto-starting workspace `.mcp.json` stdio servers, and strip child environments (H2). Done: `kcode mcp trust` plus runtime-boundary stripping. HTTP project servers still connect when used.

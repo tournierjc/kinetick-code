@@ -14,7 +14,7 @@ The source in this repository names **Kinetick Code**. The video and still are t
 
 ## Recording and verification
 
-- Recorded upstream on September 28–29, 2026 (Asia/Shanghai), using installed MiniMax Code **0.5.8** with an existing **BYOK** configuration. This is a CLI workflow demonstration, not a model evaluation. Kinetick Code keeps its own version (**0.6.7**).
+- Recorded upstream on September 28–29, 2026 (Asia/Shanghai), using installed MiniMax Code **0.5.8** with an existing **BYOK** configuration. This is a CLI workflow demonstration, not a model evaluation. Kinetick Code keeps its own version (**0.6.8**).
 - The two real agent turns took approximately **102 seconds** and **154 seconds**. Model waiting time is omitted from the 36-second edit; it is not a speed benchmark. Browser footage plays at its captured speed.
 - The first run added the timer and passed 6 tests. The follow-up added hold-to-pause and the celebration and passed all 13 tests. Both runs explicitly said browser behavior was unverified; the maintainer then checked it in Chrome.
 - Browser checks cover start, short-click behavior, pointer hold/pause/resume, keyboard hold/repeat/release/resume, the default 25-minute setting, canceled holds, completion, reduced-motion behavior, and a 390 px viewport without horizontal overflow.
