@@ -529,8 +529,8 @@ export function isDangerousRemovalPath(inputPath: string, homeDir?: string): boo
  * Check if a path is within the working directory.
  */
 export function pathInWorkingPath(filePath: string, workingDirectory: string): boolean {
-  const resolved = path.resolve(filePath);
-  const normalizedWork = path.resolve(workingDirectory);
+  const resolved = resolveExistingPath(path.resolve(filePath));
+  const normalizedWork = resolveExistingPath(path.resolve(workingDirectory));
 
   return resolved === normalizedWork || resolved.startsWith(normalizedWork + path.sep);
 }
@@ -542,10 +542,10 @@ export function pathInAllowedWorkingPath(
   filePath: string,
   allowedPaths: readonly string[],
 ): boolean {
-  const resolved = path.resolve(filePath);
+  const resolved = resolveExistingPath(path.resolve(filePath));
 
   for (const allowed of allowedPaths) {
-    const normalizedAllowed = path.resolve(allowed);
+    const normalizedAllowed = resolveExistingPath(path.resolve(allowed));
     if (resolved === normalizedAllowed || resolved.startsWith(normalizedAllowed + path.sep)) {
       return true;
     }
@@ -616,7 +616,10 @@ function isWellKnownSystemReadAllowed(resolvedPath: string): boolean {
  *   Linux:   /tmp
  *   Windows: C:\Users\<user>\AppData\Local\Temp
  */
-const RESOLVED_TMPDIR = path.resolve(os.tmpdir());
+const RESOLVED_TMPDIR = resolveExistingPath(path.resolve(os.tmpdir()));
+/** macOS `/tmp` and `/var` are symlinks into `/private`. Compare the real directory. */
+const RESOLVED_POSIX_TMP =
+  process.platform === 'win32' ? undefined : resolveExistingPath('/tmp');
 
 /**
  * Check if a resolved path is within the system temp directory.
@@ -635,13 +638,15 @@ const RESOLVED_TMPDIR = path.resolve(os.tmpdir());
  *     POSIX-style /tmp to fall back to.
  */
 export function isTempDirectory(resolvedPath: string): boolean {
-  if (resolvedPath === RESOLVED_TMPDIR || resolvedPath.startsWith(RESOLVED_TMPDIR + path.sep)) {
+  const canonical = resolveExistingPath(path.resolve(resolvedPath));
+  if (canonical === RESOLVED_TMPDIR || canonical.startsWith(RESOLVED_TMPDIR + path.sep)) {
     return true;
   }
-  if (process.platform !== 'win32') {
-    if (resolvedPath === '/tmp' || resolvedPath.startsWith('/tmp/')) {
-      return true;
-    }
+  if (
+    RESOLVED_POSIX_TMP &&
+    (canonical === RESOLVED_POSIX_TMP || canonical.startsWith(RESOLVED_POSIX_TMP + path.sep))
+  ) {
+    return true;
   }
   return false;
 }
@@ -650,15 +655,31 @@ export function isTempDirectory(resolvedPath: string): boolean {
 // Internal whitelist paths
 // ---------------------------------------------------------------------------
 
-/** Resolve existing parents too, so a directory alias cannot hide a protected read. */
-function resolveExistingPath(filePath: string): string {
+/**
+ * Canonicalize a path through existing directories and symlinks.
+ * A missing leaf keeps its final name under the real parent. A symlink leaf
+ * is followed even when the target does not exist yet, so a workspace link
+ * cannot hide a path outside the workspace.
+ */
+function resolveExistingPath(filePath: string, seen = new Set<string>()): string {
+  const absolute = path.resolve(filePath);
+  if (seen.has(absolute)) return absolute;
+  seen.add(absolute);
   try {
-    return fs.realpathSync(filePath);
+    return fs.realpathSync(absolute);
   } catch {
-    const parent = path.dirname(filePath);
-    return parent === filePath
-      ? filePath
-      : path.join(resolveExistingPath(parent), path.basename(filePath));
+    const parent = path.dirname(absolute);
+    if (parent === absolute) return absolute;
+    const resolvedParent = resolveExistingPath(parent, seen);
+    const joined = path.join(resolvedParent, path.basename(absolute));
+    try {
+      if (fs.lstatSync(joined).isSymbolicLink()) {
+        return resolveExistingPath(path.resolve(resolvedParent, fs.readlinkSync(joined)), seen);
+      }
+    } catch {
+      // The leaf does not exist.
+    }
+    return joined;
   }
 }
 
@@ -781,23 +802,23 @@ export function isInternalWhitelistedPath(filePath: string, context: PathCheckCo
  * - Single-level glob: `/path/*` (matches direct children of /path)
  */
 export function matchPathRule(filePath: string, ruleContent: string): boolean {
-  const resolved = path.resolve(filePath);
+  const resolved = resolveExistingPath(path.resolve(filePath));
 
   // Directory glob: /path/**
   if (ruleContent.endsWith('/**')) {
-    const dir = path.resolve(ruleContent.slice(0, -3));
+    const dir = resolveExistingPath(path.resolve(ruleContent.slice(0, -3)));
     return resolved.startsWith(dir + path.sep) || resolved === dir;
   }
 
   // Single-level glob: /path/*
   if (ruleContent.endsWith('/*') && !ruleContent.endsWith('**')) {
-    const dir = path.resolve(ruleContent.slice(0, -2));
+    const dir = resolveExistingPath(path.resolve(ruleContent.slice(0, -2)));
     const parent = path.dirname(resolved);
     return parent === dir;
   }
 
-  // Exact match
-  return resolved === path.resolve(ruleContent);
+  // Exact match. A rule spelled through a directory symlink matches the target.
+  return resolved === resolveExistingPath(path.resolve(ruleContent));
 }
 
 // ---------------------------------------------------------------------------
@@ -846,7 +867,10 @@ export function isPathAllowed(
     };
   }
 
-  const { resolved } = validation;
+  const lexical = validation.resolved;
+  // Boundary and safety checks use the symlink target, not the spelling
+  // inside an allowed directory.
+  const resolved = resolveExistingPath(lexical);
 
   // Filter rules for this tool, plus the `fs` umbrella that applies to all
   // filesystem tools (read / write / edit / glob / grep / list).
@@ -881,7 +905,10 @@ export function isPathAllowed(
       };
     }
 
-    if (matchPathRule(resolved, rule.ruleValue.ruleContent)) {
+    if (
+      matchPathRule(lexical, rule.ruleValue.ruleContent) ||
+      matchPathRule(resolved, rule.ruleValue.ruleContent)
+    ) {
       return {
         allowed: false,
         reason: { type: 'rule', rule },
@@ -1027,7 +1054,9 @@ export function isPathAllowed(
 
   if (
     (toolName === 'write' || toolName === 'edit') &&
-    context.trustedExactWritePaths?.some((trustedPath) => isSameResolvedPath(trustedPath, resolved))
+    context.trustedExactWritePaths?.some((trustedPath) =>
+      isSameResolvedPath(resolveExistingPath(path.resolve(trustedPath)), resolved),
+    )
   ) {
     return {
       allowed: true,
