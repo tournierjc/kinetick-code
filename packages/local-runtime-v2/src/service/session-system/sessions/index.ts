@@ -4,6 +4,7 @@ export * from './agent-name.js';
 export * from './initialize.js';
 export * from './interaction-mode-capability.js';
 export * from './memory-policy.js';
+export * from './skill-policy.js';
 export * from './support/plan-document.js';
 export * from './legacy-session-compatibility.js';
 export {

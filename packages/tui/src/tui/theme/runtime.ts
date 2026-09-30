@@ -12,7 +12,7 @@ import type {
 } from './contracts.js';
 import { resolveTuiAnsi16Foreground, shouldSuppressTuiAnsi16Background } from './ansi16.js';
 import { resolveEnvironmentAppearance } from './detection.js';
-import { MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME } from './palettes.js';
+import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from './palettes.js';
 import { createSyntaxHighlightTheme } from './syntax.js';
 
 export interface TuiRenderThemeSnapshot {
@@ -31,13 +31,13 @@ let renderThemeSnapshot: TuiRenderThemeSnapshot = {
   signature: '',
 };
 let activeColors: TuiThemeColors =
-  initialAppearance === 'light' ? MINIMAX_CODE_LIGHT_THEME.colors : MINIMAX_CODE_DARK_THEME.colors;
+  initialAppearance === 'light' ? KCODE_LIGHT_THEME.colors : KCODE_DARK_THEME.colors;
 let activeSyntax: TuiThemeSyntaxTones =
-  initialAppearance === 'light' ? MINIMAX_CODE_LIGHT_THEME.syntax : MINIMAX_CODE_DARK_THEME.syntax;
+  initialAppearance === 'light' ? KCODE_LIGHT_THEME.syntax : KCODE_DARK_THEME.syntax;
 renderThemeSnapshot = {
   ...renderThemeSnapshot,
   signature: paletteSignature(
-    initialAppearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME,
+    initialAppearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME,
   ),
 };
 
@@ -121,7 +121,7 @@ let activeChalk = createTuiChalk({
 });
 type TuiChalkModifier = 'bold' | 'italic' | 'strikethrough' | 'underline';
 
-const MINIMAX_CODE_CHALK_MODIFIERS = new Set<TuiChalkModifier>([
+const KCODE_CHALK_MODIFIERS = new Set<TuiChalkModifier>([
   'bold',
   'italic',
   'strikethrough',
@@ -172,7 +172,7 @@ function createDynamicTuiChalk(modifiers: readonly TuiChalkModifier[] = []): Cha
       }
       if (
         typeof property === 'string' &&
-        MINIMAX_CODE_CHALK_MODIFIERS.has(property as TuiChalkModifier)
+        KCODE_CHALK_MODIFIERS.has(property as TuiChalkModifier)
       ) {
         return createDynamicTuiChalk([...modifiers, property as TuiChalkModifier]);
       }

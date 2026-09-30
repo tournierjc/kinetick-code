@@ -16,9 +16,8 @@ import type {
 import type { TuiRuntimeEvent } from '../types/runtime-events.js';
 import type { TuiPermissionMode } from '../application/permission-mode.js';
 import type { TuiMessage, TuiStreamEvent } from './stream-events.js';
-import type { McodeProviderRuntimePort } from '../provider/contract.js';
-import type { McodePluginRuntimeAccess } from '../plugin/contract.js';
-import type { TuiDailyCheckinOutcome } from '../checkin/application.js';
+import type { KcodeProviderRuntimePort } from '../provider/contract.js';
+import type { KcodePluginRuntimeAccess } from '../plugin/contract.js';
 import type {
   AbortSessionReq,
   CliSendMessageReq,
@@ -106,6 +105,8 @@ export interface TuiSession {
   visibility?: 'visible' | 'hidden';
   purpose?: string;
   archived?: boolean;
+  /** Sits in the runtime's pin list; projected per read, not stored on the Session. */
+  pinned?: boolean;
   workspaceDir?: string;
   createdAt?: number | string;
   updatedAt?: number | string;
@@ -122,6 +123,13 @@ export interface TuiSession {
    * available options, never the chosen one.
    */
   model?: TuiSessionModelSelection;
+  /** Session Skill dispositions: mandatory / optional / forbidden. */
+  skillPolicy?: {
+    closed: boolean;
+    mandatory: string[];
+    optional: string[];
+    forbidden: string[];
+  };
 }
 
 export interface TuiSessionModelSelection {
@@ -211,7 +219,19 @@ export interface TuiSessionPort {
   getMessages(sessionId: string, limit?: number): Promise<TuiMessage[]>;
   listMessagePage(sessionId: string, input?: TuiMessagePageInput): Promise<TuiMessagePage>;
   renameSession(sessionId: string, title: string): Promise<TuiSession>;
+  updateSessionSkillPolicy?(
+    sessionId: string,
+    skillPolicy: {
+      dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+      closed?: boolean;
+    },
+  ): Promise<TuiSession>;
   archiveSession(sessionId: string, archived: boolean): Promise<void>;
+  /**
+   * Pin or unpin a Session in the product's ordered pin list. The runtime projects
+   * `pinned` back on the next Session read, so callers refresh the catalogue.
+   */
+  pinSession?(input: { sessionId: string; pinned: boolean; insertIndex?: number }): Promise<void>;
   deleteSession(sessionId: string): Promise<void>;
   listSessionInputSummaries(
     sessionId: string,
@@ -261,7 +281,7 @@ export interface TuiSessionForkPort {
   forkSession(input: ForkTuiSessionInput): Promise<TuiSessionForkResult>;
 }
 
-export interface TuiConfigurationPort extends McodeProviderRuntimePort {
+export interface TuiConfigurationPort extends KcodeProviderRuntimePort {
   getRuntimeDiagnostics(): Promise<TuiRuntimeDiagnostics>;
   getInstructionSources(workspaceDir: string): Promise<readonly TuiInstructionSource[]>;
   getAccountStatus(
@@ -290,6 +310,10 @@ export interface TuiAccountStatusOptions {
 export interface TuiInspectionPort {
   getSessionUsage(sessionId: string): Promise<TuiSessionUsage>;
   getSessionUsageSummary?(sessionId: string): Promise<TuiSessionUsageSummary>;
+  /** Usage rows (per-message model + cost) for Sessions in the active tree. */
+  getSessionUsageWithRows?(sessionId: string): Promise<TuiSessionUsage>;
+  /** All Sessions (roots + branch children) for one agent, from the Runtime tree. */
+  getSessionTree?(agentName?: string): Promise<readonly TuiSession[]>;
   watchSessionUsageCommits?(signal: AbortSignal): AsyncGenerator<string>;
   requestCompaction(
     sessionId: string,
@@ -297,6 +321,29 @@ export interface TuiInspectionPort {
     customInstructions?: string,
   ): Promise<TuiCompactionResult>;
   listSkills(agentName?: string, keyword?: string, workspaceDir?: string): Promise<TuiSkillList>;
+  listKnowledgeProposals?(filter?: {
+    status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+    kind?: 'skill' | 'memory';
+    sessionId?: string;
+    limit?: number;
+  }): Promise<
+    ReadonlyArray<{
+      id: string;
+      kind: 'skill' | 'memory';
+      action: 'create' | 'improve';
+      status: string;
+      title: string;
+      summary: string;
+      draft: string;
+      editedDraft?: string;
+    }>
+  >;
+  reviewKnowledgeProposal?(input: {
+    proposalId: string;
+    decision: 'approve' | 'reject';
+    editedDraft?: string;
+    reviewNote?: string;
+  }): Promise<{ applied: boolean; title: string; status: string }>;
   listMcpServers(keyword?: string, sessionId?: string): Promise<TuiMcpServer[]>;
   inspectProjectMcp(sessionId: string): Promise<TuiProjectMcpPreview | undefined>;
   getContextSnapshot(sessionId: string): Promise<TuiContextSnapshotResponse>;
@@ -338,10 +385,6 @@ export interface TuiFeedbackPort {
   prepareFeedback(input: { description: string; sessionId?: string }): Promise<TuiFeedbackPreview>;
   submitFeedback(draftId: string, options?: TuiFeedbackSubmitOptions): Promise<TuiFeedbackReceipt>;
   cancelFeedback(draftId: string): Promise<boolean>;
-}
-
-export interface TuiDailyCheckin {
-  runDailyCheckin(): Promise<TuiDailyCheckinOutcome>;
 }
 
 export interface TuiQueueSnapshot {
@@ -608,7 +651,7 @@ export interface TuiActiveRunControlPort {
 }
 
 /**
- * Product-facing Runtime surface required by the interactive MCode TUI.
+ * Product-facing Runtime surface required by the interactive KCode TUI.
  *
  * Headless run lifecycle is intentionally excluded: commands and application
  * services should depend on the narrow domain ports above instead of this
@@ -619,7 +662,6 @@ export type TuiRuntime = TuiSessionPort &
   TuiConfigurationPort &
   TuiInspectionPort &
   TuiFeedbackPort &
-  TuiDailyCheckin &
   TuiQueuePort &
   TuiInteractionPort &
   TuiRuntimeEventPort &
@@ -629,7 +671,7 @@ export type TuiRuntime = TuiSessionPort &
   TuiBackgroundTaskCapability &
   TuiActiveRunControlPort &
   TuiWorkspaceGitPort &
-  McodePluginRuntimeAccess &
+  KcodePluginRuntimeAccess &
   Partial<TuiSessionForkPort> &
   Partial<TuiWorkspaceFilePort>;
 

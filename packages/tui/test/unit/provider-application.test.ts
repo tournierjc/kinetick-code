@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { McodeProviderModel, McodeProviderView } from '../../src/provider/contract.js';
-import { McodeProviderApplication } from '../../src/provider/application.js';
+import type { KcodeProviderModel, KcodeProviderView } from '../../src/provider/contract.js';
+import { defaultProviderApiFormatForBaseUrl } from '../../src/provider/contract.js';
+import { KcodeProviderApplication } from '../../src/provider/application.js';
 
 function createPort() {
   return {
-    discoverUserModelsCandidate: vi.fn(async (): Promise<readonly McodeProviderModel[]> => []),
+    discoverUserModelsCandidate: vi.fn(async (): Promise<readonly KcodeProviderModel[]> => []),
     listProviderPresets: vi.fn(async () => []),
     getCodexOAuthStatus: vi.fn(async () => ({
       state: 'disconnected' as const,
@@ -16,7 +17,19 @@ function createPort() {
       providerId: 'openai-codex' as const,
       authUrl: 'https://auth.openai.example/authorize',
     })),
-    listUserModelProviders: vi.fn(async () => [
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: 'hidden' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: 'pending' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: 'disconnected' as const,
+      providerId: 'github-copilot' as const,
+    })),
+    listModelProviders: vi.fn(async () => [
       {
         providerId: 'custom_provider:openai',
         name: 'OpenAI',
@@ -59,7 +72,7 @@ function createPort() {
 
 describe('McodeProviderApplication', () => {
   it('exposes a disconnected Codex OAuth row when Runtime makes it visible', async () => {
-    const application = new McodeProviderApplication(createPort());
+    const application = new KcodeProviderApplication(createPort());
 
     const snapshot = await application.snapshot({ includeCodexOAuth: true });
 
@@ -81,7 +94,7 @@ describe('McodeProviderApplication', () => {
       state: 'hidden',
       providerId: 'openai-codex',
     });
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot({ includeCodexOAuth: true });
 
@@ -90,15 +103,120 @@ describe('McodeProviderApplication', () => {
     );
   });
 
+  it('exposes a disconnected Copilot OAuth row when Runtime makes it visible', async () => {
+    const port = createPort();
+    port.getCopilotOAuthStatus.mockResolvedValueOnce({
+      state: 'disconnected',
+      providerId: 'github-copilot',
+    });
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot({ includeCopilotOAuth: true });
+
+    expect(snapshot.providers[0]).toMatchObject({
+      providerId: 'github-copilot',
+      name: 'GitHub Copilot',
+      kind: 'copilot-oauth',
+      active: false,
+      enabled: true,
+      readOnly: true,
+      hasApiKey: false,
+      status: { state: 'disconnected' },
+    });
+  });
+
+  it('omits the Copilot OAuth row when Runtime marks it hidden', async () => {
+    const application = new KcodeProviderApplication(createPort());
+
+    const snapshot = await application.snapshot({ includeCopilotOAuth: true });
+
+    expect(snapshot.providers).not.toContainEqual(
+      expect.objectContaining({ providerId: 'github-copilot' }),
+    );
+  });
+
+  it('keeps a single Copilot row once the connector has written its entry', async () => {
+    const port = createPort();
+    port.getCopilotOAuthStatus.mockResolvedValueOnce({
+      state: 'connected',
+      providerId: 'github-copilot',
+    });
+    // Runtime hands back the prefixed id, not the bare key the connector writes.
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:github-copilot',
+        name: 'GitHub Copilot',
+        kind: 'oauth' as const,
+        enabled: true,
+        hasApiKey: false,
+        configRevision: 'rev-2',
+        models: [{ modelId: 'claude-opus-4.8', displayName: 'Claude Opus 4.8' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot({ includeCopilotOAuth: true });
+
+    // A synthetic row here would render the connection the entry already carries.
+    const rows = snapshot.providers.filter((provider) => provider.kind === 'copilot-oauth');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      providerId: 'custom_provider:github-copilot',
+      readOnly: true,
+      configRevision: 'rev-2',
+      status: { state: 'connected' },
+      models: [{ modelId: 'claude-opus-4.8' }],
+    });
+  });
+
+  it('lists a connection the builtin tree owns as a read-only row', async () => {
+    const port = createPort();
+    // Runtime hands back the bare id for an entry in the builtin `provider`
+    // tree, and marks the tree it came from.
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'openrouter',
+        name: 'OpenRouter',
+        source: 'provider',
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        hasApiKey: false,
+        maskedApiKey: 'sk-o****MPLE',
+        models: [{ modelId: 'openai/gpt-5-mini', displayName: 'GPT-5 Mini', selected: true }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    const row = snapshot.providers.find((provider) => provider.providerId === 'openrouter');
+    expect(row).toMatchObject({
+      name: 'OpenRouter',
+      kind: 'builtin',
+      // The panel shows and tests it; config.yaml owns the endpoint and key.
+      readOnly: true,
+      active: true,
+      enabled: true,
+      baseUrl: 'https://openrouter.ai/api/v1',
+      models: [{ modelId: 'openai/gpt-5-mini' }],
+    });
+    // No revision means no candidate save may target it.
+    expect(row?.configRevision).toBeUndefined();
+  });
+
   it('builds a CLI-owned snapshot without exposing raw API keys', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
     expect(snapshot.providers.map((provider) => provider.providerId)).toEqual([
       'minimax_oauth',
       'minimax_api',
+      'openrouter',
+      'deepseek',
+      'local',
       'custom_provider:openai',
     ]);
     expect(snapshot.providers[0]).toMatchObject({
@@ -117,8 +235,11 @@ describe('McodeProviderApplication', () => {
     });
     expect(JSON.stringify(snapshot)).toContain('MiniMax OAuth');
     expect(JSON.stringify(snapshot)).not.toContain('must-never-cross-the-cli-boundary');
-    expect(snapshot.providers[2]).not.toHaveProperty('rawApiKey');
-    expect(snapshot.providers[2]?.models[0]).toMatchObject({
+    const openai = snapshot.providers.find(
+      (provider) => provider.providerId === 'custom_provider:openai',
+    );
+    expect(openai).not.toHaveProperty('rawApiKey');
+    expect(openai?.models[0]).toMatchObject({
       contextLimit: 32768,
       maxOutputTokens: 4096,
     });
@@ -128,7 +249,7 @@ describe('McodeProviderApplication', () => {
   it('marks OAuth active when the MiniMax source is Token Plan', async () => {
     const port = createPort();
     port.getMiniMaxModelSource.mockResolvedValueOnce('token_plan');
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -139,7 +260,7 @@ describe('McodeProviderApplication', () => {
 
   it('forwards MiniMax source changes through the CLI port', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     await expect(application.setMiniMaxSource('token_plan')).resolves.toBe('token_plan');
 
@@ -148,7 +269,7 @@ describe('McodeProviderApplication', () => {
 
   it('forwards custom provider creation through the CLI port', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     await application.create({
       name: 'OpenAI',
@@ -171,7 +292,7 @@ describe('McodeProviderApplication', () => {
 
   it('saves a tested provider candidate and selects its chosen model atomically', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const result = await application.saveCandidate({
       name: 'OpenAI',
@@ -197,7 +318,7 @@ describe('McodeProviderApplication', () => {
 
   it('preserves the Runtime-supported OpenAI Responses protocol', async () => {
     const port = createPort();
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:responses',
         name: 'OpenAI Responses',
@@ -209,7 +330,7 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'gpt-5.6' }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
@@ -220,7 +341,7 @@ describe('McodeProviderApplication', () => {
 
   it('uses provider and model-specific connectivity tests', async () => {
     const port = createPort();
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     await application.test('custom_provider:openai');
     await application.test('custom_provider:openai', 'gpt-4.1');
@@ -231,7 +352,7 @@ describe('McodeProviderApplication', () => {
 
   it('keeps a disabled provider inactive even when a model is still selected', async () => {
     const port = createPort();
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:byok',
         name: 'BYOK Vendor',
@@ -245,13 +366,15 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'byok-large-5', selected: true }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
     // Runtime drops disabled providers from the roster, so rendering the row
     // as active would contradict the "Disabled" label on the same line.
-    expect(snapshot.providers[2]).toMatchObject({
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:byok'),
+    ).toMatchObject({
       providerId: 'custom_provider:byok',
       enabled: false,
       active: false,
@@ -260,7 +383,7 @@ describe('McodeProviderApplication', () => {
 
   it('keeps an enabled provider active while a model is selected', async () => {
     const port = createPort();
-    port.listUserModelProviders.mockResolvedValueOnce([
+    port.listModelProviders.mockResolvedValueOnce([
       {
         providerId: 'custom_provider:byok',
         name: 'BYOK Vendor',
@@ -272,17 +395,131 @@ describe('McodeProviderApplication', () => {
         models: [{ modelId: 'byok-large-5', selected: true }],
       },
     ]);
-    const application = new McodeProviderApplication(port);
+    const application = new KcodeProviderApplication(port);
 
     const snapshot = await application.snapshot();
 
-    expect(snapshot.providers[2]).toMatchObject({ enabled: true, active: true });
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:byok'),
+    ).toMatchObject({ enabled: true, active: true });
+  });
+
+  it('offers OpenRouter, DeepSeek, and Local setup until a matching connection exists', async () => {
+    const application = new KcodeProviderApplication(createPort());
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.find((provider) => provider.kind === 'openrouter-setup')).toMatchObject({
+      providerId: 'openrouter',
+      name: 'OpenRouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiFormat: 'openai-completions',
+      hasApiKey: false,
+      readOnly: false,
+      models: [],
+    });
+    expect(snapshot.providers.find((provider) => provider.kind === 'deepseek-setup')).toMatchObject({
+      providerId: 'deepseek',
+      name: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com/v1',
+      apiFormat: 'openai-completions',
+      hasApiKey: false,
+      readOnly: false,
+      models: [],
+    });
+    expect(snapshot.providers.find((provider) => provider.kind === 'local-setup')).toMatchObject({
+      providerId: 'local',
+      name: 'Local',
+      baseUrl: 'http://localhost:11434/v1',
+      apiFormat: 'openai-completions',
+      hasApiKey: false,
+      readOnly: false,
+      models: [],
+    });
+  });
+
+  it('hides the OpenRouter setup row once a connection targets OpenRouter', async () => {
+    const port = createPort();
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:openrouter',
+        name: 'OpenRouter',
+        kind: 'custom' as const,
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        hasApiKey: true,
+        configRevision: 'rev-9',
+        models: [{ modelId: 'openai/gpt-5-mini' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.filter((provider) => provider.kind === 'openrouter-setup')).toHaveLength(0);
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:openrouter'),
+    ).toMatchObject({ kind: 'custom', hasApiKey: true });
+    expect(snapshot.providers.some((provider) => provider.kind === 'local-setup')).toBe(true);
+    expect(snapshot.providers.some((provider) => provider.kind === 'deepseek-setup')).toBe(true);
+  });
+
+  it('hides the DeepSeek setup row once a connection targets DeepSeek', async () => {
+    const port = createPort();
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:deepseek',
+        name: 'DeepSeek',
+        kind: 'custom' as const,
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'https://api.deepseek.com/v1',
+        hasApiKey: true,
+        configRevision: 'rev-ds',
+        models: [{ modelId: 'deepseek-chat' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.filter((provider) => provider.kind === 'deepseek-setup')).toHaveLength(0);
+    expect(
+      snapshot.providers.find((provider) => provider.providerId === 'custom_provider:deepseek'),
+    ).toMatchObject({ kind: 'custom', hasApiKey: true });
+    expect(snapshot.providers.some((provider) => provider.kind === 'openrouter-setup')).toBe(true);
+    expect(snapshot.providers.some((provider) => provider.kind === 'local-setup')).toBe(true);
+  });
+
+  it('hides the Local setup row once a loopback connection exists', async () => {
+    const port = createPort();
+    port.listModelProviders.mockResolvedValueOnce([
+      {
+        providerId: 'custom_provider:ollama',
+        name: 'Ollama',
+        kind: 'custom' as const,
+        enabled: true,
+        apiFormat: 'openai-completions' as const,
+        baseUrl: 'http://127.0.0.1:11434/v1',
+        hasApiKey: false,
+        configRevision: 'rev-3',
+        models: [{ modelId: 'qwen3' }],
+      },
+    ]);
+    const application = new KcodeProviderApplication(port);
+
+    const snapshot = await application.snapshot();
+
+    expect(snapshot.providers.filter((provider) => provider.kind === 'local-setup')).toHaveLength(0);
+    expect(snapshot.providers.some((provider) => provider.kind === 'openrouter-setup')).toBe(true);
+    expect(snapshot.providers.some((provider) => provider.kind === 'deepseek-setup')).toBe(true);
   });
 });
 
 
 describe('saved provider model refresh', () => {
-  const provider: McodeProviderView = {
+  const provider: KcodeProviderView = {
     providerId: 'custom_provider:work', name: 'Work', kind: 'custom',
     enabled: true, readOnly: false, active: true, hasApiKey: true,
     configRevision: 'rev-1', baseUrl: 'https://models.example/v1',
@@ -295,7 +532,7 @@ describe('saved provider model refresh', () => {
       { modelId: 'old-model', displayName: 'Do not overwrite saved settings' },
       { modelId: 'new-model', displayName: 'New model' }, { modelId: ' new-model ' }, { modelId: ' old-model ' },
     ]);
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).resolves.toBe(1);
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).resolves.toBe(1);
     const identity = { providerId: provider.providerId, expectedRevision: 'rev-1', baseUrl: provider.baseUrl };
     expect(port.discoverUserModelsCandidate).toHaveBeenCalledWith(identity);
     expect(port.saveUserModelProviderCandidate).toHaveBeenCalledWith({
@@ -310,14 +547,14 @@ describe('saved provider model refresh', () => {
   it.each([{ models: [] }, { models: [{ modelId: 'old-model' }] }])('does not save an empty or unchanged discovery result', async ({ models }) => {
     const port = createPort();
     port.discoverUserModelsCandidate.mockResolvedValue(models);
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).resolves.toBe(0);
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).resolves.toBe(0);
     expect(port.saveUserModelProviderCandidate).not.toHaveBeenCalled();
   });
 
   it('keeps the saved configuration when discovery fails', async () => {
     const port = createPort();
     port.discoverUserModelsCandidate.mockRejectedValue(new Error('Authentication failed'));
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Authentication failed');
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Authentication failed');
     expect(port.saveUserModelProviderCandidate).not.toHaveBeenCalled();
   });
 
@@ -325,14 +562,14 @@ describe('saved provider model refresh', () => {
     const port = createPort();
     port.discoverUserModelsCandidate.mockResolvedValue([{ modelId: 'new-model' }]);
     port.saveUserModelProviderCandidate.mockRejectedValue(new Error('Configuration changed'));
-    await expect(new McodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Configuration changed');
+    await expect(new KcodeProviderApplication(port).refreshModels(provider)).rejects.toThrow('Configuration changed');
     expect(port.saveUserModelProviderCandidate).toHaveBeenCalledOnce();
     expect(port.createUserModelProvider).not.toHaveBeenCalled();
   });
 
   it('rejects a missing revision before making any request', async () => {
     const port = createPort();
-    await expect(new McodeProviderApplication(port).refreshModels({ ...provider, configRevision: undefined })).rejects.toThrow('Reopen /provider');
+    await expect(new KcodeProviderApplication(port).refreshModels({ ...provider, configRevision: undefined })).rejects.toThrow('Reopen /provider');
     expect(port.discoverUserModelsCandidate).not.toHaveBeenCalled();
   });
 });
@@ -346,9 +583,30 @@ it('forwards unsaved discovery credentials without saving the candidate', async 
     apiFormat: 'openai-completions' as const,
   };
   port.discoverUserModelsCandidate.mockResolvedValue([{ modelId: 'new-model' }]);
-  await expect(new McodeProviderApplication(port).discoverModels(candidate)).resolves.toEqual([
+  await expect(new KcodeProviderApplication(port).discoverModels(candidate)).resolves.toEqual([
     { modelId: 'new-model' },
   ]);
   expect(port.discoverUserModelsCandidate).toHaveBeenCalledWith(candidate);
   expect(port.saveUserModelProviderCandidate).not.toHaveBeenCalled();
+});
+
+describe('defaultProviderApiFormatForBaseUrl', () => {
+  it('defaults OpenRouter and DeepSeek hosts to openai-completions', () => {
+    expect(defaultProviderApiFormatForBaseUrl('https://openrouter.ai/api/v1')).toBe(
+      'openai-completions',
+    );
+    expect(defaultProviderApiFormatForBaseUrl('https://api.deepseek.com/v1')).toBe(
+      'openai-completions',
+    );
+    expect(defaultProviderApiFormatForBaseUrl('https://api.deepseek.com')).toBe(
+      'openai-completions',
+    );
+  });
+
+  it('keeps the Anthropic default for other hosts', () => {
+    expect(defaultProviderApiFormatForBaseUrl('https://api.anthropic.com')).toBe(
+      'anthropic-messages',
+    );
+    expect(defaultProviderApiFormatForBaseUrl('not-a-url')).toBe('anthropic-messages');
+  });
 });

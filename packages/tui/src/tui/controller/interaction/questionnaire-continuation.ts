@@ -7,7 +7,7 @@ import {
 import type { TranscriptStore } from '../../transcript/store.js';
 import type { TranscriptCellUpdate } from '../../transcript/model.js';
 import type { TuiInteractionPort, TuiRuntimeEvent } from '../../../runtime/port.js';
-import { MINIMAX_CODE_DEFAULT_AGENT_NAME } from '../../../product-context.js';
+import { KCODE_DEFAULT_AGENT_NAME } from '../../../product-context.js';
 import type { TuiSessionLifecycleEvent } from '../../../types/runtime-events.js';
 import { classifyQuestionnaireReplyError } from './questionnaire-reply-outcome.js';
 
@@ -54,7 +54,7 @@ export class QuestionnaireContinuation {
       ok = await runtime.replyQuestionnaire(
         questionnaire.agentName ??
           questionnaire.request.requester?.agentName ??
-          MINIMAX_CODE_DEFAULT_AGENT_NAME,
+          KCODE_DEFAULT_AGENT_NAME,
         questionnaire.request.id,
         buildQuestionnaireReplyAnswers(questionnaire, { skipUnanswered }),
       );
@@ -99,7 +99,7 @@ export class QuestionnaireContinuation {
     if (!finished) {
       this.updateTranscript(questionnaire.request.id, {
         status: 'resolved',
-        detail: 'Answer sent · MCode is continuing…',
+        detail: 'Answer sent · KCode is continuing…',
         updatedAtMs: Date.now(),
       });
     }

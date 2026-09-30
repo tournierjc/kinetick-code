@@ -8,6 +8,7 @@ import type {
   SearchSessionsInput as SearchSessionsReq,
   SessionPage as SearchSessionsResp,
 } from "./query-contract.js";
+import type { SessionInfoView } from "./view-contract.js";
 
 import {
   SessionQueryServiceError,
@@ -22,6 +23,11 @@ export interface SessionQueryApplicationOptions {
     SessionQueryService,
     "list" | "search" | "tree" | "get"
   >;
+  /**
+   * Session ids in the product's ordered pin list. Pins live in a preference value
+   * rather than on the Session row, so each read projects the flag from here.
+   */
+  readonly pinnedSessions?: () => Promise<readonly string[]>;
 }
 
 /** Local Session query; parameters come from the service contract and results are built by local view converters. */
@@ -47,7 +53,7 @@ export class SessionQueryApplication {
       }),
     );
     return {
-      sessions: page.sessions.map(toSessionInfoView),
+      sessions: await this.markPinned(page.sessions.map(toSessionInfoView)),
       hasMore: page.hasMore,
       ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
     };
@@ -66,7 +72,7 @@ export class SessionQueryApplication {
       }),
     );
     return {
-      sessions: page.sessions.map(toSessionInfoView),
+      sessions: await this.markPinned(page.sessions.map(toSessionInfoView)),
       hasMore: page.hasMore,
       ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
     };
@@ -104,7 +110,32 @@ export class SessionQueryApplication {
     req: GetSessionReq,
   ): Promise<GetSessionResp> {
     const session = await this.invoke(() => this.options.service.get(req.id));
-    return { session: toSessionInfoView(session) };
+    const [view] = await this.markPinned([toSessionInfoView(session)]);
+    return { session: view };
+  }
+
+  /**
+   * Project the pin list onto the views. Pins are a preference value, not a Session
+   * column, so the flag is added at read time and never stored on the record. A read
+   * that fails to reach the pin list still returns the Sessions: losing the flag is
+   * better than losing the catalogue.
+   */
+  private async markPinned(
+    sessions: readonly SessionInfoView[],
+  ): Promise<SessionInfoView[]> {
+    const readPinned = this.options.pinnedSessions;
+    if (!readPinned || sessions.length === 0) return [...sessions];
+    let pinnedIds: readonly string[];
+    try {
+      pinnedIds = await readPinned();
+    } catch {
+      return [...sessions];
+    }
+    if (pinnedIds.length === 0) return [...sessions];
+    const pinned = new Set(pinnedIds);
+    return sessions.map((session) =>
+      session.sessionId && pinned.has(session.sessionId) ? { ...session, pinned: true } : session,
+    );
   }
 
   private async invoke<T>(operation: () => Promise<T>): Promise<T> {

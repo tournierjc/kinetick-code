@@ -14,6 +14,7 @@ import { createServer } from "node:http";
 import { afterEach, expect, it, vi } from "vitest";
 import { McpConnectionPool } from "@mavis/mcp/runtime/connection-pool";
 import { LocalMcpService } from "../../../src/service/mcp/index.js";
+import { trustProjectStdioWorkspace } from "../../../src/service/mcp/project-stdio-trust.js";
 import { LocalMcpPublicFacade } from "../../../src/service/mcp/tools/public-facade.js";
 
 const roots: string[] = [];
@@ -61,6 +62,9 @@ async function setup() {
   services.push(service);
   return { data, a, b, service };
 }
+async function trust(dataDir: string, root: string) {
+  await trustProjectStdioWorkspace(dataDir, root);
+}
 async function configure(root: string, env = "one") {
   await writeFile(
     join(root, ".mcp.json"),
@@ -75,10 +79,23 @@ async function configure(root: string, env = "one") {
     }),
   );
 }
-it("loads automatically at first discovery with project cwd, roots and isolated connections", async () => {
-  const { a, b, service } = await setup();
+it("does not start an untrusted project stdio server", async () => {
+  const { a, service } = await setup();
+  await configure(a);
+  const context = { sessionId: "untrusted", workspaceRoot: a };
+  expect((await service.inspectProjectMcp(context))?.servers[0]?.status).toBe(
+    "error",
+  );
+  expect(await service.listNativeToolsForTurn(context)).toEqual([]);
+  await expect(access(join(a, "started"))).rejects.toThrow();
+});
+
+it("loads a trusted project at first discovery with project cwd, roots and isolated connections", async () => {
+  const { data, a, b, service } = await setup();
   await configure(a, "a");
   await configure(b, "b");
+  await trust(data, a);
+  await trust(data, b);
   const ca = { sessionId: "a", workspaceRoot: a };
   const cb = { sessionId: "b", workspaceRoot: b };
   await expect(access(join(a, "started"))).rejects.toThrow();
@@ -111,6 +128,7 @@ it("loads automatically at first discovery with project cwd, roots and isolated 
 it("shadows profile entries, survives ACP clear, and reloads automatically on edit or deletion", async () => {
   const { data, a, service } = await setup();
   await configure(a);
+  await trust(data, a);
   const profile = JSON.stringify({
     mcpServers: { repo: { command: "should-never-start" } },
   });
@@ -136,6 +154,7 @@ it("shadows profile entries, survives ACP clear, and reloads automatically on ed
     ),
   ).toMatchObject([{ sourceScope: "project", status: "available" }]);
   await configure(a, "changed");
+  await trust(data, a);
   expect((await service.inspectProjectMcp(context))?.servers[0]?.status).toBe(
     "configured",
   );
@@ -159,8 +178,9 @@ it("shadows profile entries, survives ACP clear, and reloads automatically on ed
 });
 
 it("invalidates malformed files without retaining the old executable", async () => {
-  const { a, service } = await setup();
+  const { data, a, service } = await setup();
   await configure(a);
+  await trust(data, a);
   const context = { sessionId: "one", workspaceRoot: a };
   expect(await service.listNativeToolsForTurn(context)).toHaveLength(1);
   await writeFile(join(a, ".mcp.json"), "{bad json");
@@ -230,8 +250,9 @@ it("uses HTTP headers on a real loopback server and does not expose them in insp
 });
 
 it("aborts an old project call on reload without marking the replacement as available", async () => {
-  const { a, service } = await setup();
+  const { data, a, service } = await setup();
   await configure(a);
+  await trust(data, a);
   const context = { sessionId: "one", workspaceRoot: a };
   const calling = service.call("repo", "where", { hold: true }, { context });
   // Real subprocess startup under CI coverage can exceed Vitest's default one second.
@@ -242,6 +263,7 @@ it("aborts an old project call on reload without marking the replacement as avai
     { timeout: 10_000 },
   );
   await configure(a, "replacement");
+  await trust(data, a);
   await service.inspectProjectMcp(context);
   expect((await calling).isError).toBe(true);
   expect((await service.inspectProjectMcp(context))?.servers[0]?.status).toBe(
@@ -310,6 +332,7 @@ it("keeps disabled and invalid project entries from executing or falling back to
 it("keeps profile tools available when a workspace disappears and releases old project connections", async () => {
   const { data, a, service } = await setup();
   await configure(a, "release-cwd");
+  await trust(data, a);
   const context = { sessionId: "deleted", workspaceRoot: a };
   expect(await service.listNativeToolsForTurn(context)).toHaveLength(1);
   await writeFile(
@@ -324,8 +347,9 @@ it("keeps profile tools available when a workspace disappears and releases old p
 });
 
 it("disposes project calls and ACP configuration together for a deleted session", async () => {
-  const { a, service } = await setup();
+  const { data, a, service } = await setup();
   await configure(a);
+  await trust(data, a);
   const context = { sessionId: "deleted", workspaceRoot: a };
   await service.configureSessionServers("deleted", [
     { name: "client-only", config: { command: "unused" } },

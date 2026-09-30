@@ -33,8 +33,10 @@ export {
   type ModelSystemOwner,
 } from './initialize.js';
 export * from './codex-oauth.js';
+export * from './copilot-oauth.js';
 export {
   CUSTOM_PROVIDER_ID_PREFIX,
+  GITHUB_COPILOT_PROVIDER_ID,
   isModelProviderApi,
   MANAGED_MINIMAX_PROVIDER_ID,
   MINIMAX_API_PROVIDER_ID,
@@ -51,6 +53,7 @@ export * from './catalog/model-cache.js';
 export * from './catalog/model-favorites.js';
 export * from './catalog/model-selection.js';
 export * from './catalog/provider-views.js';
+export * from './connectivity/copilot-model-discovery.js';
 export * from './connectivity/discover-models.js';
 export * from './connectivity/provider-request.js';
 export * from './connectivity/test-connection.js';

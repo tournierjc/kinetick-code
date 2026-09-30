@@ -13,8 +13,8 @@ const LEGACY_MANIFEST_LITERAL = './liveboard/liveboard.json';
 const LEGACY_MANIFEST_PATH = 'liveboard/liveboard.json';
 const MINIAPP_MANIFEST_LITERAL = './miniapp/miniapp.json';
 const MINIAPP_MANIFEST_PATH = 'miniapp/miniapp.json';
-const MCODE_V1_FIELDS = new Set(['schemaVersion', 'liveboard']);
-const MCODE_V2_FIELDS = new Set(['schemaVersion', 'miniApp']);
+const MINIAPP_V1_FIELDS = new Set(['schemaVersion', 'liveboard']);
+const MINIAPP_V2_FIELDS = new Set(['schemaVersion', 'miniApp']);
 
 export async function readOptionalMiniAppContribution(
   packageRoot: string,
@@ -58,7 +58,7 @@ async function readOptionalPackageJson(
 export function readMiniAppMcode(value: unknown): string {
   if (!isRecord(value)) invalidMcode();
   if (value.schemaVersion === 1) {
-    if (hasUnknownField(value, MCODE_V1_FIELDS)) invalidMcode();
+    if (hasUnknownField(value, MINIAPP_V1_FIELDS)) invalidMcode();
     if (value.liveboard !== LEGACY_MANIFEST_LITERAL) {
       miniAppFail(
         'MCODE_SCHEMA_INVALID',
@@ -68,7 +68,7 @@ export function readMiniAppMcode(value: unknown): string {
     return LEGACY_MANIFEST_PATH;
   }
   if (value.schemaVersion === 2) {
-    if (hasUnknownField(value, MCODE_V2_FIELDS)) invalidMcode();
+    if (hasUnknownField(value, MINIAPP_V2_FIELDS)) invalidMcode();
     if (value.miniApp === MINIAPP_MANIFEST_LITERAL) return MINIAPP_MANIFEST_PATH;
     if (value.miniApp === LEGACY_MANIFEST_LITERAL) return LEGACY_MANIFEST_PATH;
     miniAppFail(

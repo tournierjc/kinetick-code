@@ -8,6 +8,34 @@ export { CUSTOM_PROVIDER_ID_PREFIX, MANAGED_MINIMAX_PROVIDER_ID, MINIMAX_API_PRO
 
 export const OPENAI_CODEX_PROVIDER_ID = 'openai-codex';
 
+/**
+ * GitHub Copilot is a BYOK route whose upstream is the editor-side Copilot API.
+ * The id is the pi-ai provider id on purpose: pi's own transports key their
+ * Copilot request attribution (`Copilot-Integration-Id`, `X-Initiator`,
+ * `Openai-Intent`) off `model.provider === 'github-copilot'`, so a config
+ * provider registered under this id inherits that behaviour instead of
+ * re-implementing the headers here.
+ */
+export const GITHUB_COPILOT_PROVIDER_ID = 'github-copilot';
+
+/**
+ * Provider ids whose connection a dedicated surface owns: the managed MiniMax
+ * identity, its BYOK API-key twin, and the two OAuth connectors. The generic
+ * BYOK paths — listing a connection in `/provider`, testing one, offering a
+ * config entry as an editable custom connection — must leave them alone, or one
+ * connection would be reachable twice with two different behaviours.
+ */
+export const DEDICATED_CONNECTION_PROVIDER_IDS: ReadonlySet<string> = new Set([
+  MANAGED_MINIMAX_PROVIDER_ID,
+  MINIMAX_API_PROVIDER_ID,
+  OPENAI_CODEX_PROVIDER_ID,
+  GITHUB_COPILOT_PROVIDER_ID,
+]);
+
+export function hasDedicatedConnectionSurface(providerId: string): boolean {
+  return DEDICATED_CONNECTION_PROVIDER_IDS.has(providerId);
+}
+
 export const MODEL_PROVIDER_SOURCES = ['provider', 'minimax_api', 'custom_provider'] as const;
 export type ModelProviderSource = (typeof MODEL_PROVIDER_SOURCES)[number];
 

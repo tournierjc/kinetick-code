@@ -511,6 +511,10 @@ export function buildRelevantMemoryBlock(memory: string): string {
   ].join('\n');
 }
 
+export function buildPromptSkillMatchBlock(matchText: string): string {
+  return ['<prompt-skill-match>', matchText, '</prompt-skill-match>'].join('\n');
+}
+
 /** Build the opt-in hot-path rubric for deciding whether this turn created durable memory. */
 export function buildProactiveMemoryBlock(): string {
   return [

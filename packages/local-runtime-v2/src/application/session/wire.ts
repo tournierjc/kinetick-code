@@ -9,6 +9,7 @@ import {
   type SessionInfoView,
   type SessionKind as DesktopSessionKindValue,
   type SessionMemoryPolicyView,
+  type SessionSkillPolicyView,
   type SessionStatusInfoView,
   type SessionTreeChildView,
 } from "./view-contract.js";
@@ -20,6 +21,8 @@ import type {
 import {
   CURRENT_SESSION_DATA_VERSION,
   effectiveSessionMemoryPolicy,
+  effectiveSessionSkillPolicy,
+  listSkillsByDisposition,
   isConversationMutationEligibleSession,
 } from "../../service/session-system/index.js";
 
@@ -70,6 +73,7 @@ export function toSessionInfoView(session: SessionRecord): SessionInfoView {
       : {}),
     interactionMode: toSessionInteractionModeView(session.interactionMode),
     memoryPolicy: toSessionMemoryPolicyView(session),
+    skillPolicy: toSessionSkillPolicyView(session),
   };
 }
 
@@ -84,6 +88,17 @@ function toSessionMemoryPolicyView(
     ...(policy.recallLockedAtMs === undefined
       ? {}
       : { recallLockedAtMs: policy.recallLockedAtMs }),
+  };
+}
+
+function toSessionSkillPolicyView(session: SessionRecord): SessionSkillPolicyView {
+  const policy = effectiveSessionSkillPolicy(session.skillPolicy);
+  return {
+    dispositions: { ...policy.dispositions },
+    closed: policy.closed,
+    mandatory: listSkillsByDisposition(policy, 'mandatory'),
+    optional: listSkillsByDisposition(policy, 'optional'),
+    forbidden: listSkillsByDisposition(policy, 'forbidden'),
   };
 }
 

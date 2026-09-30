@@ -83,6 +83,13 @@ function readExternalWorkspaceSkillRoots(
     const nearestPriorityBonus = (rootCount - index) / 1000;
     return [
       externalSkillRoot(
+        'workspace-kinetick',
+        join(rootPath, '.kinetick', 'skills'),
+        'workspace',
+        skillsConfig,
+        nearestPriorityBonus,
+      ),
+      externalSkillRoot(
         'workspace-minimax',
         join(rootPath, '.minimax', 'skills'),
         'workspace',

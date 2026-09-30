@@ -6,7 +6,7 @@ import {
   createTuiSkillsInspectionPanel,
 } from "../../src/tui/features/inspection/capabilities.js";
 
-describe("MCode capability inspection", () => {
+describe("KCode capability inspection", () => {
   it("renders Skills as a grouped read-only catalog instead of transcript prose", () => {
     const onCancel = vi.fn();
     const panel = createTuiSkillsInspectionPanel(

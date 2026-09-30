@@ -17,6 +17,7 @@ import {
 import { LocalMemoryFacade } from '../memory/local-memory-facade.js';
 import type { LocalMemoryBusEmitter } from '../memory/local-memory-orchestration.js';
 import type { CliSunsetNoticeEvaluator } from '../memory/cli-sunset-notice.js';
+import type { PromptSkillCandidate } from '../skills/prompt-skill-lookup.js';
 
 export function createLocalMemorySubsystem(input: {
   configGetter: () => LocalRuntimeConfig;
@@ -29,6 +30,9 @@ export function createLocalMemorySubsystem(input: {
   cliSunsetNotice?: CliSunsetNoticeEvaluator;
   agentFacts?: () => LocalAgentFactsReader | undefined;
   userConfiguredName?: () => string | undefined;
+  listSkillCandidates?: (
+    session: LocalReminderSessionInfo,
+  ) => Promise<readonly PromptSkillCandidate[]> | readonly PromptSkillCandidate[];
 }) {
   const memoryFacade = new LocalMemoryFacade({
     config: () => ({
@@ -53,6 +57,9 @@ export function createLocalMemorySubsystem(input: {
     ...(input.cliSunsetNotice ? { cliSunsetNotice: input.cliSunsetNotice } : {}),
     agentFacts: input.agentFacts,
     userConfiguredName: input.userConfiguredName,
+    ...(input.listSkillCandidates
+      ? { listSkillCandidates: input.listSkillCandidates }
+      : {}),
   });
   const systemReminderService = new LocalSystemReminderService(
     localDataCollector,

@@ -8,6 +8,7 @@ import type {
   TaskSessionBindingCreate,
 } from './agent-binding.js';
 import type { SessionMemoryPolicy } from '../memory-policy.js';
+import type { SessionSkillPolicy } from '../skill-policy.js';
 
 export const SESSION_RUNTIMES = ['pi-agent', 'opencode'] as const;
 export const SESSION_TYPES = ['root', 'branch'] as const;
@@ -63,6 +64,7 @@ export interface SessionRecord {
   readonly appMode?: AppMode;
   readonly interactionMode?: SessionInteractionMode;
   readonly memoryPolicy?: SessionMemoryPolicy;
+  readonly skillPolicy?: SessionSkillPolicy;
   readonly status: SessionStatus;
   readonly errorMessage?: string;
   readonly errorCode?: number;
@@ -124,6 +126,7 @@ export interface SessionCreateInput {
   readonly effectiveModelContextWindow?: number | null;
   readonly effectiveModelMaxOutputTokens?: number | null;
   readonly memoryPolicy?: SessionMemoryPolicy;
+  readonly skillPolicy?: SessionSkillPolicy;
   readonly origin?: SessionOrigin;
   readonly sessionOrigin?: SessionDataOrigin;
   readonly sessionDataVersion?: number;

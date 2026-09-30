@@ -26,6 +26,7 @@ import {
   buildTeamMemoryBlock,
   buildEvolutionReminderBlock,
   buildRelevantMemoryBlock,
+  buildPromptSkillMatchBlock,
   buildUserMemoryUpdateBlock,
   buildAgentMemoryUpdateBlock,
   buildMemorySummaryUpdateBlock,
@@ -486,6 +487,11 @@ export const relevantMemoryProvider: ReminderProviderFn = (input) => {
   return buildRelevantMemoryBlock(input.relevantMemory.trim());
 };
 
+export const promptSkillMatchProvider: ReminderProviderFn = (input) => {
+  if (!input.promptSkillMatch?.trim()) return undefined;
+  return buildPromptSkillMatchBlock(input.promptSkillMatch.trim());
+};
+
 /** Inject <user_memory_update> when user memory changes mid-session. */
 export const userMemoryUpdateProvider: ReminderProviderFn = (input) => {
   if (!input.userMemoryUpdate?.trim()) return undefined;
@@ -838,7 +844,11 @@ export function createDefaultRegistry(formatLocalDateTime: DateFormatter): Syste
       .append('bootstrapProvider', bootstrapProvider)
       .append('worktreeReminderProvider', worktreeReminderProvider)
       .append('teamMemoryProvider', teamMemoryProvider)
-      // relevantMemoryProvider removed — low relevance precision wastes ~500-1000 tokens/turn
+      // Bounded prompt-overlap excerpts only. An earlier default omitted this
+      // provider because unscoped recall spent roughly 500–1000 tokens per turn
+      // at low precision. Empty input still emits nothing.
+      .append('relevantMemoryProvider', relevantMemoryProvider)
+      .append('promptSkillMatchProvider', promptSkillMatchProvider)
       .append('userMemoryUpdateProvider', userMemoryUpdateProvider)
       .append('agentMemoryUpdateProvider', agentMemoryUpdateProvider)
       .append('memorySummaryUpdateProvider', memorySummaryUpdateProvider)

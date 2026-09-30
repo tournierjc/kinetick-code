@@ -6,7 +6,7 @@ import { formatTuiTranscriptMarkdown } from '../../src/tui/transcript/export.js'
 import { createTranscriptCell } from '../../src/tui/transcript/model.js';
 import { TranscriptStore } from '../../src/tui/transcript/store.js';
 import { TranscriptView } from '../../src/tui/transcript/view.js';
-import { MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
+import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
 import { applyTuiRenderTheme, getTuiThemeSnapshot } from '../../src/tui/theme/runtime.js';
 
 function thinkingStore(content: string, status: 'running' | 'failed' | 'succeeded' = 'running') {
@@ -49,7 +49,7 @@ describe('Thinking preview', () => {
     const store = thinkingStore('Original reasoning\n');
     const view = new TranscriptView(store);
     let fullContent = store.get('thinking')!.content;
-    applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 2);
+    applyTuiRenderTheme(KCODE_DARK_THEME, 2);
     try {
       for (const index of [1, 2, 3]) {
         const delta = `${'A previous reasoning line.\n'.repeat(4_000)}Latest step ${index}`;
@@ -74,7 +74,7 @@ describe('Thinking preview', () => {
       }
     } finally {
       applyTuiRenderTheme(
-        originalTheme.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME,
+        originalTheme.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME,
         originalTheme.colorLevel,
       );
     }

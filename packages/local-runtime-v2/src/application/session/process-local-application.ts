@@ -5,6 +5,7 @@ import {
   annotateModelFavorites,
   modelFavoriteRefs,
   type CodexOAuthManager,
+  type CopilotOAuthManager,
   type LocalModelProviderService,
   type ModelFavoritesPreference,
   type ModelSystemOwner,
@@ -39,6 +40,7 @@ export interface ProcessLocalApplicationOptions {
     readonly listProviderPresets: ModelSystemOwner['listProviderPresets'];
     readonly oauth: Pick<CodexOAuthManager, 'getStatus' | 'startLogin' | 'cancelLogin'>;
     readonly favorites?: Pick<ModelFavoritesPreference, 'list' | 'set'>;
+    readonly copilotOAuth: Pick<CopilotOAuthManager, 'getStatus' | 'startLogin' | 'cancelLogin'>;
   };
   readonly peripherals: Required<
     Pick<
@@ -134,8 +136,12 @@ export function createProcessLocalApplication(
       getCodexOAuthStatus: async () => options.modelProvider.oauth.getStatus(),
       startCodexOAuthLogin: (input) => options.modelProvider.oauth.startLogin(input),
       cancelCodexOAuthLogin: async (loginId) => options.modelProvider.oauth.cancelLogin(loginId),
-      listUser: async () =>
-        options.modelProvider.providers.listUserProviders().map(toProviderRecord),
+      getCopilotOAuthStatus: async () => options.modelProvider.copilotOAuth.getStatus(),
+      startCopilotOAuthLogin: () => options.modelProvider.copilotOAuth.startLogin(),
+      cancelCopilotOAuthLogin: async (loginId) =>
+        options.modelProvider.copilotOAuth.cancelLogin(loginId),
+      listProviders: async () =>
+        options.modelProvider.providers.listProviders().map(toProviderRecord),
       getMiniMaxApiKeyStatus: async () => options.modelProvider.providers.getMinimaxApiKeyStatus(),
       getMiniMaxModelSource: async () => options.modelProvider.providers.getMinimaxModelSource(),
       setMiniMaxModelSource: async ({ source }) => {

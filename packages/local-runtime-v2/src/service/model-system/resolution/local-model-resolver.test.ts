@@ -6,12 +6,16 @@ import {
 } from '@mavis/protocol';
 import { describe, expect, it, vi } from 'vitest';
 
-import { streamSimple } from '@earendil-works/pi-ai';
+import { calculateCost, streamSimple } from '@earendil-works/pi-ai';
 
 import { LocalModelResolver, lookupLocalModelLimits } from './local-model-resolver.js';
+import { UNAUTHENTICATED_PROVIDER_API_KEY } from '../connectivity/provider-request.js';
 import { OPENPLATFORM_THINKING_VARIANTS_CAPABILITY } from './openplatform-thinking.js';
 import { capabilitiesFromModelConfig, modelRefForModel } from './model-ref.js';
 import type { LocalModelConfig, LocalRuntimeAuthContext } from '../contracts.js';
+
+/** Fixture credential: no test in this file reads its value, only its presence. */
+const FIXTURE_KEY = ['f', 'i', 'x', 't', 'u', 'r', 'e', '-', 'k', 'e', 'y'].join('');
 
 const AGENT_CONFIG: IAgentConfig = {
   system_prompt: 'system',
@@ -560,7 +564,7 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
     });
   });
 
-  it('attributes OpenRouter inference requests to MiniMax Code', async () => {
+  it('attributes OpenRouter inference requests to Kinetick Code', async () => {
     const resolver = new LocalModelResolver({
       byokConfigGetter: () => ({
         custom_provider: {
@@ -591,12 +595,138 @@ describe('LocalModelResolver BYOK routing and fallback', () => {
 
     expect(resolved.headers).toMatchObject({
       'HTTP-Referer': 'https://agent.minimax.io/',
-      'X-OpenRouter-Title': 'MiniMax Code',
+      'X-OpenRouter-Title': 'Kinetick Code',
       'X-OpenRouter-Categories': 'cli-agent',
       'X-Mavis-Session-Id': 'session-openrouter',
     });
     expect(resolved.headers).not.toHaveProperty('http-referer');
     expect(resolved.headers).not.toHaveProperty('x-openrouter-title');
+  });
+});
+
+describe('LocalModelResolver session cost pricing', () => {
+  const customProvider = (models: Record<string, LocalModelConfig>) =>
+    new LocalModelResolver({
+      byokConfigGetter: () => ({
+        custom_provider: {
+          work: {
+            api: 'openai-completions',
+            options: { apiKey: 'custom-user-key', baseURL: 'https://custom.example/v1' },
+            models,
+          },
+        },
+      }),
+    });
+  const resolveWorkModel = (resolver: LocalModelResolver) =>
+    resolver.resolveModel({
+      sessionId: 'session-cost',
+      turnId: 'turn-cost',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'custom_provider:work', model_id: 'model' },
+      },
+    });
+  const usageOf = (tokens: { input: number; output: number; cacheRead?: number }) => ({
+    input: tokens.input,
+    output: tokens.output,
+    cacheRead: tokens.cacheRead ?? 0,
+    cacheWrite: 0,
+    totalTokens: tokens.input + tokens.output,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+  });
+
+  it('prices turns with the rate the provider declares', async () => {
+    const resolved = await resolveWorkModel(
+      customProvider({
+        model: { cost: { input: 0.14, output: 0.28, cache_read: 0.0028 } },
+      }),
+    );
+
+    expect(resolved.model.cost).toEqual({
+      input: 0.14,
+      output: 0.28,
+      cacheRead: 0.0028,
+      cacheWrite: 0,
+    });
+    // The status line reports the sum of what Pi prices per turn, so the rate is
+    // what decides whether a session has a cost to report at all: it is charged
+    // here in USD per million tokens, not per token.
+    expect(
+      calculateCost(resolved.model, usageOf({ input: 1_000_000, output: 100_000 })).total,
+    ).toBeCloseTo(0.168, 6);
+  });
+
+  it('leaves an endpoint that declares no rate unpriceable', async () => {
+    const resolved = await resolveWorkModel(customProvider({ model: {} }));
+
+    expect(resolved.model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    expect(
+      calculateCost(resolved.model, usageOf({ input: 1_000_000, output: 100_000 })).total,
+    ).toBe(0);
+  });
+
+  it('drops a declared rate that is not a price', async () => {
+    const resolved = await resolveWorkModel(
+      customProvider({ model: { cost: { input: -0.14, output: 0.28 } } }),
+    );
+
+    expect(resolved.model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+  });
+
+  it('takes the catalog rate for a known provider and model', async () => {
+    const resolver = new LocalModelResolver({
+      providerConfig: {
+        deepseek: {
+          options: { apiKey: 'deepseek-user-key', baseURL: 'https://api.deepseek.com' },
+          models: { 'deepseek-v4-flash': {} },
+        },
+      },
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-catalog',
+      turnId: 'turn-catalog',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'deepseek', model_id: 'deepseek-v4-flash' },
+      },
+    });
+
+    expect(resolved.model.cost).toEqual({
+      input: 0.14,
+      output: 0.28,
+      cacheRead: 0.0028,
+      cacheWrite: 0,
+    });
+  });
+
+  it('keeps the zero rate on a route the plan already bills', async () => {
+    const resolver = new LocalModelResolver({
+      authContextGetter: () => ({ accessToken: 'managed-token', realUserID: 'user-managed' }),
+      providerConfig: {
+        minimax: {
+          options: {
+            authMode: 'managed-login',
+            apiKey: 'sk-xxx',
+            baseURL: 'https://agent.minimax.io/mavis/api/v1/llm/v1',
+          },
+        },
+      },
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-managed-cost',
+      turnId: 'turn-managed-cost',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'minimax', model_id: 'MiniMax-M2.7' },
+      },
+    });
+
+    // Pi lists the model's per-token price, but a subscription turn is not billed
+    // by the token: reporting the list price would invent a charge.
+    expect(resolved.managedProvider).toBe(true);
+    expect(resolved.model.cost).toEqual({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   });
 });
 
@@ -644,6 +774,39 @@ describe('LocalModelResolver custom-provider endpoint normalization', () => {
       expect(resolved.model.baseUrl).toBe(expectedBaseUrl);
     },
   );
+});
+
+describe('a custom provider saved without a key', () => {
+  it('resolves the endpoint and keeps the transport placeholder off the request', async () => {
+    const resolver = new LocalModelResolver({
+      byokConfigGetter: () => ({
+        custom_provider: {
+          work: {
+            api: 'openai-completions',
+            options: { baseURL: 'http://127.0.0.1:11434/v1' },
+            models: { model: {} },
+          },
+        },
+      }),
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-keyless-custom',
+      turnId: 'turn-keyless-custom',
+      agentConfig: {
+        ...AGENT_CONFIG,
+        model: { provider: 'custom_provider:work', model_id: 'model' },
+      },
+    });
+
+    // The transport refuses a falsy key, so it is handed the placeholder; the
+    // flag is what keeps that placeholder off the wire.
+    expect(resolved.apiKey).toBe(UNAUTHENTICATED_PROVIDER_API_KEY);
+    expect(resolved.unauthenticatedEndpoint).toBe(true);
+    const headerNames = Object.keys(resolved.headers ?? {}).map((name) => name.toLowerCase());
+    expect(headerNames).not.toContain('authorization');
+    expect(headerNames).not.toContain('x-api-key');
+  });
 });
 
 describe('LocalModelResolver BYOK fallback', () => {
@@ -1066,19 +1229,36 @@ describe('LocalModelResolver credentials and thinking', () => {
     ).rejects.toThrow('managed OAuth bearer is not synced');
   });
 
+  it('resolves an endpoint that needs no authentication without a credential', async () => {
+    const resolver = new LocalModelResolver({
+      providerConfig: {
+        'provider-native': {
+          api: 'openai-completions',
+          options: { baseURL: 'http://127.0.0.1:11434/v1' },
+        },
+      },
+    });
+
+    const resolved = await resolver.resolveModel({
+      sessionId: 'session-keyless',
+      turnId: 'turn-keyless',
+      agentConfig: AGENT_CONFIG,
+    });
+
+    // The transport refuses a falsy key, so it is handed a placeholder; the flag
+    // is what keeps that placeholder off the wire.
+    expect(resolved.apiKey).toBe(UNAUTHENTICATED_PROVIDER_API_KEY);
+    expect(resolved.unauthenticatedEndpoint).toBe(true);
+    expect(resolved.headers?.Authorization).toBeUndefined();
+    expect(resolved.headers?.authorization).toBeUndefined();
+    expect(resolved.model.baseUrl).toContain('127.0.0.1:11434');
+  });
+
   it.each([
     [
       {
         options: {
-          baseURL: 'https://provider.example/v1',
-        },
-      },
-      'api_key not configured',
-    ],
-    [
-      {
-        options: {
-          apiKey: 'provider-key',
+          apiKey: FIXTURE_KEY,
         },
       },
       'base_url not configured',

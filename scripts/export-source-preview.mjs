@@ -64,7 +64,7 @@ let extractor;
 try {
   receiptFd = openSync(sidecar, "wx", 0o600);
   await measure("archive", () =>
-    git(["archive", "--format=tar.gz", "--prefix=minimax-code/", revision], {
+    git(["archive", "--format=tar.gz", "--prefix=kinetick-code/", revision], {
       stdio: ["ignore", fd, "pipe"],
     }),
   );
@@ -76,7 +76,7 @@ try {
       process.env.MCODE_SOURCE_EXTRACTOR,
     ),
   );
-  const snapshotRoot = path.join(snapshot, "minimax-code");
+  const snapshotRoot = path.join(snapshot, "kinetick-code");
   const check = await measure("inventory", () =>
     spawnSync(
       process.execPath,

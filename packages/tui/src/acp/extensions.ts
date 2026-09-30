@@ -5,6 +5,9 @@ import * as acp from '@agentclientprotocol/sdk';
 import type { TuiSession } from '../runtime/port.js';
 import type { TuiAcpRuntime } from './runtime.js';
 
+// The `minimax-code/extensions` namespace and the `mcode/session/*` method
+// names are the ACP extension wire contract clients already implement, so the
+// product rename does not change them.
 export const TUI_ACP_EXTENSION_VERSION = 1;
 
 const TUI_ACP_GOAL_METHODS = [
