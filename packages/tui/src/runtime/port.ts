@@ -123,6 +123,13 @@ export interface TuiSession {
    * available options, never the chosen one.
    */
   model?: TuiSessionModelSelection;
+  /** Session Skill dispositions: mandatory / optional / forbidden. */
+  skillPolicy?: {
+    closed: boolean;
+    mandatory: string[];
+    optional: string[];
+    forbidden: string[];
+  };
 }
 
 export interface TuiSessionModelSelection {
@@ -212,6 +219,13 @@ export interface TuiSessionPort {
   getMessages(sessionId: string, limit?: number): Promise<TuiMessage[]>;
   listMessagePage(sessionId: string, input?: TuiMessagePageInput): Promise<TuiMessagePage>;
   renameSession(sessionId: string, title: string): Promise<TuiSession>;
+  updateSessionSkillPolicy?(
+    sessionId: string,
+    skillPolicy: {
+      dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+      closed?: boolean;
+    },
+  ): Promise<TuiSession>;
   archiveSession(sessionId: string, archived: boolean): Promise<void>;
   /**
    * Pin or unpin a Session in the product's ordered pin list. The runtime projects
@@ -307,6 +321,29 @@ export interface TuiInspectionPort {
     customInstructions?: string,
   ): Promise<TuiCompactionResult>;
   listSkills(agentName?: string, keyword?: string, workspaceDir?: string): Promise<TuiSkillList>;
+  listKnowledgeProposals?(filter?: {
+    status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+    kind?: 'skill' | 'memory';
+    sessionId?: string;
+    limit?: number;
+  }): Promise<
+    ReadonlyArray<{
+      id: string;
+      kind: 'skill' | 'memory';
+      action: 'create' | 'improve';
+      status: string;
+      title: string;
+      summary: string;
+      draft: string;
+      editedDraft?: string;
+    }>
+  >;
+  reviewKnowledgeProposal?(input: {
+    proposalId: string;
+    decision: 'approve' | 'reject';
+    editedDraft?: string;
+    reviewNote?: string;
+  }): Promise<{ applied: boolean; title: string; status: string }>;
   listMcpServers(keyword?: string, sessionId?: string): Promise<TuiMcpServer[]>;
   inspectProjectMcp(sessionId: string): Promise<TuiProjectMcpPreview | undefined>;
   getContextSnapshot(sessionId: string): Promise<TuiContextSnapshotResponse>;

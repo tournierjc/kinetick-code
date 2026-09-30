@@ -13,6 +13,12 @@ import {
 } from './prompt-templates.js';
 import { resolveAgentCapabilities, type ResolvedAgentCapabilities } from '@mavis/config';
 import type { SessionRecord, TaskSessionBinding } from '../../../../session-system/index.js';
+import {
+  isSkillAllowedBySessionPolicy,
+  listSkillsByDisposition,
+  normalizeSkillPolicyName,
+  effectiveSessionSkillPolicy,
+} from '../../../../session-system/index.js';
 import type {
   AgentExecutionSnapshot,
   ContextUsagePromptRange,
@@ -507,7 +513,10 @@ async function loadPromptLayers(parameters: {
   ]);
   const [{ basePrompt, sessionPrompt }, projectInstructions, globalInstructions, memory, skills] =
     loaded;
-  const filteredRuntimeSkills = skills.skills.filter((skill) =>
+  const sessionFilteredSkills = skills.skills.filter((skill) =>
+    isSkillAllowedBySessionPolicy(input.session.skillPolicy, skill.name),
+  );
+  const filteredRuntimeSkills = sessionFilteredSkills.filter((skill) =>
     isRuntimeSkillSelected(profile?.configSelection, skill),
   );
   const standaloneNames = new Set(
@@ -520,6 +529,7 @@ async function loadPromptLayers(parameters: {
     return (
       !(hideCodeReviewSkill && name === CODE_REVIEW_SKILL_NAME) &&
       !standaloneNames.has(name) &&
+      isSkillAllowedBySessionPolicy(input.session.skillPolicy, skill.name) &&
       isExtensionSkillSelected(allowedExtensionSkills, skill.pluginName, skill.name)
     );
   });
@@ -554,13 +564,47 @@ function createExecutionScope(
   profile: LocalAgentExecutionProfile | undefined,
   miniappAvailable: boolean,
 ): LocalPromptSkillCatalogScope {
+  const profileScope = profileSelectionScope(profile);
   return {
     agentName: profile?.resourceReadRef ?? runtimeFacts.resourceAgentName,
     ...profileResourceScope(profile),
     workspaceDir: session.workspaceDir,
     ...builtinSkillScope(session, runtimeFacts),
-    ...profileSelectionScope(profile),
+    ...composeSkillAllowlists(profileScope, sessionSkillSelectionScope(session)),
     ...runtimeFeatureScope(runtimeFacts, profile, miniappAvailable),
+  };
+}
+
+function sessionSkillSelectionScope(
+  session: SessionRecord,
+): Pick<LocalPromptSkillCatalogScope, 'allowedSkillNames'> {
+  const policy = effectiveSessionSkillPolicy(session.skillPolicy);
+  if (!policy.closed) return {};
+  return {
+    allowedSkillNames: [
+      ...listSkillsByDisposition(policy, 'mandatory'),
+      ...listSkillsByDisposition(policy, 'optional'),
+    ],
+  };
+}
+
+function composeSkillAllowlists(
+  profileScope: ReturnType<typeof profileSelectionScope>,
+  sessionScope: Pick<LocalPromptSkillCatalogScope, 'allowedSkillNames'>,
+): ReturnType<typeof profileSelectionScope> {
+  const profileAllowed = profileScope.allowedSkillNames;
+  const sessionAllowed = sessionScope.allowedSkillNames;
+  if (profileAllowed === undefined && sessionAllowed === undefined) return profileScope;
+  if (profileAllowed === undefined) {
+    return { ...profileScope, allowedSkillNames: sessionAllowed };
+  }
+  if (sessionAllowed === undefined) return profileScope;
+  const sessionSet = new Set(sessionAllowed.map(normalizeSkillPolicyName));
+  return {
+    ...profileScope,
+    allowedSkillNames: profileAllowed.filter((name) =>
+      sessionSet.has(normalizeSkillPolicyName(name)),
+    ),
   };
 }
 

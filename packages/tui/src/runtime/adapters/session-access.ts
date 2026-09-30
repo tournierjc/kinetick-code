@@ -225,6 +225,17 @@ export class TuiSessionAccess {
     return normalizeRequiredSession(response.session, sessionId);
   }
 
+  async updateSessionSkillPolicy(
+    sessionId: string,
+    skillPolicy: {
+      dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+      closed?: boolean;
+    },
+  ): Promise<TuiSession> {
+    const response = await this.cliService.updateSession({ id: sessionId, skillPolicy });
+    return normalizeRequiredSession(response.session, sessionId);
+  }
+
   async archiveSession(sessionId: string, archived: boolean): Promise<void> {
     await this.cliService.archiveSession({ id: sessionId, archived });
   }

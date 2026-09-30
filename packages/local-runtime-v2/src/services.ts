@@ -14,6 +14,10 @@ import type {
   GlobalEventInput,
 } from "@mavis/shared/global-events";
 import { isOrdinaryQuestionnaireResponseOrigin } from "@mavis/shared/questionnaire";
+import {
+  createKnowledgeReviewApplication,
+  LocalMemoryFacade,
+} from "@mavis/local-runtime";
 import { createGoalBudgetSummaryExtension } from "./application/agent/goal-budget-summary-reminder.js";
 import {
   combineLocalTurnToolPolicyGuards,
@@ -251,6 +255,7 @@ export interface RuntimeServices extends RuntimeMiniAppServices {
   readonly modelSystem: ModelSystemOwner;
   readonly modelProviderApplication: ModelProviderApplication;
   readonly skill: RuntimeSkillApplication;
+  readonly knowledge?: import("@mavis/local-runtime").KnowledgeReviewApplication;
   readonly sandbox: LocalSandboxService;
   /** Development-only LLM Context Inspector; absent when the build hides it. */
   readonly llmContextInspector?: ComposedInspector["service"];
@@ -511,6 +516,37 @@ export async function createRuntimeServices(
     nowMs,
     createSkillApplication: createRuntimeSkillApplication,
   });
+  const knowledge = createKnowledgeReviewApplication({
+    dataDir: () => options.dataDir,
+    nowMs,
+    skills: options.compatibility.plugin.skill,
+    memory: new LocalMemoryFacade({
+      config: () => ({ dataDir: options.dataDir, enabled: true }),
+      nowMs,
+    }),
+  });
+  options.eventBus.subscribe({
+    next: (event) => {
+      if (event.type !== "session.finish") return;
+      void (async () => {
+        try {
+          const session = await sessionSystem.sessions.query.find(
+            event.payload.sessionId,
+          );
+          if (!session) return;
+          await knowledge.onSessionIdle({
+            sessionId: session.sessionId,
+            agentName: session.agentName,
+            ...(session.title ? { title: session.title } : {}),
+            messageCount: 12,
+            recentUserTexts: session.title ? [session.title] : [],
+          });
+        } catch {
+          // Idle knowledge drafts are best-effort and must not affect turn lifecycle.
+        }
+      })();
+    },
+  });
   const application = composeProcessLocalApplication({
     eventBus: options.eventBus,
     usageCommits: sessionSystem.usage.commits,
@@ -601,6 +637,7 @@ export async function createRuntimeServices(
     modelSystem,
     modelProviderApplication,
     skill,
+    knowledge,
     sandbox,
     ...(inspector ? { llmContextInspector: inspector.service } : {}),
     ...owners.miniAppComposition.services,

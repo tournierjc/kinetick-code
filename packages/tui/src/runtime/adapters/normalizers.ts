@@ -52,6 +52,14 @@ export function normalizeSessionInfoView(session: SessionInfoView): TuiSession {
     errorProviderId: session.status?.errorProviderId,
     interactionMode: session.interactionMode === 1 ? ('plan' as const) : undefined,
     model: normalizeSessionModelSelection(session.model),
+    skillPolicy: session.skillPolicy
+      ? {
+          closed: session.skillPolicy.closed,
+          mandatory: [...session.skillPolicy.mandatory],
+          optional: [...session.skillPolicy.optional],
+          forbidden: [...session.skillPolicy.forbidden],
+        }
+      : undefined,
   });
 }
 

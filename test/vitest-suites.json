@@ -6,7 +6,9 @@
     ],
     "capability": [
       "packages/local-runtime/test/unit/skill-directory-symlinks.test.ts",
+      "packages/local-runtime/test/unit/knowledge-management.test.ts",
       "packages/local-runtime/test/unit/fetch-address-profile.test.ts",
+      "packages/local-runtime-v2/src/service/session-system/sessions/skill-policy.test.ts",
       "packages/agent-core/test/unit/bash-subprocess-env.test.ts",
       "packages/agent-modules/permission/test/unit/permission/bash-policy-regressions.test.ts",
       "packages/agent-modules/permission/test/unit/permission/fs-symlink-boundary.test.ts",

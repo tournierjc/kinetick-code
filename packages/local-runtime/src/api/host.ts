@@ -629,6 +629,16 @@ export class LocalRuntimeApiHost {
       cliSunsetNotice: options.cliSunsetNotice,
       agentFacts: () => this.agentRuntimePort,
       userConfiguredName: () => this.authContextGetter?.()?.subUserName,
+      listSkillCandidates: async (session) => {
+        const result = await this.skillService.listRuntimeSkills({
+          agentName: session.agentName,
+          ...(session.workspaceDir ? { workspaceDir: session.workspaceDir } : {}),
+        });
+        return (result.skills ?? []).map((skill) => ({
+          name: skill.name,
+          ...(skill.description ? { description: skill.description } : {}),
+        }));
+      },
     });
     this.memoryFacade = memory.memoryFacade;
     this.localDataCollector = memory.localDataCollector;

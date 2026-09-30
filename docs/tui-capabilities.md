@@ -178,6 +178,17 @@ Skill roster (for example, `/review` or `/plugin:review`), not the installation
 package name. Select a command and append instructions to invoke it through the
 normal Agent turn. `/skills [filter]` lists the session's available Skills.
 
+Session Skill policy controls are available interactively through `/skills`:
+- `/skills require|optional|forbid <name>` sets a disposition for the current Session
+- `/skills clear <name>` removes an explicit disposition
+- `/skills policy` shows mandatory, optional, and forbidden Skills for the Session
+- `/skills review` lists pending Skill/Memory drafts created when a Session becomes idle
+- `/skills approve|reject <proposal-id>` applies or discards a pending draft after human review
+
+Prompt-conditioned Skill and Memory lookup injects matched reminders for the latest
+user prompt. Idle Sessions may draft Skill/Memory proposals, but those drafts never
+apply until a human approves them (optionally after editing).
+
 Built-in command names take priority over conflicting Skill names. Disabled,
 duplicate, and invalid command names are omitted. If Skill discovery fails,
 built-in commands remain available. Reopen the session after installing or enabling

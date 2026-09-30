@@ -705,6 +705,21 @@ export interface SessionMemoryPolicyView {
   recallLockedAtMs?: number;
 }
 
+export type SessionSkillDispositionView = 'mandatory' | 'optional' | 'forbidden';
+
+export interface SessionSkillPolicyInput {
+  dispositions?: Record<string, SessionSkillDispositionView | null>;
+  closed?: boolean;
+}
+
+export interface SessionSkillPolicyView {
+  dispositions: Record<string, SessionSkillDispositionView>;
+  closed: boolean;
+  mandatory: string[];
+  optional: string[];
+  forbidden: string[];
+}
+
 export interface SessionCollaborationView {
   kind: SessionCollaborationKind;
   dispatchId: string;
@@ -743,6 +758,7 @@ export interface SessionInfoView {
   interactionMode?: SessionInteractionModeView;
   conversationCapabilities?: SessionConversationCapabilities;
   memoryPolicy?: SessionMemoryPolicyView;
+  skillPolicy?: SessionSkillPolicyView;
   collaboration?: SessionCollaborationView;
 }
 
@@ -854,6 +870,7 @@ export interface UpdateSessionInput {
   id: string;
   title?: string;
   memoryPolicy?: SessionMemoryPolicyInput;
+  skillPolicy?: SessionSkillPolicyInput;
   projectId?: number;
 }
 

@@ -255,6 +255,11 @@ export interface SystemReminderInput {
   teamMemoryIndex?: string | undefined;
   /** Relevant agent memory sections matched against current user query. */
   relevantMemory?: string | undefined;
+  /**
+   * Prompt-matched Skills for this turn (already formatted). Injected so the
+   * model loads the right Skill before improvising.
+   */
+  promptSkillMatch?: string | undefined;
   /** Updated agent MEMORY.md content — injected when agent memory changes mid-session. */
   agentMemoryUpdate?: string | undefined;
   /** Updated .summary.md content — injected (full) when summary index is regenerated mid-session. */

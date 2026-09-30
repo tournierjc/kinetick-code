@@ -447,7 +447,7 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   {
     ...TUI_COMMAND_DESCRIPTORS.skills,
     category: 'Capability',
-    argumentHint: '[filter]',
+    argumentHint: '[filter|require|optional|forbid|policy|review]',
     discoverability: 'search-only',
   },
   {

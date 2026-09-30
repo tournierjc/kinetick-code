@@ -32,7 +32,8 @@ export const TUI_COMMAND_DESCRIPTORS = {
   },
   skills: {
     name: 'skills',
-    description: 'List built-in and user Skills',
+    description:
+      'List Skills, set session require/optional/forbid policy, or review pending Skill/Memory proposals',
   },
   mcp: {
     name: 'mcp',

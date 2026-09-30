@@ -1429,6 +1429,18 @@ export class TuiFeatureFlow {
 
   async showSkills(filter: string): Promise<void> {
     if (this.isStopped()) return;
+    const trimmed = filter.trim();
+    const [verb, ...rest] = trimmed.split(/\s+/u).filter(Boolean);
+    const skillName = rest.join(' ').trim();
+    if (
+      verb &&
+      ['require', 'forbid', 'optional', 'clear', 'policy', 'review', 'approve', 'reject'].includes(
+        verb,
+      )
+    ) {
+      await this.handleSkillManagementCommand(verb, skillName, rest);
+      return;
+    }
     const sessionId = this.options.controller.snapshot().session?.sessionId;
     const sessionGeneration = this.sessionGeneration;
     const agentName =
@@ -1462,6 +1474,113 @@ export class TuiFeatureFlow {
           'error',
         );
       }
+    }
+  }
+
+  private async handleSkillManagementCommand(
+    verb: string,
+    skillName: string,
+    rest: string[],
+  ): Promise<void> {
+    try {
+      if (verb === 'policy') {
+        const session = await this.options.controller.ensureSession();
+        const current = await this.options.runtime.getSession(session.sessionId);
+        const policy = current.skillPolicy;
+        this.options.append(
+          [
+            'Session Skill policy',
+            `closed: ${policy?.closed === true ? 'yes' : 'no'}`,
+            `mandatory: ${policy?.mandatory?.join(', ') || '(none)'}`,
+            `optional: ${policy?.optional?.join(', ') || '(none)'}`,
+            `forbidden: ${policy?.forbidden?.join(', ') || '(none)'}`,
+            '',
+            'Use /skills require|optional|forbid|clear <name>, or /skills review.',
+          ].join('\n'),
+        );
+        return;
+      }
+      if (verb === 'review') {
+        const proposals = this.options.runtime.listKnowledgeProposals
+          ? await this.options.runtime.listKnowledgeProposals({ status: 'pending', limit: 20 })
+          : [];
+        if (proposals.length === 0) {
+          this.options.append('No pending Skill/Memory proposals awaiting review.');
+          return;
+        }
+        this.options.append(
+          [
+            'Pending knowledge proposals (human review required before apply):',
+            ...proposals.map(
+              (proposal) =>
+                `- ${proposal.id} [${proposal.kind}/${proposal.action}] ${proposal.title}\n  ${proposal.summary}`,
+            ),
+            '',
+            'Approve: /skills approve <proposal-id>',
+            'Reject:  /skills reject <proposal-id>',
+          ].join('\n'),
+        );
+        return;
+      }
+      if (verb === 'approve' || verb === 'reject') {
+        const proposalId = skillName || rest[0] || '';
+        if (!proposalId) {
+          this.options.append(`Usage: /skills ${verb} <proposal-id>`);
+          return;
+        }
+        if (!this.options.runtime.reviewKnowledgeProposal) {
+          this.options.append('Knowledge review is unavailable in this host.', 'warning');
+          return;
+        }
+        const result = await this.options.runtime.reviewKnowledgeProposal({
+          proposalId,
+          decision: verb === 'approve' ? 'approve' : 'reject',
+        });
+        this.options.append(
+          verb === 'approve'
+            ? `Approved ${result.title}${result.applied ? ' and applied.' : '.'}`
+            : `Rejected ${result.title}.`,
+        );
+        return;
+      }
+      if (!skillName) {
+        this.options.append(`Usage: /skills ${verb} <skill-name>`);
+        return;
+      }
+      if (!this.options.runtime.updateSessionSkillPolicy) {
+        this.options.append('Session Skill policy updates are unavailable in this host.', 'warning');
+        return;
+      }
+      const session = await this.options.controller.ensureSession();
+      const disposition =
+        verb === 'require'
+          ? 'mandatory'
+          : verb === 'forbid'
+            ? 'forbidden'
+            : verb === 'optional'
+              ? 'optional'
+              : null;
+      const updated = await this.options.runtime.updateSessionSkillPolicy(session.sessionId, {
+        dispositions: { [skillName]: disposition },
+      });
+      this.options.append(
+        disposition
+          ? `Marked Skill "${skillName}" as ${disposition} for this session.`
+          : `Cleared Skill "${skillName}" disposition for this session.`,
+      );
+      if (updated.skillPolicy) {
+        this.options.append(
+          `mandatory=${updated.skillPolicy.mandatory.join(',') || '-'}; forbidden=${updated.skillPolicy.forbidden.join(',') || '-'}`,
+        );
+      }
+    } catch (error) {
+      this.options.append(
+        formatTuiActionFailure(error, {
+          summary: "Couldn't update Skill management.",
+          nextStep: 'Retry /skills policy or /skills review.',
+        }),
+        'error',
+      );
     }
   }
 
