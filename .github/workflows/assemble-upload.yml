@@ -1,0 +1,57 @@
+name: assemble-upload
+on:
+  push:
+    branches: [cursor/skill-management-http-9cd5]
+    paths: [.cursor-upload/READY]
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/skill-management-http-9cd5
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Assemble staged parts
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import hashlib, shutil
+          staging = Path('.cursor-upload')
+          groups = {}
+          for p in sorted(staging.glob('*.part*')):
+              base, _, part = p.name.rpartition('.part')
+              groups.setdefault(base, []).append((part, p))
+          mapping = {
+            'packages__tui__src__server__http.ts': 'packages/tui/src/server/http.ts',
+            'packages__tui__test__unit__server-http.test.ts': 'packages/tui/test/unit/server-http.test.ts',
+            'docs__harness-integration.md': 'docs/harness-integration.md',
+          }
+          expected = {
+            'packages/tui/src/server/http.ts': '46c20c81711e869de87ac327af85ed2c28a87010919c6a9132d5f7fd0ed61e11',
+            'packages/tui/test/unit/server-http.test.ts': 'c3fbcb3e2b5fe541affb010e8ac28221e665dae31b8793f44ecc806d16ae2cfe',
+            'docs/harness-integration.md': 'c13dd27c020b290be304b118c42662fb10bbddce0eb8384f2502a7e723d6e95f',
+          }
+          for base, parts in groups.items():
+              parts = sorted(parts, key=lambda x: x[0])
+              content = ''.join(p.read_text() for _, p in parts)
+              dest = mapping[base]
+              Path(dest).write_text(content)
+              digest = hashlib.sha256(content.encode()).hexdigest()
+              print(dest, len(content), digest)
+              assert digest == expected[dest], (dest, digest, expected[dest])
+          shutil.rmtree('.cursor-upload', ignore_errors=True)
+          wf = Path('.github/workflows/assemble-upload.yml')
+          if wf.exists():
+              wf.unlink()
+          PY
+      - name: Commit assembled files
+        run: |
+          git config user.name tournierjc
+          git config user.email mail@tournierjc.fr
+          git add -A
+          git status
+          git commit -m "feat(server): HTTP routes for skill policy and knowledge proposal review"
+          git push
