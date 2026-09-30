@@ -307,7 +307,7 @@ transcript — and `limit` caps the page size.
 
 ```console
 $ curl "http://127.0.0.1:9430/sessions/mvs_4a86acbe847b4bc28567046796a1b791/messages?limit=10"
-{"messages":[{"id":"msg-user-v1-ofKih550fY3t2XOOAD8SD5IofVGQh1cR-c4MEm4R8x4","turnId":"turn_muh7iw9x_a36jsb","role":"user","content":"Reply with the single word: pong","timestamp":1790355644138,"actions":{"fork":false,"rewind":true}},{"id":"855ce531-5415-47c8-9732-51a8f8be9d35","turnId":"turn_muh7iw9x_a36jsb","role":"assistant","source":"api","content":"pong","timestamp":1790355644454,"finishReason":"stop","usage":{"totalTokens":14,"inputTokens":12,"outputTokens":2},"actions":{"fork":true,"rewind":false}}],"hasMore":false}
+{"messages":[{"id":"msg-user-v1-ofKih550fY3t2XOOAD8SD5IofVGQh1cR-c4MEm4R8x4","turnId":"turn_muh7iw9x_a36jsb","role":"user","source":"api","content":"Reply with the single word: pong","timestamp":1790355644138,"actions":{"fork":false,"rewind":true}},{"id":"855ce531-5415-47c8-9732-51a8f8be9d35","turnId":"turn_muh7iw9x_a36jsb","role":"assistant","source":"api","content":"pong","timestamp":1790355644454,"finishReason":"stop","usage":{"totalTokens":14,"inputTokens":12,"outputTokens":2},"actions":{"fork":true,"rewind":false}}],"hasMore":false}
 ```
 
 A page with `limit=1` on the same Session shows the pagination envelope:
