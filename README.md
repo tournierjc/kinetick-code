@@ -23,8 +23,9 @@
 >
 > **What Kinetick Code adds:** Session tabs with background multitasking (turns keep running and streaming when you switch away),
 > provider setup for OpenRouter, DeepSeek, GitHub Copilot, and keyless local endpoints, session-wide cost tracking in the
-> status line and `/usage`, an independent update channel, and no telemetry — see [Session tabs](#session-tabs-and-multitasking)
-> and [Network egress](#network-egress).
+> status line and `/usage`, Skill and Memory management with human review (not inherited from upstream), an independent
+> update channel, and no telemetry — see [Session tabs](#session-tabs-and-multitasking),
+> [Skill and Memory management](#skill-and-memory-management), and [Network egress](#network-egress).
 <p align="center">
   <a href="#quick-start">Get started</a> ·
   <a href="docs/README.md">Documentation</a> ·
@@ -215,6 +216,16 @@ Kinetick Code runs several Sessions side by side in a tab bar above the composer
 - **Find any conversation:** `/sessions` groups by project, searches by what was said in the session, and can archive Sessions on delete.
 
 See [Open Session tabs](docs/tui-capabilities.md#open-session-tabs) for the full bindings and semantics.
+
+### Skill and Memory management
+
+This workflow is part of Kinetick Code. Upstream MiniMax Code does not provide it, and it is not carried in by an upstream sync.
+
+- **Session Skill policy.** `/skills require`, `/skills optional`, and `/skills forbid` mark a Skill as mandatory, optional, or forbidden for the current Session. `/skills clear` removes that mark. `/skills policy` shows the result. A forbidden Skill is left out of the system prompt and out of automatic prompt matches.
+- **Prompt lookup.** Each turn can remind the model of Skills and Memory excerpts that overlap the latest message. Mandatory Skills are preferred. The Memory reminder is a short overlap excerpt, not a full Memory dump.
+- **Human review before apply.** After enough user prompts in a root Session, the runtime may draft a Skill and an agent-Memory note. Those drafts stay pending until you `/skills approve` or `/skills reject` them. Approval writes only after the write succeeds; a failure leaves the draft pending.
+
+ACP `/skills` lists Skills only. Policy and review commands are TUI commands. Details, reserved verbs, and storage limits are in [Skill and Memory management](docs/tui-capabilities.md#skill-and-memory-management).
 
 ## Uninstall
 
