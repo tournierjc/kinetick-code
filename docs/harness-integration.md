@@ -259,6 +259,9 @@ the LAN, `http://192.168.1.50:9430`.
 | `POST` | `/sessions/<id>/pin` | Pin/unpin. Body: `{pinned}`. |
 | `GET` | `/sessions/<id>/rewind-preview/<userMessageId>` · `POST /sessions/<id>/rewind` | Rewind preview / rewind. Body: `{userMessageId, rewindTurnDiff?}`. |
 | `GET` | `/skills` | Skill list. Query: `agent`, `keyword`, `workspaceDir`. |
+| `POST` | `/sessions/<id>/skill-policy` | Set Session Skill dispositions. Body: `{dispositions?:{<name>:"mandatory"|"optional"|"forbidden"|null}, closed?:boolean}`. Returns the Session (with `skillPolicy`). |
+| `GET` | `/skills/proposals` | Pending Skill/Memory drafts awaiting human review. Query: `status`, `kind`, `sessionId`, `limit`. |
+| `POST` | `/skills/proposals/<id>/review` | Approve or reject a draft. Body: `{decision:"approve"|"reject", editedDraft?, reviewNote?}`. |
 | `GET` | `/mcp` | MCP server list. Query: `keyword`, `sessionId`. |
 | `GET` | `/status` | Runtime diagnostics, account status, permission mode, model roster. |
 | `GET` | `/events` | Runtime event stream (`text/event-stream`): `questionnaire.ask`, `permission.ask`, `session.created`, `session.queue.updated`, … One subscription per connection; `: ping` keepalives every 15 s. |
@@ -304,7 +307,7 @@ transcript — and `limit` caps the page size.
 
 ```console
 $ curl "http://127.0.0.1:9430/sessions/mvs_4a86acbe847b4bc28567046796a1b791/messages?limit=10"
-{"messages":[{"id":"msg-user-v1-ofKih550fY3t2XOOAD8SD5IofVGQh1cR-c4MEm4R8x4","turnId":"turn_muh7iw9x_a36jsb","role":"user","source":"api","content":"Reply with the single word: pong","timestamp":1790355644138,"actions":{"fork":false,"rewind":true}},{"id":"855ce531-5415-47c8-9732-51a8f8be9d35","turnId":"turn_muh7iw9x_a36jsb","role":"assistant","source":"api","content":"pong","timestamp":1790355644454,"finishReason":"stop","usage":{"totalTokens":14,"inputTokens":12,"outputTokens":2},"actions":{"fork":true,"rewind":false}}],"hasMore":false}
+{"messages":[{"id":"msg-user-v1-ofKih550fY3t2XOOAD8SD5IofVGQh1cR-c4MEm4R8x4","turnId":"turn_muh7iw9x_a36jsb","role":"user","content":"Reply with the single word: pong","timestamp":1790355644138,"actions":{"fork":false,"rewind":true}},{"id":"855ce531-5415-47c8-9732-51a8f8be9d35","turnId":"turn_muh7iw9x_a36jsb","role":"assistant","source":"api","content":"pong","timestamp":1790355644454,"finishReason":"stop","usage":{"totalTokens":14,"inputTokens":12,"outputTokens":2},"actions":{"fork":true,"rewind":false}}],"hasMore":false}
 ```
 
 A page with `limit=1` on the same Session shows the pagination envelope:
@@ -390,8 +393,11 @@ permissions. Loopback does not hide the port from other users on the same
 machine; the token file mode is what keeps those users out.
 There is no per-turn subscription endpoint that replays a turn started by
 another connection (`/events` carries Runtime events, not deltas), so a second
-device joining a live turn polls the transcript until it settles. Skill writes
-(create/edit/delete) are not exposed; `GET /skills` is read-only.
+device joining a live turn polls the transcript until it settles. Direct Skill
+file create/edit/delete is not exposed; idle Skill/Memory drafts land as
+proposals under `/skills/proposals` and apply only after human
+approve/reject via `/skills/proposals/<id>/review`. Per-session Skill
+dispositions use `POST /sessions/<id>/skill-policy`.
 
 ## 4. Notes for callers
 
