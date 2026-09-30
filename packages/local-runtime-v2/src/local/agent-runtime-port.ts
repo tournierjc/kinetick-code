@@ -44,8 +44,26 @@ export function createV2AgentRuntimeManagementPort(input: {
   const controller = createAgentManagementApplication(input.application);
   const context: ApplicationContext = {};
   return {
-    listAgents: (request: ListAgentsReq): Promise<ListAgentsResp> =>
-      controller.listAgents(context, request),
+    listAgents: async (request: ListAgentsReq): Promise<ListAgentsResp> => {
+      const resp = await controller.listAgents(context, request);
+      if (!resp.agents) return resp;
+      const agents = await Promise.all(
+        resp.agents.map(async (agent) => {
+          if (typeof agent.name !== "string") return agent;
+          try {
+            const policy = await input.service.getSpawnPolicy(agent.name);
+            return {
+              ...agent,
+              ...(policy.spawnMode ? { spawnMode: policy.spawnMode } : {}),
+              ...(policy.canSpawn ? { canSpawn: [...policy.canSpawn] } : {}),
+            };
+          } catch {
+            return agent;
+          }
+        }),
+      );
+      return { ...resp, agents };
+    },
     createAgent: (request: CreateAgentReq): Promise<CreateAgentResp> =>
       controller.createAgent(context, request),
     getAgent: (request: GetAgentReq): Promise<GetAgentResp> =>
@@ -77,6 +95,15 @@ export function createV2AgentRuntimeManagementPort(input: {
         profile.capabilityCeiling.features.delegation &&
         (tools === undefined || tools.includes("bash"))
       );
+    },
+    getAgentSpawnPolicy: async (agentName: string) => {
+      try {
+        return await input.service.getSpawnPolicy(agentName);
+      } catch {
+        // The spawn gate fails open: an unreadable policy must not make an
+        // Agent unspawnable, matching the port's no-policy = allow behavior.
+        return {};
+      }
     },
     listLegacyPinnedAgentRefs: async () => [
       ...(await input.application.listLegacyPinnedAgentRefs()),

@@ -1,5 +1,15 @@
 export * from './contracts.js';
 export * from './errors.js';
+export {
+  evaluateAgentSpawnGate,
+  evaluateAgentSpawnGateForConfig,
+  normalizeCanSpawn,
+  parseAgentSpawnMode,
+  type AgentMavisSpawnPolicy,
+  type AgentSpawnGateDecision,
+  type AgentSpawnGateInput,
+  type AgentSpawnMode,
+} from './domain/spawn-policy.js';
 export { describeAgentPromptSnapshot } from './domain/prompt-snapshot.js';
 export { LocalAgentService, type LocalAgentServiceOptions } from './application/agent.service.js';
 export { AgentFavorites } from './application/favorites.js';

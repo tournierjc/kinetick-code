@@ -1233,6 +1233,7 @@ async function initializeSessionApplications(
     compatibility: input.options.compatibility.sessionV2,
     attachmentRegistration: input.options.compatibility.attachmentRegistration,
     resolveAgentWriteTarget: input.agentSessionPorts.resolveWriteTarget,
+    getAgentSpawnPolicy: input.agentSessionPorts.getSpawnPolicy,
     requireExactAgentKey: input.agentSessionPorts.requireExactAgentKey,
     ...createRuntimePluginSessionLifecycle(turnSystem, plugin),
     turn: turnSystem.turns,

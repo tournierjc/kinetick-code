@@ -22,6 +22,7 @@ import {
   createFailClosedAgentRuntimePort,
   createLocalMavisAgentAdapter,
   type LocalAgentRuntimePort,
+  type LocalAgentSpawnPolicyPort,
 } from "../agent/runtime-port.js";
 import { stopBackgroundLocalBashTask } from "../background-task/bash-runner.js";
 import { closeLocalBackgroundTaskDelivery } from "../background-task/delivery.js";
@@ -376,6 +377,8 @@ export class LocalRuntimeApiHost {
   }
   /** Neutral reference port supplied by the owning runtime (V2 in production). */
   public readonly agentResolver: AgentReferenceResolver;
+  /** Declarative spawn-policy source for the task-spawn gate. */
+  public readonly agentSpawnPolicyPort: LocalAgentSpawnPolicyPort;
   public readonly memoryFacade: LocalMemoryFacade;
   public readonly skillService: LocalSkillService;
   public readonly localDataCollector: LocalDataCollector;
@@ -478,6 +481,11 @@ export class LocalRuntimeApiHost {
       options.agentRuntimePort ?? createFailClosedAgentRuntimePort();
     this.promptSnapshots = options.promptSnapshots;
     this.agentResolver = options.agentResolver ?? this.agentRuntimePort;
+    this.agentSpawnPolicyPort =
+      options.agentSpawnPolicyPort ??
+      ("getAgentSpawnPolicy" in this.agentRuntimePort
+        ? (this.agentRuntimePort as LocalAgentSpawnPolicyPort)
+        : { getAgentSpawnPolicy: async () => ({}) });
     this.cuScreenshotPruner = createCuScreenshotPrunerHook(
       2,
       this.metricsClient,
