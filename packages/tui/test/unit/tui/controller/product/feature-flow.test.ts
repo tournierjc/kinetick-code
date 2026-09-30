@@ -69,6 +69,45 @@ function createHarness(
       ],
       hasMore: false,
     })),
+    getSession: vi.fn(async () => ({
+      sessionId: "session-a",
+      agentName: "mavis",
+      skillPolicy: {
+        closed: false,
+        mandatory: ["pdf"],
+        optional: [],
+        forbidden: ["xlsx"],
+      },
+    })),
+    updateSessionSkillPolicy: vi.fn(async (_sessionId: string, patch: unknown) => ({
+      sessionId: "session-a",
+      agentName: "mavis",
+      skillPolicy: {
+        closed: false,
+        mandatory: ["pdf"],
+        optional: [],
+        forbidden: ["xlsx"],
+        ...(typeof patch === "object" && patch && "dispositions" in patch
+          ? {}
+          : {}),
+      },
+    })),
+    listKnowledgeProposals: vi.fn(async () => [
+      {
+        id: "kp_1",
+        kind: "skill" as const,
+        action: "create" as const,
+        status: "pending",
+        title: "Idle skill draft",
+        summary: "Capture deploy pattern",
+        draft: "draft",
+      },
+    ]),
+    reviewKnowledgeProposal: vi.fn(async () => ({
+      applied: true,
+      title: "Idle skill draft",
+      status: "approved",
+    })),
     listMessagePage: vi.fn(async () => ({
       messages: [] as TuiMessage[],
       hasMore: false,
@@ -125,6 +164,12 @@ function createHarness(
             }
           : undefined,
       }),
+      ensureSession: vi.fn(async () => ({
+        sessionId: activeSessionId ?? "session-a",
+        agentName: "mavis",
+        title: "Runtime review",
+        workspaceDir: "/workspace",
+      })),
       refreshCurrentSessionHistory,
       refreshStatusMetricsNow: vi.fn(),
       deleteSession,
@@ -1552,5 +1597,54 @@ describe("TuiFeatureFlow", () => {
     expect(
       harness.append.mock.calls.filter(([, kind]) => kind === "warning"),
     ).toHaveLength(0);
+  });
+
+  it("shows session skill policy and updates dispositions", async () => {
+    const harness = createHarness();
+    await harness.flow.showSkills("policy");
+    expect(harness.runtime.getSession).toHaveBeenCalledWith("session-a");
+    expect(harness.append).toHaveBeenCalledWith(
+      expect.stringContaining("mandatory: pdf"),
+    );
+
+    harness.runtime.updateSessionSkillPolicy.mockResolvedValueOnce({
+      sessionId: "session-a",
+      agentName: "mavis",
+      skillPolicy: {
+        closed: false,
+        mandatory: ["pdf"],
+        optional: [],
+        forbidden: ["xlsx", "docx"],
+      },
+    });
+    await harness.flow.showSkills("forbid docx");
+    expect(harness.runtime.updateSessionSkillPolicy).toHaveBeenCalledWith(
+      "session-a",
+      { dispositions: { docx: "forbidden" } },
+    );
+    expect(harness.append).toHaveBeenCalledWith(
+      expect.stringContaining('Marked Skill "docx" as forbidden'),
+    );
+  });
+
+  it("lists and approves pending knowledge proposals", async () => {
+    const harness = createHarness();
+    await harness.flow.showSkills("review");
+    expect(harness.runtime.listKnowledgeProposals).toHaveBeenCalledWith({
+      status: "pending",
+      limit: 20,
+    });
+    expect(harness.append).toHaveBeenCalledWith(
+      expect.stringContaining("kp_1"),
+    );
+
+    await harness.flow.showSkills("approve kp_1");
+    expect(harness.runtime.reviewKnowledgeProposal).toHaveBeenCalledWith({
+      proposalId: "kp_1",
+      decision: "approve",
+    });
+    expect(harness.append).toHaveBeenCalledWith(
+      expect.stringContaining("Approved Idle skill draft"),
+    );
   });
 });

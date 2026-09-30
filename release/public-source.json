@@ -317,6 +317,7 @@
     "packages/agent-modules/system-reminder/src/service.ts",
     "packages/agent-modules/system-reminder/src/todo-state.ts",
     "packages/agent-modules/system-reminder/src/types.ts",
+    "packages/agent-modules/system-reminder/test/unit/prompt-lookup-providers.test.ts",
     "packages/agent-runtime/package.json",
     "packages/agent-runtime/src/api.ts",
     "packages/agent-runtime/src/factories.ts",
