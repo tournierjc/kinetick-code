@@ -16,6 +16,7 @@ import type {
 import { isOrdinaryQuestionnaireResponseOrigin } from "@mavis/shared/questionnaire";
 import {
   createKnowledgeReviewApplication,
+  KnowledgeProposalError,
   LocalMemoryFacade,
 } from "@mavis/local-runtime";
 import { createGoalBudgetSummaryExtension } from "./application/agent/goal-budget-summary-reminder.js";
@@ -516,30 +517,58 @@ export async function createRuntimeServices(
     nowMs,
     createSkillApplication: createRuntimeSkillApplication,
   });
+  const knowledgeMemory = new LocalMemoryFacade({
+    config: () => ({
+      dataDir: options.dataDir,
+      enabled:
+        !isCommandLineRuntimeOwner(options.runtimeOwnerKind) &&
+        readAgentHostConfig().memory?.enabled !== false,
+    }),
+    nowMs,
+  });
   const knowledge = createKnowledgeReviewApplication({
     dataDir: () => options.dataDir,
     nowMs,
     skills: options.compatibility.plugin.skill,
-    memory: new LocalMemoryFacade({
-      config: () => ({ dataDir: options.dataDir, enabled: true }),
-      nowMs,
-    }),
+    memory: {
+      appendMemory: (agentName, content) =>
+        knowledgeMemory.appendMemory(agentName, content),
+      appendUserMemory: (content, reason) => {
+        if (options.runtimeOwnerKind === "tui") {
+          throw new KnowledgeProposalError(
+            "apply-unavailable",
+            "User memory writes are disabled for this host",
+          );
+        }
+        return knowledgeMemory.appendUserMemory(content, reason);
+      },
+    },
   });
   options.eventBus.subscribe({
     next: (event) => {
       if (event.type !== "session.finish") return;
+      // session.finish is published after every completed turn. Drafts are
+      // created only for root Sessions, and only after the persisted user-prompt
+      // count clears the idle threshold with no pending proposal already stored.
       void (async () => {
         try {
           const session = await sessionSystem.sessions.query.find(
             event.payload.sessionId,
           );
-          if (!session) return;
+          if (!session || session.sessionType !== "root") return;
+          const page = await sessionSystem.messages.inputSummaries.list({
+            sessionId: session.sessionId,
+            limit: 12,
+          });
+          const recentUserTexts = page.summaries
+            .map((summary) => summary.userInput.contentHead?.trim() ?? "")
+            .filter((text) => text.length > 0);
           await knowledge.onSessionIdle({
             sessionId: session.sessionId,
             agentName: session.agentName,
             ...(session.title ? { title: session.title } : {}),
-            messageCount: 12,
-            recentUserTexts: session.title ? [session.title] : [],
+            messageCount: page.total,
+            recentUserTexts,
           });
         } catch {
           // Idle knowledge drafts are best-effort and must not affect turn lifecycle.

@@ -8,9 +8,12 @@
  * itself.
  */
 
-import { randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+
+/** Terminal proposals kept after pruning. Pending drafts are never dropped. */
+const MAX_TERMINAL_PROPOSALS = 100;
 
 export type KnowledgeProposalKind = 'skill' | 'memory';
 export type KnowledgeProposalAction = 'create' | 'improve';
@@ -91,7 +94,7 @@ export class KnowledgeProposalStore {
       evidenceExcerpts: [...(input.evidenceExcerpts ?? [])].map((item) => item.trim()).filter(Boolean),
     };
     state.proposals.unshift(proposal);
-    await this.write(state);
+    await this.write(pruneProposals(state));
     return proposal;
   }
 
@@ -139,7 +142,7 @@ export class KnowledgeProposalStore {
       ...(input.reviewNote?.trim() ? { reviewNote: input.reviewNote.trim() } : {}),
     };
     state.proposals = state.proposals.map((item) => (item.id === proposal.id ? next : item));
-    await this.write(state);
+    await this.write(pruneProposals(state));
     return next;
   }
 
@@ -164,7 +167,7 @@ export class KnowledgeProposalStore {
       ...(reason?.trim() ? { reviewNote: reason.trim() } : {}),
     };
     state.proposals = state.proposals.map((item) => (item.id === proposal.id ? next : item));
-    await this.write(state);
+    await this.write(pruneProposals(state));
     return next;
   }
 
@@ -174,27 +177,56 @@ export class KnowledgeProposalStore {
   }
 
   private async read(): Promise<KnowledgeProposalState> {
+    let raw: string;
     try {
-      const parsed = JSON.parse(await readFile(this.file, 'utf-8')) as Partial<KnowledgeProposalState>;
-      return {
-        proposals: Array.isArray(parsed.proposals)
-          ? parsed.proposals.filter(isKnowledgeProposal)
-          : [],
-      };
-    } catch {
-      return { proposals: [] };
+      raw = await readFile(this.file, 'utf-8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { proposals: [] };
+      throw new KnowledgeProposalError(
+        'corrupt',
+        `Proposal store at ${this.file} could not be read`,
+      );
     }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      throw new KnowledgeProposalError(
+        'corrupt',
+        `Proposal store at ${this.file} is not valid JSON`,
+      );
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new KnowledgeProposalError(
+        'corrupt',
+        `Proposal store at ${this.file} is not a proposal object`,
+      );
+    }
+    const proposals = (parsed as Partial<KnowledgeProposalState>).proposals;
+    if (!Array.isArray(proposals)) {
+      throw new KnowledgeProposalError(
+        'corrupt',
+        `Proposal store at ${this.file} has no proposal list`,
+      );
+    }
+    return { proposals: proposals.filter(isKnowledgeProposal) };
   }
 
   private async write(state: KnowledgeProposalState): Promise<void> {
     await mkdir(dirname(this.file), { recursive: true });
-    await writeFile(this.file, `${JSON.stringify(state, null, 2)}\n`, 'utf-8');
+    const temporary = `${this.file}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, 'utf-8');
+      await rename(temporary, this.file);
+    } finally {
+      await rm(temporary, { force: true });
+    }
   }
 }
 
 export class KnowledgeProposalError extends Error {
   constructor(
-    readonly code: 'not-found' | 'not-pending',
+    readonly code: 'not-found' | 'not-pending' | 'apply-unavailable' | 'corrupt',
     message: string,
   ) {
     super(message);
@@ -213,6 +245,18 @@ function isKnowledgeProposal(value: unknown): value is KnowledgeProposal {
     typeof record.title === 'string' &&
     typeof record.draft === 'string'
   );
+}
+
+function pruneProposals(state: KnowledgeProposalState): KnowledgeProposalState {
+  const pending = state.proposals.filter((proposal) => proposal.status === 'pending');
+  const terminal = state.proposals
+    .filter((proposal) => proposal.status !== 'pending')
+    .sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id))
+    .slice(0, MAX_TERMINAL_PROPOSALS);
+  const retained = new Set([...pending, ...terminal].map((proposal) => proposal.id));
+  return {
+    proposals: state.proposals.filter((proposal) => retained.has(proposal.id)),
+  };
 }
 
 function clampInt(raw: number | undefined, fallback: number, min: number, max: number): number {

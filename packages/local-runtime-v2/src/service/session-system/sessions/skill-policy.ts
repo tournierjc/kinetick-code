@@ -89,10 +89,13 @@ export function listSkillsByDisposition(
 /**
  * Compose an allowlist for Skill catalog filtering.
  *
- * - When the session policy is open and has no forbidden entries, returns
- *   `baseAllowed` unchanged (undefined means "all that pass other gates").
- * - Otherwise returns the intersection of the agent allowlist (if any) with
- *   Skills that the session policy permits, always including mandatory Skills.
+ * - No session dispositions: return `baseAllowed` unchanged.
+ * - Open policy with no agent allowlist: return undefined so the full catalog
+ *   stays visible. Callers still drop forbidden Skills with
+ *   `isSkillAllowedBySessionPolicy`.
+ * - Otherwise return catalog names the session permits, intersected with
+ *   `baseAllowed` when that list exists, always keeping mandatory Skills that
+ *   appear in `catalogNames`.
  */
 export function resolveSessionSkillAllowlist(
   policy: SessionSkillPolicy | undefined,
@@ -105,6 +108,9 @@ export function resolveSessionSkillAllowlist(
     Object.values(effective.dispositions).some((value) => value === 'forbidden');
   if (!hasRestrictions && Object.keys(effective.dispositions).length === 0) {
     return baseAllowed;
+  }
+  if (!effective.closed && baseAllowed === undefined) {
+    return undefined;
   }
 
   const baseSet =

@@ -32,9 +32,11 @@ import {
   matchMemoryForPrompt,
 } from "./prompt-memory-lookup.js";
 import {
+  applyPromptSkillSessionPolicy,
   formatPromptSkillMatchReminder,
   matchSkillsForPrompt,
   type PromptSkillCandidate,
+  type PromptSkillSessionPolicy,
 } from "../skills/prompt-skill-lookup.js";
 import {
   agentDetailToIdentity,
@@ -70,6 +72,8 @@ export type LocalReminderSessionInfo = SessionInfo & {
   memoryRecallEnabled?: boolean;
   memoryWriteEnabled?: boolean;
   taskResultDelivery?: "runtime-managed";
+  /** Session require/optional/forbid policy. Absent means the catalog stays open. */
+  skillPolicy?: PromptSkillSessionPolicy;
 };
 export type LocalReminderMessageRequest = MessageRequest;
 export type LocalReminderInput = SystemReminderInput;
@@ -335,7 +339,10 @@ export class LocalDataCollector {
         ? await this.input.listSkillCandidates(input.session)
         : [];
       promptSkillMatch = formatPromptSkillMatchReminder(
-        matchSkillsForPrompt(input.prompt, candidates),
+        matchSkillsForPrompt(
+          input.prompt,
+          applyPromptSkillSessionPolicy(candidates, input.session.skillPolicy),
+        ),
       );
     } catch {
       promptSkillMatch = "";

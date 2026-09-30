@@ -16,8 +16,8 @@ import type { SessionRecord, TaskSessionBinding } from '../../../../session-syst
 import {
   isSkillAllowedBySessionPolicy,
   listSkillsByDisposition,
-  normalizeSkillPolicyName,
   effectiveSessionSkillPolicy,
+  resolveSessionSkillAllowlist,
 } from '../../../../session-system/index.js';
 import type {
   AgentExecutionSnapshot,
@@ -570,42 +570,26 @@ function createExecutionScope(
     ...profileResourceScope(profile),
     workspaceDir: session.workspaceDir,
     ...builtinSkillScope(session, runtimeFacts),
-    ...composeSkillAllowlists(profileScope, sessionSkillSelectionScope(session)),
+    ...composeSkillAllowlists(profileScope, session),
     ...runtimeFeatureScope(runtimeFacts, profile, miniappAvailable),
-  };
-}
-
-function sessionSkillSelectionScope(
-  session: SessionRecord,
-): Pick<LocalPromptSkillCatalogScope, 'allowedSkillNames'> {
-  const policy = effectiveSessionSkillPolicy(session.skillPolicy);
-  if (!policy.closed) return {};
-  return {
-    allowedSkillNames: [
-      ...listSkillsByDisposition(policy, 'mandatory'),
-      ...listSkillsByDisposition(policy, 'optional'),
-    ],
   };
 }
 
 function composeSkillAllowlists(
   profileScope: ReturnType<typeof profileSelectionScope>,
-  sessionScope: Pick<LocalPromptSkillCatalogScope, 'allowedSkillNames'>,
+  session: SessionRecord,
 ): ReturnType<typeof profileSelectionScope> {
+  const policy = effectiveSessionSkillPolicy(session.skillPolicy);
   const profileAllowed = profileScope.allowedSkillNames;
-  const sessionAllowed = sessionScope.allowedSkillNames;
-  if (profileAllowed === undefined && sessionAllowed === undefined) return profileScope;
-  if (profileAllowed === undefined) {
-    return { ...profileScope, allowedSkillNames: sessionAllowed };
-  }
-  if (sessionAllowed === undefined) return profileScope;
-  const sessionSet = new Set(sessionAllowed.map(normalizeSkillPolicyName));
-  return {
-    ...profileScope,
-    allowedSkillNames: profileAllowed.filter((name) =>
-      sessionSet.has(normalizeSkillPolicyName(name)),
-    ),
-  };
+  const catalogNames = [
+    ...(profileAllowed ?? []),
+    ...listSkillsByDisposition(policy, 'mandatory'),
+    ...listSkillsByDisposition(policy, 'optional'),
+    ...listSkillsByDisposition(policy, 'forbidden'),
+  ];
+  const allowedSkillNames = resolveSessionSkillAllowlist(policy, profileAllowed, catalogNames);
+  if (allowedSkillNames === undefined) return profileScope;
+  return { ...profileScope, allowedSkillNames: [...allowedSkillNames] };
 }
 
 function profileResourceScope(profile: LocalAgentExecutionProfile | undefined) {

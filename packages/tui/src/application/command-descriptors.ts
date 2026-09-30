@@ -32,8 +32,9 @@ export const TUI_COMMAND_DESCRIPTORS = {
   },
   skills: {
     name: 'skills',
-    description:
-      'List Skills, set session require/optional/forbid policy, or review pending Skill/Memory proposals',
+    // Shared with ACP, whose /skills handler only lists Skills. Session policy and
+    // proposal review wording lives on the TUI catalog entry.
+    description: 'List Skills',
   },
   mcp: {
     name: 'mcp',

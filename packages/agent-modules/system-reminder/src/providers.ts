@@ -844,6 +844,9 @@ export function createDefaultRegistry(formatLocalDateTime: DateFormatter): Syste
       .append('bootstrapProvider', bootstrapProvider)
       .append('worktreeReminderProvider', worktreeReminderProvider)
       .append('teamMemoryProvider', teamMemoryProvider)
+      // Bounded prompt-overlap excerpts only. An earlier default omitted this
+      // provider because unscoped recall spent roughly 500–1000 tokens per turn
+      // at low precision. Empty input still emits nothing.
       .append('relevantMemoryProvider', relevantMemoryProvider)
       .append('promptSkillMatchProvider', promptSkillMatchProvider)
       .append('userMemoryUpdateProvider', userMemoryUpdateProvider)

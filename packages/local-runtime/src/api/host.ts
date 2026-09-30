@@ -170,6 +170,7 @@ import {
 import { LocalSkillHubStore } from "../skills/hub-api.js";
 import { resolveBuiltinSkillsDir } from "../skills/roots.js";
 import { seedBuiltinSkills } from "../skills/seed-builtin.js";
+import { applyPromptSkillSessionPolicy } from "../skills/prompt-skill-lookup.js";
 import {
   initSkillService,
   type LocalSkillService,
@@ -634,10 +635,11 @@ export class LocalRuntimeApiHost {
           agentName: session.agentName,
           ...(session.workspaceDir ? { workspaceDir: session.workspaceDir } : {}),
         });
-        return (result.skills ?? []).map((skill) => ({
+        const listed = (result.skills ?? []).map((skill) => ({
           name: skill.name,
           ...(skill.description ? { description: skill.description } : {}),
         }));
+        return applyPromptSkillSessionPolicy(listed, session.skillPolicy);
       },
     });
     this.memoryFacade = memory.memoryFacade;

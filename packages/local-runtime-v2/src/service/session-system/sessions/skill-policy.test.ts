@@ -69,6 +69,22 @@ describe('session skill policy', () => {
     ).toEqual(['review', 'docs']);
   });
 
+  it('keeps mandatory skills omitted by the agent allowlist', () => {
+    const policy = applySessionSkillPolicyPatch(undefined, {
+      dispositions: { review: 'mandatory', pdf: 'forbidden' },
+    });
+    expect(
+      resolveSessionSkillAllowlist(policy, ['pdf', 'docs'], ['pdf', 'docs', 'review']),
+    ).toEqual(['docs', 'review']);
+  });
+
+  it('leaves an open catalog unscoped when the agent allowlist is absent', () => {
+    const policy = applySessionSkillPolicyPatch(undefined, {
+      dispositions: { pdf: 'forbidden' },
+    });
+    expect(resolveSessionSkillAllowlist(policy, undefined, ['pdf', 'xlsx'])).toBeUndefined();
+  });
+
   it('returns base allowlist unchanged when unrestricted', () => {
     expect(resolveSessionSkillAllowlist(undefined, ['pdf'], ['pdf', 'xlsx'])).toEqual(['pdf']);
     expect(resolveSessionSkillAllowlist({ closed: false, dispositions: {} }, undefined, ['pdf'])).toBe(

@@ -446,8 +446,11 @@ const COMMAND_SOURCES: readonly TuiCommandSource[] = [
   },
   {
     ...TUI_COMMAND_DESCRIPTORS.skills,
+    description:
+      'List Skills, set session require/optional/forbid policy, or review pending Skill/Memory proposals',
     category: 'Capability',
-    argumentHint: '[filter|require|optional|forbid|policy|review]',
+    argumentHint:
+      '[filter|require|optional|forbid|clear|policy|review|approve|reject]',
     discoverability: 'search-only',
   },
   {

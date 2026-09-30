@@ -1,13 +1,60 @@
 /**
  * Prompt-conditioned Skill lookup. Scores catalog entries against the latest
- * user prompt using token overlap on name + description. Forbidden Skills are
- * excluded by the caller before invoking this helper.
+ * user prompt using token overlap on name + description. Callers apply the
+ * session Skill policy with `applyPromptSkillSessionPolicy` before matching so
+ * forbidden Skills are not advertised.
  */
 
 export interface PromptSkillCandidate {
   readonly name: string;
   readonly description?: string;
   readonly disposition?: 'mandatory' | 'optional';
+}
+
+/** Session Skill policy as seen by prompt matching. Names are matched case-insensitively. */
+export interface PromptSkillSessionPolicy {
+  readonly dispositions: Readonly<Record<string, 'mandatory' | 'optional' | 'forbidden'>>;
+  readonly closed: boolean;
+}
+
+/**
+ * Drop forbidden and closed-catalog Skills, and stamp mandatory/optional from
+ * the session policy so prompt matching can prefer mandatory Skills.
+ * Without a policy, candidates pass through unchanged.
+ */
+export function applyPromptSkillSessionPolicy(
+  candidates: readonly PromptSkillCandidate[],
+  policy: PromptSkillSessionPolicy | undefined,
+): PromptSkillCandidate[] {
+  if (!policy) return [...candidates];
+  const selected: PromptSkillCandidate[] = [];
+  for (const candidate of candidates) {
+    const name = candidate.name.trim();
+    if (!name) continue;
+    const disposition = promptSkillDisposition(policy, name);
+    if (disposition === 'forbidden' || disposition === 'hidden') continue;
+    selected.push({
+      name,
+      ...(candidate.description ? { description: candidate.description } : {}),
+      disposition: disposition === 'mandatory' ? 'mandatory' : 'optional',
+    });
+  }
+  return selected;
+}
+
+function promptSkillDisposition(
+  policy: PromptSkillSessionPolicy,
+  skillName: string,
+): 'mandatory' | 'optional' | 'forbidden' | 'hidden' {
+  const key = skillName.normalize('NFKC').toLocaleLowerCase('en-US');
+  if (!Object.prototype.hasOwnProperty.call(policy.dispositions, key)) {
+    return policy.closed ? 'hidden' : 'optional';
+  }
+  const explicit = policy.dispositions[key];
+  if (explicit === 'mandatory' || explicit === 'optional' || explicit === 'forbidden') {
+    return explicit;
+  }
+  return policy.closed ? 'hidden' : 'optional';
 }
 
 export interface PromptSkillMatch {

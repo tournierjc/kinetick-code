@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -15,6 +15,7 @@ import {
   matchMemoryForPrompt,
 } from '../../src/memory/prompt-memory-lookup.js';
 import {
+  applyPromptSkillSessionPolicy,
   formatPromptSkillMatchReminder,
   matchSkillsForPrompt,
   tokenizePromptLookupText,
@@ -49,6 +50,36 @@ describe('prompt skill lookup', () => {
     expect(tokenizePromptLookupText('the to and of')).toEqual([]);
     expect(matchSkillsForPrompt('the to and of', [{ name: 'pdf' }])).toEqual([]);
     expect(formatPromptSkillMatchReminder([])).toBe('');
+  });
+
+  it('drops forbidden skills and stamps mandatory disposition from session policy', () => {
+    const candidates = applyPromptSkillSessionPolicy(
+      [
+        { name: 'pdf', description: 'PDF documents' },
+        { name: 'xlsx', description: 'Spreadsheets' },
+        { name: 'docx', description: 'Word documents' },
+      ],
+      {
+        closed: false,
+        dispositions: { pdf: 'forbidden', xlsx: 'mandatory' },
+      },
+    );
+    expect(candidates.map((candidate) => candidate.name)).toEqual(['xlsx', 'docx']);
+    expect(candidates[0]?.disposition).toBe('mandatory');
+    const matches = matchSkillsForPrompt('pdf xlsx spreadsheet', candidates);
+    expect(matches.map((match) => match.name)).not.toContain('pdf');
+    expect(matches[0]?.disposition).toBe('mandatory');
+  });
+
+  it('hides unlisted skills when the session catalog is closed', () => {
+    const candidates = applyPromptSkillSessionPolicy(
+      [
+        { name: 'pdf', description: 'PDF documents' },
+        { name: 'xlsx', description: 'Spreadsheets' },
+      ],
+      { closed: true, dispositions: { pdf: 'optional' } },
+    );
+    expect(candidates.map((candidate) => candidate.name)).toEqual(['pdf']);
   });
 
   it('respects minScore and limit options', () => {
@@ -147,6 +178,40 @@ describe('knowledge proposal store', () => {
       await expect(
         store.review({ proposalId: 'missing', decision: 'reject' }),
       ).rejects.toMatchObject({ code: 'not-found' });
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to replace a corrupt store with an empty one', async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'knowledge-store-corrupt-'));
+    try {
+      const store = new KnowledgeProposalStore(dataDir, () => 1_700_000_000_000);
+      await store.create({
+        kind: 'skill',
+        action: 'create',
+        sessionId: 'sess_a',
+        agentName: 'mavis',
+        title: 'Skill A',
+        summary: 'summary',
+        rationale: 'rationale',
+        draft: 'draft-a',
+      });
+      const file = join(dataDir, 'local-runtime', 'knowledge-proposals.json');
+      await writeFile(file, '{', 'utf8');
+      await expect(store.list()).rejects.toMatchObject({ code: 'corrupt' });
+      await expect(
+        store.create({
+          kind: 'skill',
+          action: 'create',
+          sessionId: 'sess_a',
+          agentName: 'mavis',
+          title: 'Skill A',
+          summary: 'summary',
+          rationale: 'rationale',
+          draft: 'draft-a',
+        }),
+      ).rejects.toMatchObject({ code: 'corrupt' });
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -319,6 +384,52 @@ describe('knowledge proposal review', () => {
       });
       await review.reviewProposal({ proposalId: proposal.id, decision: 'approve' });
       expect(createdName).toBe('plain-draft-skill');
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves the proposal pending when apply fails', async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'knowledge-apply-fail-'));
+    try {
+      const review = createKnowledgeReviewApplication({
+        dataDir: () => dataDir,
+        skills: {
+          createSkill: async () => {
+            throw new Error('disk full');
+          },
+        },
+      });
+      const proposal = await review.createProposal({
+        kind: 'skill',
+        action: 'create',
+        sessionId: 'sess_fail',
+        agentName: 'mavis',
+        title: 'Failing skill',
+        summary: 'summary',
+        rationale: 'rationale',
+        draft: 'body',
+      });
+      await expect(
+        review.reviewProposal({ proposalId: proposal.id, decision: 'approve' }),
+      ).rejects.toThrow(/disk full/);
+      expect(await review.getProposal(proposal.id)).toMatchObject({ status: 'pending' });
+
+      const unavailable = createKnowledgeReviewApplication({ dataDir: () => dataDir });
+      const memory = await unavailable.createProposal({
+        kind: 'memory',
+        action: 'improve',
+        sessionId: 'sess_fail',
+        agentName: 'mavis',
+        title: 'Memory',
+        summary: 'summary',
+        rationale: 'rationale',
+        draft: 'note',
+      });
+      await expect(
+        unavailable.reviewProposal({ proposalId: memory.id, decision: 'approve' }),
+      ).rejects.toMatchObject({ code: 'apply-unavailable' });
+      expect(await unavailable.getProposal(memory.id)).toMatchObject({ status: 'pending' });
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

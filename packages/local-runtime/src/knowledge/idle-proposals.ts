@@ -1,7 +1,9 @@
 /**
- * Idle-session knowledge proposals. When a session becomes idle after enough
- * activity, draft Skill/Memory create-or-improve proposals for human review.
- * Nothing is applied until a human approves (and optionally edits) the draft.
+ * Idle-session knowledge proposals. After a root Session turn finishes, the
+ * runtime may call this with the persisted user-prompt count and recent prompt
+ * texts. Drafts are created only once the message threshold is met and the
+ * Session has no pending proposal. Nothing is applied until a human approves
+ * (and optionally edits) the draft.
  */
 
 import type { KnowledgeProposalStore } from './proposal-store.js';
@@ -95,7 +97,7 @@ export async function createIdleKnowledgeProposals(
       'Edit this draft during review, then approve to append to Memory.',
       '',
     ].join('\n'),
-    targetRef: 'agent-main',
+    // Omitted targetRef appends agent Memory. Only `user` selects user Memory.
     evidenceExcerpts: evidence,
   });
   proposalIds.push(memory.id);

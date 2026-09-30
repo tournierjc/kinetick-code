@@ -58,16 +58,29 @@ export class KnowledgeReviewApplication {
     input: ReviewKnowledgeProposalInput,
   ): Promise<{ proposal: KnowledgeProposal; applied: boolean }> {
     const store = this.store();
-    const proposal = await store.review(input);
     if (input.decision !== 'approve') {
-      return { proposal, applied: false };
+      return { proposal: await store.review(input), applied: false };
     }
-    const draft = KnowledgeProposalStore.effectiveDraft(proposal);
-    if (proposal.kind === 'skill') {
-      await this.applySkillProposal(proposal, draft);
+    const current = await store.get(input.proposalId);
+    if (!current) {
+      throw new KnowledgeProposalError('not-found', `Proposal ${input.proposalId} not found`);
+    }
+    if (current.status !== 'pending') {
+      throw new KnowledgeProposalError(
+        'not-pending',
+        `Proposal ${input.proposalId} is ${current.status}`,
+      );
+    }
+    const draft =
+      input.editedDraft !== undefined
+        ? input.editedDraft
+        : KnowledgeProposalStore.effectiveDraft(current);
+    if (current.kind === 'skill') {
+      await this.applySkillProposal(current, draft);
     } else {
-      await this.applyMemoryProposal(proposal, draft);
+      await this.applyMemoryProposal(current, draft);
     }
+    const proposal = await store.review(input);
     return { proposal, applied: true };
   }
 
@@ -104,7 +117,7 @@ export class KnowledgeReviewApplication {
   private async applySkillProposal(proposal: KnowledgeProposal, draft: string): Promise<void> {
     if (!this.options.skills) {
       throw new KnowledgeProposalError(
-        'not-pending',
+        'apply-unavailable',
         'Skill apply is unavailable in this host',
       );
     }
@@ -120,7 +133,7 @@ export class KnowledgeReviewApplication {
   private async applyMemoryProposal(proposal: KnowledgeProposal, draft: string): Promise<void> {
     if (!this.options.memory) {
       throw new KnowledgeProposalError(
-        'not-pending',
+        'apply-unavailable',
         'Memory apply is unavailable in this host',
       );
     }
