@@ -1,1 +1,1 @@
-file:///tmp/arg_content.txt
+x
