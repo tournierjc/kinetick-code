@@ -290,18 +290,12 @@ export class KcodeInteractiveRenderer {
         : undefined),
   ): TuiMainScreen | TuiAltScreen {
     if (mode === 'fullscreen') {
-      const renderer = new TuiAltScreen(
+      return new TuiAltScreen(
         this.options.terminal,
         showHardwareCursor,
         this.options.logDirectory,
         this.options.altScreen,
       );
-      renderer.onResize = (width, height) => {
-        if (this.mainScreenRenderState) {
-          TuiMainScreen.resizeRenderState(this.mainScreenRenderState, width, height);
-        }
-      };
-      return renderer;
     }
     return new TuiMainScreen(this.options.terminal, showHardwareCursor, this.options.logDirectory);
   }

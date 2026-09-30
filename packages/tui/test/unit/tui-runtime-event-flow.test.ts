@@ -65,7 +65,11 @@ function createFlow(events: readonly TuiStreamEvent[], options: HarnessOptions =
       continuesTurn: () => false,
       handleRuntimeEvent: async () => false,
     } as never,
-    runProjection: { markRecoveredTurn, markQueueHandoffPending: () => undefined } as never,
+    runProjection: {
+      markRecoveredTurn,
+      markQueueHandoffPending: () => undefined,
+      snapshot: () => ({ latestRuntimeTurnId: undefined, queueHandoffPending: false, stoppingRuntimeTurnId: undefined }),
+    } as never,
     releaseQueueItem: async () => undefined,
     transcript: new TranscriptStore(),
     refreshQueue: async () => [],

@@ -109,17 +109,13 @@
     {
       "path": "index.ts",
       "currentSha256": "f45ae2e2a6fdf78015b9877745ee374fe69462c89db88b8c92b5b790a0343cdf",
-<<<<<<< HEAD
-      "changeIds": ["L009", "L021", "L045"],
-=======
       "changeIds": [
         "L009",
         "L021",
         "L045"
       ],
->>>>>>> origin/main
-      "reason": "Export the generic scrollback layout contract through the public Engine boundary.",
-      "behaviorImpact": "Product transcript adapters can identify retained source blocks and rendered rows without importing engine internals."
+      "reason": "Export the generic scrollback layout contract through the public Engine boundary.. Export the generic Editor state snapshot type and the terminal capability override helper through the product-facing Engine barrel.",
+      "behaviorImpact": "Product transcript adapters can identify retained source blocks and rendered rows without importing engine internals.. Product adapters can type serializable Pi Editor state and inject deterministic terminal capability behavior without importing Engine internals."
     },
     {
       "path": "keybindings.ts",
@@ -172,8 +168,8 @@
       "changeIds": [
         "L014"
       ],
-      "reason": "Adapt Pi's post-baseline native module candidate resolver to the @minimax/code package layout.",
-      "behaviorImpact": "Installed npm packages and standalone archives share one deterministic native helper resolution path."
+      "reason": "Adapt Pi's post-baseline native module candidate resolver to the @minimax/code package layout.. Adapt Pi's post-baseline native module candidate resolver to the @minimax/code package layout.",
+      "behaviorImpact": "Installed npm packages and standalone archives share one deterministic native helper resolution path.. Installed npm packages and standalone archives share one deterministic native helper resolution path."
     },
     {
       "path": "stdin-buffer.ts",
@@ -209,15 +205,11 @@
     {
       "path": "terminal.ts",
       "currentSha256": "11fca3d510dc827a2a91d05425aeb9ddf3a1829ce1f57415a3c000a8d9a9fd17",
-<<<<<<< HEAD
-      "changeIds": ["L014", "L028", "L044"],
-=======
       "changeIds": [
         "L014",
         "L028",
         "L044"
       ],
->>>>>>> origin/main
       "reason": "Use the package-aware native module resolver for Windows virtual-terminal input initialization. 终端焦点报告生命周期 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
       "behaviorImpact": "Packaged Windows builds retain modified-key escape sequences such as Shift+Tab instead of silently falling back to plain keys. 焦点报告转发给 Host，cmux 抑制策略仍归 Host。 Slow terminal output does not block input; pending frames coalesce and terminal handoffs drain ordered output."
     },
@@ -239,11 +231,7 @@
     },
     {
       "path": "tui-main-screen.ts",
-<<<<<<< HEAD
-      "currentSha256": "e7458ff5c3123e89883bcc3c10a21694e8949d75bb483ca98a208693fb3162b4",
-=======
-      "currentSha256": "87fd94087b9765ae55045008ec3b5d93fff1c796d8a38a4973bbaf4f4b1f7719",
->>>>>>> origin/main
+      "currentSha256": "f57eab79552763ae29bc39e2ced4c7905eb44fa163f538ba3ff6000136e0f493",
       "changeIds": [
         "L005",
         "L017",
@@ -260,13 +248,8 @@
         "L047"
       ],
       "upstreamCommit": "6c4f360264397c59801f6da2bdac13e3b1fcbe91",
-<<<<<<< HEAD
-      "reason": "Align bounded regular-mode projections with emitted row identities and preserve native history across folding, footer shrink, redraw and resize. Diff isolated overlay frames and align short conversations at welcome rows. Preserve admitted row identity and observe deferred or inactive main-buffer resizes.",
-      "behaviorImpact": "Native scrollback retains emitted snapshots and pre-launch shell history. Automatic folding and footer updates preserve scrolling; unmatched projections archive the visible body and start a labelled snapshot. Resize retains pending rows, forced redraw retains physical state, and historical image resources survive viewport repaints. Transient overlays use a separate terminal buffer and return to main on close or stop, preserving main geometry across resize. Unchanged overlays emit no frame bytes; text changes repaint only affected rows. Background welcome and footer updates retain short-conversation history without replaying the banner or warnings. First submission does not replay existing output. Every physical resize is retained through backpressure and fullscreen ownership; short frames that still fit avoid a snapshot marker."
-=======
-      "reason": "Align bounded regular-mode projections with emitted row identities and preserve native history across folding, footer shrink, redraw and resize. Diff isolated overlay frames and align short conversations at welcome rows. Preserve admitted row identity and observe deferred or inactive main-buffer resizes. Keep strict TypeScript fixes and stream full and differential renders through Pi's bounded terminal writer. 缩放期间仅重绘可见尾部 常规模式在差分比较前剥离行首 OSC 133 zone 标记。 内容收缩或历史内容变化触发回退重绘时仅更新可见区域。 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
-      "behaviorImpact": "Native scrollback retains emitted snapshots and pre-launch shell history. Automatic folding and footer updates preserve scrolling; unmatched projections archive the visible body and start a labelled snapshot. Resize retains pending rows, forced redraw retains physical state, and historical image resources survive viewport repaints. Transient overlays use a separate terminal buffer and return to main on close or stop, preserving main geometry across resize. Unchanged overlays emit no frame bytes; text changes repaint only affected rows. Background welcome and footer updates retain short-conversation history without replaying the banner or warnings. First submission does not replay existing output. Every physical resize is retained through backpressure and fullscreen ownership; short frames that still fit avoid a snapshot marker. Regular viewport redraws erase rows in place so hosts that save an erased screen to scrollback do not retain stale transcript or footer rows. Visible text-only shrink with unchanged historical text temporarily pads the active screen to preserve host scrolling and the input position; later output reuses this space. Historical text replacement or removal still reconstructs the session to avoid stale or duplicate history. Rebuilding clears pre-launch shell scrollback. Genuine resize retains delayed history replay; redundant same-size notifications are ignored. Slow terminal output does not block input; pending frames coalesce and terminal handoffs drain ordered output."
->>>>>>> origin/main
+      "reason": "Align bounded regular-mode projections with emitted row identities and preserve native history across folding, footer shrink, redraw and resize. Diff isolated overlay frames and align short conversations at welcome rows. Preserve admitted row identity and observe deferred or inactive main-buffer resizes.. Align bounded regular-mode projections with emitted row identities and preserve native history across folding, footer shrink, redraw and resize. Diff isolated overlay frames and align short conversations at welcome rows. Preserve admitted row identity and observe deferred or inactive main-buffer resizes. Keep strict TypeScript fixes and stream full and differential renders through Pi's bounded terminal writer. 缩放期间仅重绘可见尾部 常规模式在差分比较前剥离行首 OSC 133 zone 标记。 内容收缩或历史内容变化触发回退重绘时仅更新可见区域。 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
+      "behaviorImpact": "Native scrollback retains emitted snapshots and pre-launch shell history. Automatic folding and footer updates preserve scrolling; unmatched projections archive the visible body and start a labelled snapshot. Resize retains pending rows, forced redraw retains physical state, and historical image resources survive viewport repaints. Transient overlays use a separate terminal buffer and return to main on close or stop, preserving main geometry across resize. Unchanged overlays emit no frame bytes; text changes repaint only affected rows. Background welcome and footer updates retain short-conversation history without replaying the banner or warnings. First submission does not replay existing output. Every physical resize is retained through backpressure and fullscreen ownership; short frames that still fit avoid a snapshot marker.. Native scrollback retains emitted snapshots and pre-launch shell history. Automatic folding and footer updates preserve scrolling; unmatched projections archive the visible body and start a labelled snapshot. Resize retains pending rows, forced redraw retains physical state, and historical image resources survive viewport repaints. Transient overlays use a separate terminal buffer and return to main on close or stop, preserving main geometry across resize. Unchanged overlays emit no frame bytes; text changes repaint only affected rows. Background welcome and footer updates retain short-conversation history without replaying the banner or warnings. First submission does not replay existing output. Every physical resize is retained through backpressure and fullscreen ownership; short frames that still fit avoid a snapshot marker. Regular viewport redraws erase rows in place so hosts that save an erased screen to scrollback do not retain stale transcript or footer rows. Visible text-only shrink with unchanged historical text temporarily pads the active screen to preserve host scrolling and the input position; later output reuses this space. Historical text replacement or removal still reconstructs the session to avoid stale or duplicate history. Rebuilding clears pre-launch shell scrollback. Genuine resize retains delayed history replay; redundant same-size notifications are ignored. Slow terminal output does not block input; pending frames coalesce and terminal handoffs drain ordered output."
     },
     {
       "path": "tui.ts",
@@ -285,13 +268,8 @@
         "L046",
         "L047"
       ],
-<<<<<<< HEAD
-      "reason": "Expose bounded row anchors, source-block retention and the transcript/footer boundary for regular-mode output snapshots. Distinguish prelude anchors and expose physical cursor hiding to cached renderers. Publish layout padding and physical resize observations for inactive main state.",
-      "behaviorImpact": "Regular renderers can distinguish projection eviction from retained-block presentation changes. Prelude rows cannot mask transcript replacement; nested overlays and coalesced cursor preference changes restore cursor visibility. Owners observe physical geometry before render scheduling, and row anchors can ignore only layout-owned leading padding."
-=======
-      "reason": "Expose bounded row anchors, source-block retention and the transcript/footer boundary for regular-mode output snapshots. Distinguish prelude anchors and expose physical cursor hiding to cached renderers. Publish layout padding and physical resize observations for inactive main state. Keep strict TypeScript fixes, expose Pi's existing immediate scheduler as a non-destructive product interaction contract, dispatch the input left over after terminal color sequences are removed, and coalesce synchronous submission renders. 提供 resize hook 及焦点输入过滤 独立面板声明键盘分页归属。 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
-      "behaviorImpact": "Regular renderers can distinguish projection eviction from retained-block presentation changes. Prelude rows cannot mask transcript replacement; nested overlays and coalesced cursor preference changes restore cursor visibility. Owners observe physical geometry before render scheduling, and row anchors can ignore only layout-owned leading padding. Urgent product interactions render immediately without resetting differential state or clearing native scrollback, and a coalesced color answer no longer discards the keystrokes sharing its chunk. A synchronous submission frame dismisses the previous interrupted footer without a second input render. 焦点先交给 viewport listener，不进入编辑器。 handlesViewportKeys 为 true 时，fullscreen 分页交给焦点面板；默认仍由外层视口处理。 Slow terminal output does not block input; pending frames coalesce and terminal handoffs drain ordered output."
->>>>>>> origin/main
+      "reason": "Expose bounded row anchors, source-block retention and the transcript/footer boundary for regular-mode output snapshots. Distinguish prelude anchors and expose physical cursor hiding to cached renderers. Publish layout padding and physical resize observations for inactive main state.. Keep strict TypeScript fixes, expose Pi's existing immediate scheduler as a non-destructive product interaction contract, dispatch the input left over after terminal color sequences are removed, and coalesce synchronous submission renders. 提供 resize hook 及焦点输入过滤 独立面板声明键盘分页归属。 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
+      "behaviorImpact": "Regular renderers can distinguish projection eviction from retained-block presentation changes. Prelude rows cannot mask transcript replacement; nested overlays and coalesced cursor preference changes restore cursor visibility. Owners observe physical geometry before render scheduling, and row anchors can ignore only layout-owned leading padding.. Urgent product interactions render immediately without resetting differential state or clearing native scrollback, and a coalesced color answer no longer discards the keystrokes sharing its chunk. A synchronous submission frame dismisses the previous interrupted footer without a second input render. 焦点先交给 viewport listener，不进入编辑器。 handlesViewportKeys 为 true 时，fullscreen 分页交给焦点面板；默认仍由外层视口处理。 Slow terminal output does not block input; pending frames coalesce and terminal handoffs drain ordered output."
     },
     {
       "path": "utils.ts",
