@@ -327,6 +327,57 @@ describe('session server HTTP contract', () => {
       async listSkills() {
         return { skills: [{ name: 'pdf', description: 'work with pdf files' }] };
       },
+      async updateSessionSkillPolicy(
+        sessionId: string,
+        skillPolicy: {
+          dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+          closed?: boolean;
+        },
+      ) {
+        calls.push(`skill-policy:${sessionId}:${JSON.stringify(skillPolicy)}`);
+        return {
+          sessionId,
+          workspaceDir: '/workspace',
+          skillPolicy: {
+            closed: skillPolicy.closed === true,
+            mandatory: Object.entries(skillPolicy.dispositions ?? {})
+              .filter(([, value]) => value === 'mandatory')
+              .map(([name]) => name),
+            optional: Object.entries(skillPolicy.dispositions ?? {})
+              .filter(([, value]) => value === 'optional')
+              .map(([name]) => name),
+            forbidden: Object.entries(skillPolicy.dispositions ?? {})
+              .filter(([, value]) => value === 'forbidden')
+              .map(([name]) => name),
+          },
+        };
+      },
+      async listKnowledgeProposals(filter: { status?: string; sessionId?: string } = {}) {
+        calls.push(`list-proposals:${filter.status ?? ''}:${filter.sessionId ?? ''}`);
+        return [
+          {
+            id: 'kp_abc123',
+            kind: 'skill' as const,
+            action: 'create' as const,
+            status: 'pending',
+            title: 'Capture pdf workflow',
+            summary: 'Draft a pdf Skill from recent turns',
+            draft: '---\nname: pdf-flow\ndescription: PDF workflow\n---\n# PDF',
+          },
+        ];
+      },
+      async reviewKnowledgeProposal(input: {
+        proposalId: string;
+        decision: 'approve' | 'reject';
+        editedDraft?: string;
+      }) {
+        calls.push(`review:${input.proposalId}:${input.decision}`);
+        return {
+          applied: input.decision === 'approve',
+          title: 'Capture pdf workflow',
+          status: input.decision === 'approve' ? 'approved' : 'rejected',
+        };
+      },
     });
     recorded = writable;
     (recorded as { runtime: Record<string, unknown> }).runtime = writable.runtime;
@@ -417,12 +468,53 @@ describe('session server HTTP contract', () => {
     expect(list.skills[0]?.name).toBe('pdf');
   });
 
+  it('updates session skill policy and reviews knowledge proposals', async () => {
+    await startWritable();
+    const policy = await get('/sessions/session-1/skill-policy', {
+      method: 'POST',
+      body: JSON.stringify({ dispositions: { pdf: 'mandatory', xlsx: 'forbidden' } }),
+    });
+    expect(policy.status).toBe(200);
+    const session = (await policy.json()) as {
+      skillPolicy: { mandatory: string[]; forbidden: string[] };
+    };
+    expect(session.skillPolicy.mandatory).toEqual(['pdf']);
+    expect(session.skillPolicy.forbidden).toEqual(['xlsx']);
+
+    const proposals = await get('/skills/proposals?status=pending&sessionId=session-1');
+    expect(proposals.status).toBe(200);
+    const page = (await proposals.json()) as { proposals: { id: string }[] };
+    expect(page.proposals[0]?.id).toBe('kp_abc123');
+
+    const approved = await get('/skills/proposals/kp_abc123/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'approve' }),
+    });
+    expect(approved.status).toBe(200);
+    expect(await approved.json()).toMatchObject({ applied: true, status: 'approved' });
+
+    const badDecision = await get('/skills/proposals/kp_abc123/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'maybe' }),
+    });
+    expect(badDecision.status).toBe(400);
+  });
+
   it('reports unsupported capabilities as 404 for the minimal runtime', async () => {
     await start();
     // The minimal read-only fake runtime exposes none of the write surface.
     expect((await get('/sessions/session-1/prompt', { method: 'POST', body: '{}' })).status).toBe(404);
     expect((await get('/permissions')).status).toBe(404);
     expect((await get('/skills')).status).toBe(404);
+    expect((await get('/skills/proposals')).status).toBe(404);
+    expect(
+      (
+        await get('/sessions/session-1/skill-policy', {
+          method: 'POST',
+          body: JSON.stringify({ dispositions: { pdf: 'mandatory' } }),
+        })
+      ).status,
+    ).toBe(404);
     expect((await get('/sessions/session-1/delegation')).status).toBe(404);
     expect((await get('/events')).status).toBe(404);
   });

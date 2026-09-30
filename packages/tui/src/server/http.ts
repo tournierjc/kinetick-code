@@ -204,6 +204,11 @@ async function handleTuiServerRequest(
     return;
   }
 
+  // Knowledge proposals (idle Skill/Memory drafts awaiting human review).
+  if (segments[0] === 'skills' && segments[1] === 'proposals') {
+    await handleSkillProposals(runtime, method, segments, url, request, response);
+    return;
+  }
   if (segments[0] === 'skills' && segments.length === 1) {
     await handleTopLevelList(runtime, method, url, response, 'listSkills');
     return;
@@ -694,6 +699,37 @@ async function handleTuiServerRequest(
     return;
   }
 
+  // /sessions/:id/skill-policy — set mandatory/optional/forbidden Skill dispositions.
+  if (sub === 'skill-policy' && segments.length === 3 && method === 'POST') {
+    if (!runtime.updateSessionSkillPolicy) {
+      sendJson(response, 404, { error: 'skill policy is not supported by this runtime' });
+      return;
+    }
+    await handleAction(response, async () => {
+      const body = (await readJsonBody(request)) as {
+        dispositions?: unknown;
+        closed?: unknown;
+      };
+      const dispositions = parseSkillPolicyDispositions(body.dispositions);
+      const closed =
+        body.closed === undefined
+          ? undefined
+          : typeof body.closed === 'boolean'
+            ? body.closed
+            : (() => {
+                throw new InvalidTuiServerBodyError('closed must be a boolean');
+              })();
+      if (dispositions === undefined && closed === undefined) {
+        throw new InvalidTuiServerBodyError('dispositions or closed is required');
+      }
+      return runtime.updateSessionSkillPolicy!(sessionId, {
+        ...(dispositions !== undefined ? { dispositions } : {}),
+        ...(closed !== undefined ? { closed } : {}),
+      });
+    });
+    return;
+  }
+
   // /sessions/:id/rewind + /sessions/:id/rewind-preview/:userMessageId
   if (sub === 'rewind' && segments.length === 3 && method === 'POST' && runtime.rewindSession) {
     await handleAction(response, async () => {
@@ -750,6 +786,122 @@ async function handleTuiServerRequest(
   }
 
   sendJson(response, 404, { error: 'not found' });
+}
+
+// ---------------------------------------------------------------------------
+// Skill policy + knowledge proposals (kinetick-code #99)
+// ---------------------------------------------------------------------------
+
+async function handleSkillProposals(
+  runtime: TuiServerRuntime,
+  method: string,
+  segments: string[],
+  url: URL,
+  request: IncomingMessage,
+  response: ServerResponse,
+): Promise<void> {
+  // GET /skills/proposals
+  if (segments.length === 2) {
+    if (method !== 'GET' && method !== 'HEAD') {
+      sendJson(response, 405, { error: 'method not allowed' });
+      return;
+    }
+    if (!runtime.listKnowledgeProposals) {
+      sendJson(response, 404, { error: 'knowledge proposals are not supported by this runtime' });
+      return;
+    }
+    await sendRuntimeJson(response, async () => {
+      const status = url.searchParams.get('status') ?? undefined;
+      const kind = url.searchParams.get('kind') ?? undefined;
+      const sessionId = url.searchParams.get('sessionId') ?? undefined;
+      const limitRaw = url.searchParams.get('limit');
+      const limit = limitRaw === null || limitRaw === '' ? undefined : parseLimitQuery(limitRaw);
+      if (
+        status !== undefined &&
+        status !== 'pending' &&
+        status !== 'approved' &&
+        status !== 'rejected' &&
+        status !== 'cancelled'
+      ) {
+        throw new InvalidTuiServerQueryError(`invalid status: ${status}`);
+      }
+      if (kind !== undefined && kind !== 'skill' && kind !== 'memory') {
+        throw new InvalidTuiServerQueryError(`invalid kind: ${kind}`);
+      }
+      const proposals = await runtime.listKnowledgeProposals!({
+        ...(status
+          ? { status: status as 'pending' | 'approved' | 'rejected' | 'cancelled' }
+          : {}),
+        ...(kind ? { kind: kind as 'skill' | 'memory' } : {}),
+        ...(sessionId ? { sessionId } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+      });
+      return { proposals };
+    });
+    return;
+  }
+
+  // POST /skills/proposals/:id/review
+  if (segments.length === 4 && segments[3] === 'review') {
+    if (method !== 'POST') {
+      sendJson(response, 405, { error: 'method not allowed' });
+      return;
+    }
+    if (!runtime.reviewKnowledgeProposal) {
+      sendJson(response, 404, { error: 'knowledge proposals are not supported by this runtime' });
+      return;
+    }
+    const proposalId = decodeURIComponent(segments[2]!);
+    await handleAction(response, async () => {
+      const body = (await readJsonBody(request)) as {
+        decision?: unknown;
+        editedDraft?: unknown;
+        reviewNote?: unknown;
+      };
+      if (body.decision !== 'approve' && body.decision !== 'reject') {
+        throw new InvalidTuiServerBodyError('decision must be approve | reject');
+      }
+      if (body.editedDraft !== undefined && typeof body.editedDraft !== 'string') {
+        throw new InvalidTuiServerBodyError('editedDraft must be a string');
+      }
+      if (body.reviewNote !== undefined && typeof body.reviewNote !== 'string') {
+        throw new InvalidTuiServerBodyError('reviewNote must be a string');
+      }
+      return runtime.reviewKnowledgeProposal!({
+        proposalId,
+        decision: body.decision,
+        ...(typeof body.editedDraft === 'string' ? { editedDraft: body.editedDraft } : {}),
+        ...(typeof body.reviewNote === 'string' ? { reviewNote: body.reviewNote } : {}),
+      });
+    });
+    return;
+  }
+
+  sendJson(response, 404, { error: 'not found' });
+}
+
+function parseSkillPolicyDispositions(
+  value: unknown,
+): Record<string, 'mandatory' | 'optional' | 'forbidden' | null> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new InvalidTuiServerBodyError('dispositions must be an object');
+  }
+  const next: Record<string, 'mandatory' | 'optional' | 'forbidden' | null> = {};
+  for (const [name, disposition] of Object.entries(value as Record<string, unknown>)) {
+    if (
+      disposition !== null &&
+      disposition !== 'mandatory' &&
+      disposition !== 'optional' &&
+      disposition !== 'forbidden'
+    ) {
+      throw new InvalidTuiServerBodyError(
+        `disposition for ${name} must be mandatory | optional | forbidden | null`,
+      );
+    }
+    next[name] = disposition;
+  }
+  return next;
 }
 
 // ---------------------------------------------------------------------------
