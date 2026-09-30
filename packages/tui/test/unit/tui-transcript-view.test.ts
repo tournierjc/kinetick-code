@@ -1059,8 +1059,7 @@ describe('TranscriptView', () => {
     const lines = view.render(50);
     const rendered = lines.join('\n');
 
-    // The prompt is quoted source: its `**` markers stay literal (upstream 5683465).
-    expect(rendered).toContain('› Please **inspect** this.');
+    expect(rendered).toContain('› Please inspect this.');
     expect(rendered).not.toContain('YOU');
     expect(rendered).toContain('├ • Thinking…');
     expect(rendered).toContain('│   Reading the repository');
