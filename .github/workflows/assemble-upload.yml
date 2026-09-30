@@ -13,35 +13,28 @@ jobs:
         with:
           ref: cursor/skill-management-http-9cd5
           token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Assemble staged parts
+      - name: Apply staged patches
         run: |
           set -euo pipefail
           python3 <<'PY'
           from pathlib import Path
-          import hashlib, shutil
+          import base64, gzip, hashlib, shutil, subprocess
           staging = Path('.cursor-upload')
-          groups = {}
-          for p in sorted(staging.glob('*.part*')):
-              base, _, part = p.name.rpartition('.part')
-              groups.setdefault(base, []).append((part, p))
-          mapping = {
-            'packages__tui__src__server__http.ts': 'packages/tui/src/server/http.ts',
-            'packages__tui__test__unit__server-http.test.ts': 'packages/tui/test/unit/server-http.test.ts',
-            'docs__harness-integration.md': 'docs/harness-integration.md',
-          }
           expected = {
             'packages/tui/src/server/http.ts': '46c20c81711e869de87ac327af85ed2c28a87010919c6a9132d5f7fd0ed61e11',
             'packages/tui/test/unit/server-http.test.ts': 'c3fbcb3e2b5fe541affb010e8ac28221e665dae31b8793f44ecc806d16ae2cfe',
             'docs/harness-integration.md': 'c13dd27c020b290be304b118c42662fb10bbddce0eb8384f2502a7e723d6e95f',
           }
-          for base, parts in groups.items():
-              parts = sorted(parts, key=lambda x: x[0])
-              content = ''.join(p.read_text() for _, p in parts)
-              dest = mapping[base]
-              Path(dest).write_text(content)
-              digest = hashlib.sha256(content.encode()).hexdigest()
-              print(dest, len(content), digest)
-              assert digest == expected[dest], (dest, digest, expected[dest])
+          for p in sorted(staging.glob('*.patch.gz.b64')):
+              raw = gzip.decompress(base64.b64decode(p.read_text().encode()))
+              patch_path = staging / (p.name.replace('.gz.b64', ''))
+              patch_path.write_bytes(raw)
+              subprocess.check_call(['git', 'apply', '--verbose', str(patch_path)])
+          for dest, digest in expected.items():
+              content = Path(dest).read_text()
+              got = hashlib.sha256(content.encode()).hexdigest()
+              print(dest, len(content), got)
+              assert got == digest, (dest, got, digest)
           shutil.rmtree('.cursor-upload', ignore_errors=True)
           wf = Path('.github/workflows/assemble-upload.yml')
           if wf.exists():
