@@ -270,7 +270,7 @@ export class TuiRuntimeEventFlow {
     return (
       this.options.controller.snapshot().activeTurnId ??
       this.options.runProjection.snapshot().latestRuntimeTurnId ??
-      this.liveTurn?.turnId
+      [...this.liveTurns.values()].at(-1)?.turnId
     );
   }
 
@@ -350,11 +350,13 @@ export class TuiRuntimeEventFlow {
     }
 
     this.staleRunCandidate = undefined;
-    const liveTurn = this.liveTurn;
-    if (liveTurn?.sessionId === sessionId && liveTurn.turnId === projectedTurnId) {
+    const liveTurn = [...this.liveTurns.values()].find(
+      (turn) => turn.sessionId === sessionId && turn.turnId === projectedTurnId,
+    );
+    if (liveTurn) {
       liveTurn.controller.abort();
       void liveTurn.task.catch(() => undefined);
-      this.liveTurn = undefined;
+      this.liveTurns.delete(sessionId);
       this.options.controller.runtimeTurnSettlement.settleProjection(projectedTurnId, 'succeeded');
     }
     this.options.runProjection.reconcileRuntimeTurn(undefined);
