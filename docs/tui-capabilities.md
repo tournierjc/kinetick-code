@@ -209,6 +209,13 @@ Interactive control is `/skills` in the TUI:
   Approval writes the draft only after the write succeeds. A failed write leaves
   the proposal pending so it can be retried or rejected. Rejection never writes.
 
+The session server exposes the same writes to remote clients:
+`POST /sessions/<id>/skill-policy` sets one Session's dispositions, and
+`GET /skills/proposals` plus `POST /skills/proposals/<id>/review` list and decide
+pending drafts. Routes, query parameters, and status codes are in
+[harness integration](harness-integration.md). Direct Skill file create, edit, and
+delete remain unexposed over HTTP.
+
 Each user turn may add a `<prompt-skill-match>` reminder for Skills whose name
 or description overlaps the latest prompt, and a `<relevant-memory>` reminder
 for short overlapping Memory excerpts. Forbidden and closed-catalog Skills are

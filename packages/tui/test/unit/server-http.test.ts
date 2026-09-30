@@ -28,12 +28,29 @@ interface RecordedRuntime {
   readonly messageInputs: { sessionId: string; input?: { limit?: number; before?: string } }[];
 }
 
+/** The filter object `GET /skills/proposals` builds, as the port declares it. */
+type KnowledgeProposalFilter = {
+  status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  kind?: 'skill' | 'memory';
+  sessionId?: string;
+  limit?: number;
+};
+
 /** Mirrors the Runtime's transport-neutral failure: `AppError(status, key, message)`. */
 function sessionNotFound(sessionId: string): Error {
   return Object.assign(new Error(`Session not found: ${sessionId}`), {
     status: 404,
     key: 'local_session_not_found',
   });
+}
+
+/**
+ * Mirrors `KnowledgeProposalError` (`local-runtime/src/knowledge/proposal-store.ts`):
+ * a domain `code` and a `name`, no transport `status` — so the boundary has to
+ * translate it, and the HTTP suite has to prove the translation.
+ */
+function knowledgeProposalError(code: 'not-found' | 'not-pending', message: string): Error {
+  return Object.assign(new Error(message), { name: 'KnowledgeProposalError', code });
 }
 
 function createFakeRuntime(): RecordedRuntime {
@@ -285,9 +302,29 @@ describe('session server HTTP contract', () => {
 
   // --- Write surface -------------------------------------------------------
 
-  async function startWritable(): Promise<void> {
+  /**
+   * The write surface records what the runtime actually received, so a test can
+   * assert the forwarding contract rather than the fake's own echo of the
+   * request.
+   */
+  interface WriteWatch {
+    readonly calls: string[];
+    readonly proposalFilters: KnowledgeProposalFilter[];
+    readonly reviews: { proposalId: string; decision: string }[];
+  }
+
+  async function startWritable(): Promise<WriteWatch> {
     const writable = createFakeRuntime();
     const calls: string[] = [];
+    const proposalFilters: KnowledgeProposalFilter[] = [];
+    const reviews: { proposalId: string; decision: string }[] = [];
+    // Mirrors the product's per-Session policy: `applySessionSkillPolicyPatch`
+    // merges a patch onto the stored dispositions (a `null` clears the entry)
+    // and `listSkillsByDisposition` projects each bucket sorted.
+    const storedPolicy = {
+      dispositions: new Map<string, 'mandatory' | 'optional' | 'forbidden'>(),
+      closed: false,
+    };
     Object.assign(writable.runtime, {
       async createSession(input: { workspaceDir: string; title?: string }) {
         calls.push(`create:${input.workspaceDir}:${input.title ?? ''}`);
@@ -327,6 +364,70 @@ describe('session server HTTP contract', () => {
       async listSkills() {
         return { skills: [{ name: 'pdf', description: 'work with pdf files' }] };
       },
+      async updateSessionSkillPolicy(
+        sessionId: string,
+        patch: {
+          dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+          closed?: boolean;
+        },
+      ) {
+        calls.push(`skill-policy:${sessionId}:${JSON.stringify(patch)}`);
+        for (const [name, disposition] of Object.entries(patch.dispositions ?? {})) {
+          if (disposition === null) storedPolicy.dispositions.delete(name);
+          else storedPolicy.dispositions.set(name, disposition);
+        }
+        if (patch.closed !== undefined) storedPolicy.closed = patch.closed;
+        const byDisposition = (disposition: 'mandatory' | 'optional' | 'forbidden') =>
+          [...storedPolicy.dispositions]
+            .filter(([, value]) => value === disposition)
+            .map(([name]) => name)
+            .sort((left, right) => left.localeCompare(right));
+        return {
+          sessionId,
+          workspaceDir: '/workspace',
+          skillPolicy: {
+            closed: storedPolicy.closed,
+            mandatory: byDisposition('mandatory'),
+            optional: byDisposition('optional'),
+            forbidden: byDisposition('forbidden'),
+          },
+        };
+      },
+      async listKnowledgeProposals(filter: KnowledgeProposalFilter = {}) {
+        calls.push(`list-proposals:${JSON.stringify(filter)}`);
+        proposalFilters.push(filter);
+        return [
+          {
+            id: 'kp_abc123',
+            kind: 'skill' as const,
+            action: 'create' as const,
+            status: 'pending',
+            title: 'Capture pdf workflow',
+            summary: 'Draft a pdf Skill from recent turns',
+            draft: '---\nname: pdf-flow\ndescription: PDF workflow\n---\n# PDF',
+          },
+        ];
+      },
+      async reviewKnowledgeProposal(input: {
+        proposalId: string;
+        decision: 'approve' | 'reject';
+        editedDraft?: string;
+      }) {
+        calls.push(`review:${input.proposalId}:${input.decision}`);
+        reviews.push({ proposalId: input.proposalId, decision: input.decision });
+        // The store's own failures, which the HTTP boundary has to translate.
+        if (input.proposalId === 'kp_missing') {
+          throw knowledgeProposalError('not-found', `Proposal ${input.proposalId} not found`);
+        }
+        if (input.proposalId === 'kp_reviewed') {
+          throw knowledgeProposalError('not-pending', `Proposal ${input.proposalId} is approved`);
+        }
+        return {
+          applied: input.decision === 'approve',
+          title: 'Capture pdf workflow',
+          status: input.decision === 'approve' ? 'approved' : 'rejected',
+        };
+      },
     });
     recorded = writable;
     (recorded as { runtime: Record<string, unknown> }).runtime = writable.runtime;
@@ -338,7 +439,7 @@ describe('session server HTTP contract', () => {
       token: SERVER_TOKEN,
       logger: { info: () => undefined, warn: () => undefined },
     });
-    void calls;
+    return { calls, proposalFilters, reviews };
   }
 
   it('creates, renames, and deletes sessions through the write verbs', async () => {
@@ -417,12 +518,134 @@ describe('session server HTTP contract', () => {
     expect(list.skills[0]?.name).toBe('pdf');
   });
 
+  it('merges session skill policy patches across calls', async () => {
+    await startWritable();
+    const first = await get('/sessions/session-1/skill-policy', {
+      method: 'POST',
+      body: JSON.stringify({ dispositions: { pdf: 'mandatory', xlsx: 'forbidden' } }),
+    });
+    expect(first.status).toBe(200);
+    expect((await first.json()) as { skillPolicy: unknown }).toMatchObject({
+      skillPolicy: { closed: false, mandatory: ['pdf'], optional: [], forbidden: ['xlsx'] },
+    });
+
+    // The `/skills clear <name>` shape: a `null` disposition clears one entry
+    // while the rest of the patch accumulates on the stored policy.
+    const second = await get('/sessions/session-1/skill-policy', {
+      method: 'POST',
+      body: JSON.stringify({ dispositions: { pdf: null, xlsx: 'optional' }, closed: true }),
+    });
+    expect(second.status).toBe(200);
+    expect((await second.json()) as { skillPolicy: unknown }).toMatchObject({
+      skillPolicy: { closed: true, mandatory: [], optional: ['xlsx'], forbidden: [] },
+    });
+
+    const empty = await get('/sessions/session-1/skill-policy', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    expect(empty.status).toBe(400);
+  });
+
+  it('forwards the knowledge proposal filters and returns the review outcome', async () => {
+    const watch = await startWritable();
+    const proposals = await get(
+      '/skills/proposals?status=pending&kind=memory&sessionId=session-1&limit=30',
+    );
+    expect(proposals.status).toBe(200);
+    const page = (await proposals.json()) as { proposals: { id: string }[] };
+    expect(page.proposals[0]?.id).toBe('kp_abc123');
+    // `kind` and `limit` are part of the port's filter contract: the boundary
+    // has to forward them, not only the two fields the first client used.
+    expect(watch.proposalFilters).toEqual([
+      { status: 'pending', kind: 'memory', sessionId: 'session-1', limit: 30 },
+    ]);
+
+    const approved = await get('/skills/proposals/kp_abc123/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'approve', reviewNote: 'looks right' }),
+    });
+    expect(approved.status).toBe(200);
+    expect(await approved.json()).toEqual({
+      applied: true,
+      title: 'Capture pdf workflow',
+      status: 'approved',
+    });
+    expect(watch.reviews).toEqual([{ proposalId: 'kp_abc123', decision: 'approve' }]);
+
+    const badDecision = await get('/skills/proposals/kp_abc123/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'maybe' }),
+    });
+    expect(badDecision.status).toBe(400);
+  });
+
+  it('clamps an oversized proposal limit and rejects an unknown filter value', async () => {
+    const watch = await startWritable();
+    // The draft store keeps every past proposal, so the query string alone must
+    // not be able to ask for all of it over the LAN.
+    expect((await get('/skills/proposals?limit=100000')).status).toBe(200);
+    expect(watch.proposalFilters.at(-1)?.limit).toBe(200);
+    expect((await get('/skills/proposals?status=done')).status).toBe(400);
+    expect((await get('/skills/proposals?kind=notes')).status).toBe(400);
+    expect((await get('/skills/proposals?limit=0')).status).toBe(400);
+  });
+
+  it('maps knowledge proposal domain codes to 404 and 409, not 500', async () => {
+    await startWritable();
+    // A review of a proposal that is gone, then the double-approve retry a
+    // client walks into when it re-sends a decision it already made.
+    const missing = await get('/skills/proposals/kp_missing/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'approve' }),
+    });
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: 'Proposal kp_missing not found' });
+
+    const alreadyReviewed = await get('/skills/proposals/kp_reviewed/review', {
+      method: 'POST',
+      body: JSON.stringify({ decision: 'approve' }),
+    });
+    expect(alreadyReviewed.status).toBe(409);
+    expect(await alreadyReviewed.json()).toEqual({ error: 'Proposal kp_reviewed is approved' });
+  });
+
+  it('keeps every non-route /skills path on the plain 404 tail', async () => {
+    await startWritable();
+    // `/skills/proposals` is the only sub-resource under `/skills`; a stray
+    // path must answer the same 404 whatever capabilities the runtime exposes,
+    // instead of inheriting the proposals route's own failure wording.
+    const strays = ['/skills/pdf', '/skills/proposals/kp_abc123', '/skills/proposals/a/b/c'];
+    for (const path of strays) {
+      const response = await get(path);
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ error: 'not found' });
+    }
+  });
+
   it('reports unsupported capabilities as 404 for the minimal runtime', async () => {
     await start();
     // The minimal read-only fake runtime exposes none of the write surface.
     expect((await get('/sessions/session-1/prompt', { method: 'POST', body: '{}' })).status).toBe(404);
     expect((await get('/permissions')).status).toBe(404);
     expect((await get('/skills')).status).toBe(404);
+    expect((await get('/skills/proposals')).status).toBe(404);
+    expect(
+      (
+        await get('/skills/proposals/kp_abc123/review', {
+          method: 'POST',
+          body: JSON.stringify({ decision: 'approve' }),
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await get('/sessions/session-1/skill-policy', {
+          method: 'POST',
+          body: JSON.stringify({ dispositions: { pdf: 'mandatory' } }),
+        })
+      ).status,
+    ).toBe(404);
     expect((await get('/sessions/session-1/delegation')).status).toBe(404);
     expect((await get('/events')).status).toBe(404);
   });
