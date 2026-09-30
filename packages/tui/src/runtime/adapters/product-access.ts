@@ -449,6 +449,33 @@ export class TuiProductAccess {
     return { skills, hasMore: false };
   }
 
+  listKnowledgeProposals(
+    filter: {
+      status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+      kind?: 'skill' | 'memory';
+      sessionId?: string;
+      limit?: number;
+    } = {},
+  ) {
+    return this.context.service('knowledge.list').listKnowledgeProposals(filter);
+  }
+
+  async reviewKnowledgeProposal(input: {
+    proposalId: string;
+    decision: 'approve' | 'reject';
+    editedDraft?: string;
+    reviewNote?: string;
+  }) {
+    const result = await this.context
+      .service('knowledge.review')
+      .reviewKnowledgeProposal(input);
+    return {
+      applied: result.applied,
+      title: result.proposal.title,
+      status: result.proposal.status,
+    };
+  }
+
   inspectProjectMcp(
     sessionId: string,
   ): Promise<TuiProjectMcpPreview | undefined> {

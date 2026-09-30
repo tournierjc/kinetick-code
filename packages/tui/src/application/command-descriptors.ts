@@ -32,7 +32,9 @@ export const TUI_COMMAND_DESCRIPTORS = {
   },
   skills: {
     name: 'skills',
-    description: 'List built-in and user Skills',
+    // Shared with ACP, whose /skills handler only lists Skills. Session policy and
+    // proposal review wording lives on the TUI catalog entry.
+    description: 'List Skills',
   },
   mcp: {
     name: 'mcp',

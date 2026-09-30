@@ -170,6 +170,7 @@ import {
 import { LocalSkillHubStore } from "../skills/hub-api.js";
 import { resolveBuiltinSkillsDir } from "../skills/roots.js";
 import { seedBuiltinSkills } from "../skills/seed-builtin.js";
+import { applyPromptSkillSessionPolicy } from "../skills/prompt-skill-lookup.js";
 import {
   initSkillService,
   type LocalSkillService,
@@ -629,6 +630,17 @@ export class LocalRuntimeApiHost {
       cliSunsetNotice: options.cliSunsetNotice,
       agentFacts: () => this.agentRuntimePort,
       userConfiguredName: () => this.authContextGetter?.()?.subUserName,
+      listSkillCandidates: async (session) => {
+        const result = await this.skillService.listRuntimeSkills({
+          agentName: session.agentName,
+          ...(session.workspaceDir ? { workspaceDir: session.workspaceDir } : {}),
+        });
+        const listed = (result.skills ?? []).map((skill) => ({
+          name: skill.name,
+          ...(skill.description ? { description: skill.description } : {}),
+        }));
+        return applyPromptSkillSessionPolicy(listed, session.skillPolicy);
+      },
     });
     this.memoryFacade = memory.memoryFacade;
     this.localDataCollector = memory.localDataCollector;

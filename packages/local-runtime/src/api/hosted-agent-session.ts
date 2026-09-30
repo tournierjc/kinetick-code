@@ -1,4 +1,5 @@
 import type { LocalSessionRecord } from '../sessions/controller.js';
+import type { PromptSkillSessionPolicy } from '../skills/prompt-skill-lookup.js';
 
 export interface HostedSessionSnapshot {
   readonly sessionId: string;
@@ -24,6 +25,7 @@ export interface HostedSessionSnapshot {
     readonly recallLocked: boolean;
     readonly recallLockedAtMs?: number;
   };
+  readonly skillPolicy?: PromptSkillSessionPolicy;
   readonly createdAtMs: number;
   readonly updatedAtMs: number;
 }

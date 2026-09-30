@@ -17,6 +17,7 @@ import {
 } from '../contract.js';
 import { normalizePersistedSessionKind, normalizeSessionType } from './normalization.js';
 import { readSessionMemoryPolicy, type SessionMemoryPolicy } from '../../memory-policy.js';
+import { readSessionSkillPolicy, type SessionSkillPolicy } from '../../skill-policy.js';
 
 export const CURRENT_SESSION_COLUMNAR_VERSION = 3;
 
@@ -27,6 +28,7 @@ export interface SessionExtraData {
   readonly appMode?: AppMode;
   readonly interactionMode?: SessionInteractionMode;
   readonly memoryPolicy?: SessionMemoryPolicy;
+  readonly skillPolicy?: SessionSkillPolicy;
   readonly errorSource?: string;
   readonly errorDetail?: string;
   readonly errorProviderId?: string;
@@ -150,6 +152,7 @@ export function sessionExtraDataFromRecord(record: SessionRecord): SessionExtraD
     appMode: record.sessionType === 'branch' ? record.appMode : undefined,
     interactionMode: record.interactionMode,
     memoryPolicy: record.memoryPolicy,
+    skillPolicy: record.skillPolicy,
     errorSource: record.errorSource,
     errorDetail: record.errorDetail,
     errorProviderId: record.errorProviderId,
@@ -190,6 +193,7 @@ export function parseSessionExtraData(raw: string): SessionExtraData {
       'extra_data_json',
     ),
     memoryPolicy: readOptionalSessionMemoryPolicy(record, 'memoryPolicy', 'extra_data_json'),
+    skillPolicy: readOptionalSessionSkillPolicy(record, 'skillPolicy', 'extra_data_json'),
     errorSource: readOptionalString(record, 'errorSource', 'extra_data_json'),
     errorDetail: readOptionalString(record, 'errorDetail', 'extra_data_json'),
     errorProviderId: readOptionalString(record, 'errorProviderId', 'extra_data_json'),
@@ -250,6 +254,9 @@ function validateExtraData(data: SessionExtraData): void {
   if (data.memoryPolicy) {
     readSessionMemoryPolicy(data.memoryPolicy, 'extra_data_json.memoryPolicy');
   }
+  if (data.skillPolicy) {
+    readSessionSkillPolicy(data.skillPolicy, 'extra_data_json.skillPolicy');
+  }
 }
 
 function readOptionalSessionMemoryPolicy(
@@ -261,6 +268,17 @@ function readOptionalSessionMemoryPolicy(
   return value === undefined || value === null
     ? undefined
     : readSessionMemoryPolicy(value, `${field}.${key}`);
+}
+
+function readOptionalSessionSkillPolicy(
+  record: Record<string, unknown>,
+  key: string,
+  field: string,
+): SessionSkillPolicy | undefined {
+  const value = record[key];
+  return value === undefined || value === null
+    ? undefined
+    : readSessionSkillPolicy(value, `${field}.${key}`);
 }
 
 function readOptionalModelThinkingSelection(

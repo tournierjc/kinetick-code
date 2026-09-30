@@ -248,6 +248,16 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   renameSession(sessionId: string, title: string): Promise<TuiSession> {
     return this.sessionAccess.renameSession(sessionId, title);
   }
+
+  updateSessionSkillPolicy(
+    sessionId: string,
+    skillPolicy: {
+      dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+      closed?: boolean;
+    },
+  ): Promise<TuiSession> {
+    return this.sessionAccess.updateSessionSkillPolicy(sessionId, skillPolicy);
+  }
   archiveSession(sessionId: string, archived: boolean): Promise<void> {
     return this.sessionAccess.archiveSession(sessionId, archived);
   }
@@ -548,6 +558,24 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     workspaceDir?: string,
   ): Promise<TuiSkillList> {
     return this.productAccess.listSkills(agentName, keyword, workspaceDir);
+  }
+  listKnowledgeProposals(
+    filter?: {
+      status?: 'pending' | 'approved' | 'rejected' | 'cancelled';
+      kind?: 'skill' | 'memory';
+      sessionId?: string;
+      limit?: number;
+    },
+  ) {
+    return this.productAccess.listKnowledgeProposals(filter);
+  }
+  reviewKnowledgeProposal(input: {
+    proposalId: string;
+    decision: 'approve' | 'reject';
+    editedDraft?: string;
+    reviewNote?: string;
+  }) {
+    return this.productAccess.reviewKnowledgeProposal(input);
   }
   inspectProjectMcp(
     sessionId: string,

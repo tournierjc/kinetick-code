@@ -176,13 +176,59 @@ is created, loaded, resumed, or forked. Discovery uses the session's Agent and
 workspace, including installed plugin Skills. Command names come from the runtime
 Skill roster (for example, `/review` or `/plugin:review`), not the installation
 package name. Select a command and append instructions to invoke it through the
-normal Agent turn. `/skills [filter]` lists the session's available Skills.
+normal Agent turn. ACP `/skills [filter]` only lists the session's available Skills.
+Session policy and proposal review are interactive TUI commands; ACP does not
+advertise them.
 
 Built-in command names take priority over conflicting Skill names. Disabled,
 duplicate, and invalid command names are omitted. If Skill discovery fails,
 built-in commands remain available. Reopen the session after installing or enabling
 Skills to refresh its command menu. Protocol tests cover command discovery and
 prompt forwarding; this does not establish live Zed or model acceptance.
+## Skill and Memory management
+Session Skill policy, prompt-conditioned Skill and Memory reminders, and
+human-reviewed idle drafts are Kinetick Code behavior. They are not part of
+upstream MiniMax Code. Upstream synchronization must not treat these paths as
+inherited product surface.
+
+Interactive control is `/skills` in the TUI:
+
+- `/skills [filter]` lists Skills. The words `require`, `optional`, `forbid`,
+  `clear`, `policy`, `review`, `approve`, and `reject` are reserved verbs, so a
+  Skill literally named `review` cannot be filtered with `/skills review`.
+- `/skills require|optional|forbid <name>` sets that Skill's disposition for the
+  current Session. Mandatory Skills stay in the catalog even when an Agent
+  allowlist omits them. Forbidden Skills are removed from the system-prompt
+  catalog and from prompt-match reminders.
+- `/skills clear <name>` removes an explicit disposition. An open Session then
+  treats that Skill as optional again. A closed Session hides Skills that have
+  no explicit disposition.
+- `/skills policy` shows the Session's mandatory, optional, and forbidden Skills.
+- `/skills review` lists pending Skill and Memory drafts.
+- `/skills approve|reject <proposal-id>` applies or discards one pending draft.
+  Approval writes the draft only after the write succeeds. A failed write leaves
+  the proposal pending so it can be retried or rejected. Rejection never writes.
+
+Each user turn may add a `<prompt-skill-match>` reminder for Skills whose name
+or description overlaps the latest prompt, and a `<relevant-memory>` reminder
+for short overlapping Memory excerpts. Forbidden and closed-catalog Skills are
+omitted. Mandatory matches are tagged and ranked above optional ones. The
+memory reminder is bounded prompt overlap. An earlier default left it out
+because unscoped recall spent roughly 500–1000 tokens per turn at low precision.
+
+Idle drafts run after each completed turn of a root Session, not once per
+Session and not for branch or task Sessions. The runtime counts persisted user
+prompts and reads their recent text, then drafts one Skill proposal and one
+agent-Memory proposal when that count reaches eight and the Session has no
+pending proposal. The Session title is a label on the draft, not the source of
+its themes. Drafts stay in `local-runtime/knowledge-proposals.json` until a
+human approves or rejects them. Approving a Memory draft appends agent Memory.
+Only a draft whose target is `user` appends user Memory, and the TUI host
+refuses that write because it has no user-scoped Memory surface. Memory writes
+also follow `memory.enabled`; the headless CLI does not apply them. The store
+writes through a temporary file and rename. A corrupt file is left in place
+instead of being replaced with an empty list. Pending drafts are kept; older
+approved, rejected, and cancelled records are pruned.
 ## Desktop boundary
 Background workspace indexing is removed from this distribution. Runtime startup and conversation turns do not collect workspace snapshots, create workspace ZIP archives, or upload/retry them for cloud indexing. The semantic workspace search tool and its enablement policy are also removed; a saved indexing preference cannot reactivate them. Existing indexing records are left inert. User-directed file reading, search, and Git operations remain available.
 

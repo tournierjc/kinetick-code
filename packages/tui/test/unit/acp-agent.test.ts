@@ -542,7 +542,7 @@ describe('Kinetick Code ACP agent', () => {
               },
               {
                 name: 'skills',
-                description: 'List built-in and user Skills',
+                description: 'List Skills',
                 input: { hint: '[filter]' },
               },
               {
@@ -609,7 +609,7 @@ describe('Kinetick Code ACP agent', () => {
                 '- /status — Show account and model status',
                 '- /doctor — Check the local config file',
                 '- /context — Show the Runtime-owned context snapshot',
-                '- /skills [filter] — List built-in and user Skills',
+                '- /skills [filter] — List Skills',
                 '- /mcp [filter] — Inspect MCP capabilities and project configuration',
                 '- /usage — Show session usage',
                 '- /compact [instructions] — Shorten the active conversation',

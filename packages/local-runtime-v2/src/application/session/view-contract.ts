@@ -48,6 +48,14 @@ export interface SessionMemoryPolicyView {
   recallLocked: boolean;
   recallLockedAtMs?: number;
 }
+export type SessionSkillDispositionView = 'mandatory' | 'optional' | 'forbidden';
+export interface SessionSkillPolicyView {
+  dispositions: Record<string, SessionSkillDispositionView>;
+  closed: boolean;
+  mandatory: string[];
+  optional: string[];
+  forbidden: string[];
+}
 export type SessionStatusInfoView = {
   statusType: (typeof SessionStatusView)[keyof typeof SessionStatusView];
   message?: string;
@@ -81,6 +89,7 @@ export type SessionInfoView = PresentFields<
   sessionKind: SessionKind;
   interactionMode: SessionInteractionModeView;
   memoryPolicy: SessionMemoryPolicyView;
+  skillPolicy: SessionSkillPolicyView;
   conversationCapabilities?: { fork: boolean; rewind: boolean };
   model?: ModelInfoView;
   runLocation?: RunLocationView;

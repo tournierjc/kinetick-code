@@ -11,6 +11,7 @@
 - [Examples](examples.md): code fixes, model selection, search, and image input.
 - [Status line configuration](../packages/tui/docs/status-line-config.md): the default status line and optional machine-readable mode.
 - [Capabilities and service boundaries](tui-capabilities.md): accounts, tools, plugins, sandboxing, and network behavior.
+- [Skill and Memory management](tui-capabilities.md#skill-and-memory-management): Kinetick-only session Skill policy, prompt lookup, and human-reviewed drafts.
 - [Network egress policy](egress-policy.md): the default-deny guard, its allowlist, and its escape hatches.
 
 ## Contribute

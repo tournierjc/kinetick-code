@@ -95,11 +95,13 @@ import type {
 } from "../application/conversation/conversation-application.js";
 import type { RuntimeApplications } from "../application/initialize.js";
 import type { LocalRuntimeApplication } from "../application/session/process-local-application-contract.js";
+import type { KnowledgeReviewApplication } from "@mavis/local-runtime";
 
 export interface CliServiceOptions {
   readonly applications: RuntimeApplications;
   readonly application: LocalRuntimeApplication;
   readonly conversation: ConversationApplication;
+  readonly knowledge?: KnowledgeReviewApplication;
 }
 
 export type CliSendMessageReq = ConversationSendMessageRequest;
@@ -867,6 +869,39 @@ export class CliService {
     >[0],
   ) {
     return this.options.application.skills.listRuntimeSkills(input);
+  }
+
+  listKnowledgeProposals(
+    filter: Parameters<KnowledgeReviewApplication["listProposals"]>[0] = {},
+  ) {
+    return this.requireKnowledge().listProposals(filter);
+  }
+
+  getKnowledgeProposal(proposalId: string) {
+    return this.requireKnowledge().getProposal(proposalId);
+  }
+
+  reviewKnowledgeProposal(
+    input: Parameters<KnowledgeReviewApplication["reviewProposal"]>[0],
+  ) {
+    return this.requireKnowledge().reviewProposal(input);
+  }
+
+  cancelKnowledgeProposal(proposalId: string, reason?: string) {
+    return this.requireKnowledge().cancelProposal(proposalId, reason);
+  }
+
+  createIdleKnowledgeProposals(
+    input: Parameters<KnowledgeReviewApplication["onSessionIdle"]>[0],
+  ) {
+    return this.requireKnowledge().onSessionIdle(input);
+  }
+
+  private requireKnowledge(): KnowledgeReviewApplication {
+    if (!this.options.knowledge) {
+      throw new Error("Knowledge review is unavailable in this host");
+    }
+    return this.options.knowledge;
   }
 
   listBackgroundTasks(
