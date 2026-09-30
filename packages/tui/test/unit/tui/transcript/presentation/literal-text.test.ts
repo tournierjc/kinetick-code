@@ -9,8 +9,8 @@ import {
   tuiColors,
 } from '../../../../../src/tui/theme/runtime.js';
 import {
-  MINIMAX_CODE_DARK_THEME,
-  MINIMAX_CODE_LIGHT_THEME,
+  KCODE_DARK_THEME,
+  KCODE_LIGHT_THEME,
 } from '../../../../../src/tui/theme/palettes.js';
 import { wrapLiteralUserText } from '../../../../../src/tui/transcript/presentation/literal-text.js';
 
@@ -19,7 +19,7 @@ const plain = (lines: string[]): string[] => lines.map((line) => stripVTControlC
 describe('wrapLiteralUserText', () => {
   const originalTheme = getTuiThemeSnapshot();
   const palette =
-    originalTheme.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+    originalTheme.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
 
   beforeEach(() => {
     // Real color output, so styling assertions cannot pass vacuously.
