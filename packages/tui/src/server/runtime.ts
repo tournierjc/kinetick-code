@@ -57,8 +57,12 @@ export type TuiServerRuntime = Pick<
       | 'getSessionUsage'
       | 'requestCompaction'
       | 'listSkills'
+      | 'listKnowledgeProposals'
+      | 'reviewKnowledgeProposal'
       | 'listMcpServers'
       | 'getContextSnapshot'
+      // Session skill policy (kinetick-code #99).
+      | 'updateSessionSkillPolicy'
       // Configuration (models, permission mode, diagnostics, account).
       | 'getRuntimeDiagnostics'
       | 'getAccountStatus'
