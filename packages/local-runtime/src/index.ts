@@ -17,6 +17,13 @@ export {
 } from "./persistence/sqlite-persistence.js";
 export { closeAgentDb } from "./agent/db.js";
 export { resolveTaskTarget } from "./agent/port.js";
+export {
+  evaluateLocalAgentSpawnGate,
+  resolveLocalSpawnGateFacts,
+  type AgentMavisSpawnPolicy,
+  type LocalSpawnGateDecision,
+  type LocalSpawnGateFacts,
+} from "./agent/spawn-gate.js";
 export { withAgentNameConflictMigrationLock } from "./persistence/migration/agent-name-conflict-migration.js";
 export {
   createDeferredLocalAgentRuntimePort,

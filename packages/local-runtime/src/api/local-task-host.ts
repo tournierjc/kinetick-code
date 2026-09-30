@@ -5,6 +5,7 @@ import type {
 import type { MetricsClient } from '../common/metrics.js';
 import type { LocalBashCompletion } from '../runtime/bash-completion-correlation.js';
 import type { AgentReferenceResolver } from '../agent/port.js';
+import type { LocalAgentSpawnPolicyPort } from '../agent/runtime-port.js';
 import type { SubagentTelemetryHost } from '../agent/subagent-telemetry.js';
 import type { LocalBackgroundTaskService } from '../background-task/service.js';
 import type { LocalRuntimeConfig } from '../config/types.js';
@@ -14,6 +15,8 @@ import type { LocalRuntimeApiHostOptions } from './host-helpers.js';
 /** Product capabilities used by Task and background Bash adapters. */
 export interface LocalTaskRunnerHost extends SubagentTelemetryHost {
   readonly agentResolver: AgentReferenceResolver;
+  /** Declarative spawn-policy source for the task-spawn gate (may be absent). */
+  readonly agentSpawnPolicyPort?: LocalAgentSpawnPolicyPort;
   readonly runtimeConversation?: RuntimeConversation;
   readonly agentRoutes: {
     createSession(input: {

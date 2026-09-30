@@ -44,6 +44,10 @@ export interface InitializeApplicationsOptions {
   readonly compatibility: V1SessionCompatibility;
   readonly attachmentRegistration: LocalAttachmentRegistrationPort;
   readonly resolveAgentWriteTarget: (requestRef: string) => Promise<string>;
+  /** Declarative spawn policy read for the user-create subagent-only gate. */
+  readonly getAgentSpawnPolicy?: (
+    requestRef: string,
+  ) => Promise<{ readonly spawnMode?: "subagent-only" | "master-only" | "both" }>;
   readonly requireExactAgentKey: SessionRootApplicationOptions["requireExactAgentKey"];
   readonly turn: SessionRootApplicationOptions["turn"] & {
     sessionDeletion(
@@ -105,6 +109,9 @@ export const initializeApplications: InitializeApplications = (options) => {
   const createSideSession =
     options.conversationMutationWorkflow?.createSideSession;
   const lifecycle = new SessionLifecycleApplication({
+    ...(options.getAgentSpawnPolicy
+      ? { getAgentSpawnPolicy: options.getAgentSpawnPolicy }
+      : {}),
     lifecycle: options.sessionSystem.session.lifecycle,
     ...(createSideSession
       ? {

@@ -253,6 +253,16 @@ function registerCanonicalConfigParsingTests(): void {
       "extensionSkills",
     ],
     [
+      "invalid spawn mode",
+      "---\nname: researcher\ndescription: desc\nx-mavis:\n  spawnMode: solo\n---\n",
+      "x-mavis.spawnMode",
+    ],
+    [
+      "invalid canSpawn list",
+      "---\nname: researcher\ndescription: desc\nx-mavis:\n  canSpawn: orchestrator\n---\n",
+      "canSpawn",
+    ],
+    [
       "relative workspace",
       "---\nname: researcher\ndescription: desc\nx-mavis:\n  defaultWorkspaceDir: relative/workspace\n---\n",
       "x-mavis.defaultWorkspaceDir",

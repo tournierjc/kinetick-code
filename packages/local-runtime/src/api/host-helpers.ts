@@ -20,7 +20,10 @@ import type { CronStorePort } from "@mavis/cron";
 import type { PermissionRuleMatcher } from "@mavis/permission";
 import type { GlobalEventPayloadMap } from "@mavis/shared/global-events";
 import type { AgentReferenceResolver } from "../agent/port.js";
-import type { LocalAgentRuntimePort } from "../agent/runtime-port.js";
+import type {
+  LocalAgentRuntimePort,
+  LocalAgentSpawnPolicyPort,
+} from "../agent/runtime-port.js";
 import type { LocalBrowserBroker } from "../browser/api.js";
 import type { LocalAccessControlStore } from "../channels/access-control-store.js";
 import type { LocalFeishuChannelStore } from "../channels/feishu.js";
@@ -132,6 +135,8 @@ export interface LocalRuntimeApiHostOptions {
   agentResolver?: AgentReferenceResolver;
   /** Owner-injected Agent runtime port for legacy HTTP/Desktop consumers. */
   agentRuntimePort?: LocalAgentRuntimePort;
+  /** Owner-injected spawn-policy source for the declarative task-spawn gate. */
+  agentSpawnPolicyPort?: LocalAgentSpawnPolicyPort;
   /** Read-only prompt source bound by the V2 owner after prompt-config starts. */
   promptSnapshots?: PromptSnapshotSource;
   modelResolver?: LocalModelResolverLike;

@@ -6,6 +6,9 @@ import { TextDecoder } from 'node:util';
 import { isDefaultAgentAvatarMarker } from '@mavis/shared/agent-avatar';
 import yaml from 'yaml';
 
+import type { AgentSpawnMode } from '../domain/spawn-policy.js';
+import { normalizeCanSpawn, parseAgentSpawnMode } from '../domain/spawn-policy.js';
+
 import { logger } from '../../../infra/logging/index.js';
 
 /**
@@ -54,6 +57,10 @@ export interface CanonicalAgentMavisConfig {
   readonly maxOutputTokens?: number;
   readonly defaultWorkspaceDir?: string;
   readonly extensionSkills?: readonly string[];
+  /** Declarative spawn policy; absent keeps today's behavior ('both', no allowlist). */
+  readonly spawnMode?: AgentSpawnMode;
+  /** Stable names (or canonical roles) allowed to spawn this Agent. Absent = no allowlist. */
+  readonly canSpawn?: readonly string[];
 }
 
 interface AgentConfigDiagnostic {
@@ -119,6 +126,8 @@ const KNOWN_MAVIS_FIELDS = new Set([
   'maxOutputTokens',
   'defaultWorkspaceDir',
   'extensionSkills',
+  'spawnMode',
+  'canSpawn',
 ]);
 const LEGACY_DESCRIPTION_NON_PLAIN_PREFIXES = '"\'[]{}&,*!|>@`#';
 const loggedAgentDirectoryLinks = new Set<string>();
@@ -946,6 +955,8 @@ function mavisFields(
   const contextWindow = optionalPositiveInteger(source, 'contextWindow');
   const maxOutputTokens = optionalPositiveInteger(source, 'maxOutputTokens');
   const extensionSkills = optionalTextArray(source, 'extensionSkills');
+  const spawnMode = parseAgentSpawnMode(source, invalid);
+  const canSpawn = normalizeCanSpawn(optionalTextArray(source, 'canSpawn'));
   return {
     ...(displayName ? { displayName } : {}),
     ...(avatar ? { avatar } : {}),
@@ -953,6 +964,8 @@ function mavisFields(
     ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
     ...(defaultWorkspaceDir ? { defaultWorkspaceDir } : {}),
     ...(extensionSkills === undefined ? {} : { extensionSkills }),
+    ...(spawnMode === undefined ? {} : { spawnMode }),
+    ...(canSpawn === undefined ? {} : { canSpawn }),
   };
 }
 
@@ -967,6 +980,8 @@ function serializeMavis(
   if (value.maxOutputTokens !== undefined) result.maxOutputTokens = value.maxOutputTokens;
   if (value.defaultWorkspaceDir) result.defaultWorkspaceDir = value.defaultWorkspaceDir;
   if (value.extensionSkills !== undefined) result.extensionSkills = [...value.extensionSkills];
+  if (value.spawnMode !== undefined) result.spawnMode = value.spawnMode;
+  if (value.canSpawn !== undefined) result.canSpawn = [...value.canSpawn];
   return Object.keys(result).length === 0 ? undefined : result;
 }
 

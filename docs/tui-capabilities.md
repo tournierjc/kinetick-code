@@ -163,6 +163,28 @@ Offline regression tests cover cascade ownership, delivery suppression, late
 task creation, repeated stops, append completion/shutdown, and queue fallback.
 The host integration tests use a scripted runner and real background processes;
 they do not establish live-model or cross-platform acceptance.
+## Agent spawn policy
+Declarative agent-to-agent spawn rules are Kinetick Code behavior, carried by
+a Custom Agent's canonical `agent.md` under `x-mavis`. They compose with — and
+never replace — the runtime-owned built-in feature policy (`features.delegation`)
+and the canonical role tool ceilings; those decide capability, this decides
+permission between named Agents.
+
+- `x-mavis.spawnMode: subagent-only | master-only | both` (default `both`,
+  today's behavior). A `master-only` Agent rejects `task` spawns from a task
+  child; a `subagent-only` Agent rejects user-initiated Session creation
+  (TUI, CLI, and `POST /sessions`) and remains spawnable by other Agents.
+- `x-mavis.canSpawn: [names]` restricts which parent Agents may spawn this
+  Agent through `task`. Entries are stable Agent names (case-insensitive). A
+  task-child spawn with an allowlist and an unresolvable parent identity is
+  denied (fail closed on an explicit restriction).
+- An Agent with no `x-mavis` policy block behaves exactly as before: the gate
+  fails open on missing policy, missing port, and unreadable policy files.
+- Built-in Agents (`mavis`, `explore`, `worker`, `verifier`) carry no Custom
+  file policy; their runtime-owned policy remains the only gate.
+- `agent list` (native `mavis` tool) and the management `listAgents` response
+  expose `spawnMode`/`canSpawn` so clients can render the spawn graph.
+
 ## Skill directory links
 Workspace `.agents/skills`, `.claude/skills`, and `.minimax/skills` support
 directory symlinks, both for the entire skill root and for individual skill
