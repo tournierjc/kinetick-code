@@ -259,6 +259,9 @@ the LAN, `http://192.168.1.50:9430`.
 | `POST` | `/sessions/<id>/pin` | Pin/unpin. Body: `{pinned}`. |
 | `GET` | `/sessions/<id>/rewind-preview/<userMessageId>` · `POST /sessions/<id>/rewind` | Rewind preview / rewind. Body: `{userMessageId, rewindTurnDiff?}`. |
 | `GET` | `/skills` | Skill list. Query: `agent`, `keyword`, `workspaceDir`. |
+| `POST` | `/sessions/<id>/skill-policy` | Set Session Skill dispositions. Body: `{dispositions?:{<name>:"mandatory"|"optional"|"forbidden"|null}, closed?:boolean}`. Returns the Session (with `skillPolicy`). |
+| `GET` | `/skills/proposals` | Skill/Memory drafts awaiting human review. Query: `status` (`pending`\|`approved`\|`rejected`\|`cancelled`), `kind` (`skill`\|`memory`), `sessionId`, `limit` (default 50, values above 200 clamped to 200). Returns `{proposals:[…]}` with each proposal's `id`, `kind`, `action`, `status`, `title`, `summary`, `draft`, `editedDraft?` and the provenance fields. |
+| `POST` | `/skills/proposals/<id>/review` | Approve or reject a draft. Body: `{decision:"approve"\|"reject", editedDraft?, reviewNote?}`. Returns `{applied, title, status}`: `applied` is `true` when an approval wrote the draft, `false` when the decision was only recorded (a rejection). Reviewing an unknown proposal answers `404` and an already-reviewed one `409`, both leaving the stored proposal untouched. |
 | `GET` | `/mcp` | MCP server list. Query: `keyword`, `sessionId`. |
 | `GET` | `/status` | Runtime diagnostics, account status, permission mode, model roster. |
 | `GET` | `/events` | Runtime event stream (`text/event-stream`): `questionnaire.ask`, `permission.ask`, `session.created`, `session.queue.updated`, … One subscription per connection; `: ping` keepalives every 15 s. |
@@ -390,8 +393,11 @@ permissions. Loopback does not hide the port from other users on the same
 machine; the token file mode is what keeps those users out.
 There is no per-turn subscription endpoint that replays a turn started by
 another connection (`/events` carries Runtime events, not deltas), so a second
-device joining a live turn polls the transcript until it settles. Skill writes
-(create/edit/delete) are not exposed; `GET /skills` is read-only.
+device joining a live turn polls the transcript until it settles. Direct Skill
+file create/edit/delete is not exposed; idle Skill/Memory drafts land as
+proposals under `/skills/proposals` and apply only after human
+approve/reject via `/skills/proposals/<id>/review`. Per-session Skill
+dispositions use `POST /sessions/<id>/skill-policy`.
 
 ## 4. Notes for callers
 
