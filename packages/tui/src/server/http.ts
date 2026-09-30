@@ -1,1 +1,1 @@
-@/tmp/content-for-mcp.txt
+PLACEHOLDER_LOAD_FROM_FILE
