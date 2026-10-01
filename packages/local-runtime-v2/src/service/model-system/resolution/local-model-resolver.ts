@@ -1,13 +1,8 @@
-import {
-  getModels,
-  getProviders,
-  type Api,
-  type Model,
-  type ThinkingLevelMap,
-} from '@earendil-works/pi-ai';
+import { streamSimple, getModels, getProviders, type Api, type Model, type ThinkingLevelMap } from '@earendil-works/pi-ai';
 import type { StreamFn, ThinkingLevel as PiThinkingLevel } from '@earendil-works/pi-agent-core';
 import {
   isFirstPartyMinimaxMessagesRoute,
+  minimaxApiModels,
   resolveProviderAuthMode,
   type ProviderAuthMode,
   type ProviderAuthModeSource,
@@ -17,8 +12,10 @@ import type { ManagedBackendRoutingContext } from '@mavis/agent-tools/desktop';
 import { withOpenCodeGoHeaders, withOpenRouterAttributionHeaders } from '@mavis/shared';
 
 import type {
+  LocalFallbackRouteWithKey,
   LocalModelCompatOverrides,
   LocalModelConfig,
+  LocalModelResolutionRecord,
   LocalModelResolveInput,
   LocalModelResolverLike,
   LocalModelResolverLogger,
@@ -34,7 +31,7 @@ import {
   MANAGED_MINIMAX_PROVIDER_ID,
   OPENAI_CODEX_PROVIDER_ID,
 } from '../identity.js';
-import { parseProviderId } from './model-key.js';
+import { parseProviderId, parseSourceQualifiedModelKey } from './model-key.js';
 import {
   isMiniMaxM3ModelId,
   isMiniMaxM3ThinkingMode,
@@ -132,17 +129,110 @@ export class LocalModelResolver implements LocalModelResolverLike {
   }
 
   async resolveModel(input: LocalModelResolveInput): Promise<LocalResolvedModelConfig> {
+    return this.resolveModelRecord(input).then((resolved) => resolved.primary);
+  }
+
+  /**
+   * Resolves the primary model and, when the AgentConfig declares a fallback
+   * chain, every candidate the host can route to. A candidate the host cannot
+   * route (missing key, retired provider, login required) is dropped with a
+   * warning: an unavailable fallback must never take the primary down.
+   */
+  async resolveModelRecord(
+    input: LocalModelResolveInput,
+  ): Promise<LocalModelResolutionRecord> {
     const providerConfig = this.options.providerConfigGetter?.() ?? this.options.providerConfig;
     const selected = selectModel(input.agentConfig, providerConfig, this.options);
-    if (selected.byokPlan) return this.finishByok(input, selected);
-    const switched = selectMinimaxByok(selected.identity, providerConfig, this.options);
+    const primary = selected.byokPlan
+      ? await this.finishByok(input, selected)
+      : await this.resolvePrimary(input, selected.identity, providerConfig);
+    const chain = readAgentFallbackChain(input.agentConfig);
+    if (chain.length === 0) return { primary };
+    const routes = (
+      await Promise.all(
+        chain.map(async (modelKey) => {
+          const identity = candidateIdentity(modelKey, providerConfig, this.options);
+          if (!identity) {
+            this.options.logger?.warn(
+              { modelKey },
+              'LocalModelResolver: fallback model is not routable on this provider config; dropped',
+            );
+            return undefined;
+          }
+          try {
+            const resolved = await this.resolveModelForIdentity(
+              { sessionId: input.sessionId, turnId: input.turnId, agentConfig: input.agentConfig },
+              identity,
+              providerConfig,
+            );
+            return {
+              modelKey,
+              model: resolved.model,
+              ...(resolved.apiKey ? { apiKey: resolved.apiKey } : {}),
+              ...(resolved.headers ? { headers: resolved.headers } : {}),
+              streamFn: resolved.streamFn ?? this.options.streamFn ?? streamSimple,
+            } satisfies LocalFallbackRouteWithKey;
+          } catch (error) {
+            this.options.logger?.warn(
+              {
+                modelKey,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              'LocalModelResolver: fallback model route failed to resolve; dropped',
+            );
+            return undefined;
+          }
+        }),
+      )
+    ).filter((route): route is LocalFallbackRouteWithKey => route !== undefined);
+    return {
+      primary,
+      ...(routes.length > 0 ? { fallbackRoutes: routes } : {}),
+    };
+  }
+
+  private async resolvePrimary(
+    input: LocalModelResolveInput,
+    identity: ModelIdentity,
+    providerConfig: LocalModelsConfig | undefined,
+  ): Promise<LocalResolvedModelConfig> {
+    const switched = selectMinimaxByok(identity, providerConfig, this.options);
     if (switched.byokPlan) return this.finishByok(input, switched);
-    return this.resolveManagedModel(input, switched.identity, providerConfig);
+    return this.resolveManagedModel(input, identity, providerConfig);
+  }
+
+  private async resolveModelForIdentity(
+    input: LocalModelResolveInput,
+    identity: ModelIdentity,
+    providerConfig: LocalModelsConfig | undefined,
+  ): Promise<LocalResolvedModelConfig> {
+    const parsed = parseProviderId(identity.provider);
+    if (parsed && parsed.source !== 'provider') {
+      const byokPlan = selectExternalByokPlan(identity, parsed, providerConfig, this.options);
+      if (byokPlan) {
+        return this.finishByok(
+          input,
+          { identity, byokPlan, route: parsed.source },
+          // The caller passed the exact model key; a built-in fallback swap
+          // here would silently bill the wrong endpoint.
+          { forbidBuiltinFallback: true },
+        );
+      }
+      // An external-qualified key with no routable BYOK plan: fail the
+      // candidate (the caller drops it), never swap in a builtin model.
+      throw new Error(
+        `LocalModelResolver: provider "${identity.provider}" is not configured for model "${identity.modelId}".`,
+      );
+    }
+    const switched = selectMinimaxByok(identity, providerConfig, this.options);
+    if (switched.byokPlan) return this.finishByok(input, switched);
+    return this.resolveManagedModel(input, identity, providerConfig);
   }
 
   private async finishByok(
     input: LocalModelResolveInput,
     selected: SelectedModel,
+    options: { forbidBuiltinFallback?: boolean } = {},
   ): Promise<LocalResolvedModelConfig> {
     const plan = selected.byokPlan;
     if (!plan || !selected.route) {
@@ -153,6 +243,9 @@ export class LocalModelResolver implements LocalModelResolverLike {
     return this.finishResolve({
       sessionId: input.sessionId,
       agentConfig: input.agentConfig,
+      ...(options.forbidBuiltinFallback
+        ? { identityProvider: selected.identity.provider }
+        : {}),
       ...selected.identity,
       managedProvider: false,
       byokProvider: true,
@@ -291,6 +384,51 @@ function selectModel(
   if (byokPlan) return { identity, byokPlan, route: parsed.source };
   return {
     identity: fallbackBuiltinIdentity(identity, providerConfig, options.logger),
+  };
+}
+
+/**
+ * The Agent-owned fallback chain stamped on the AgentConfig by preparation.
+ * Malformed entries are dropped here — the chain is advisory, never fatal.
+ */
+function readAgentFallbackChain(agentConfig: IAgentConfig): readonly string[] {
+  const raw = (agentConfig as { model_fallback_chain?: unknown }).model_fallback_chain;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (entry): entry is string => typeof entry === 'string' && entry.includes('/'),
+  );
+}
+
+/**
+ * Builds the ModelRef identity for one declared `provider/model` key using the
+ * same config-driven construction the primary path uses. Returns undefined
+ * when the provider/model has no config entry at all: a retired catalog model
+ * degrades to "no fallback", not a broken Turn.
+ */
+function candidateIdentity(
+  modelKey: string,
+  providerConfig: LocalModelsConfig | undefined,
+  options: LocalModelResolverOptions,
+): ModelIdentity | undefined {
+  const parsed = parseSourceQualifiedModelKey(modelKey);
+  if (!parsed) return undefined;
+  const provider = parsed.providerId;
+  const modelId = parsed.modelId;
+  const sourceModels =
+    parsed.source === 'minimax_api'
+      ? minimaxApiModels({
+          provider: providerConfig,
+          minimax_api: options.byokConfigGetter?.()?.minimax_api,
+        })
+      : parsed.source === 'custom_provider'
+        ? providerConfig?.[provider]?.models
+        : providerConfig?.[provider]?.models;
+  const modelConfig = sourceModels?.[modelId];
+  if (!modelConfig) return undefined;
+  return {
+    provider,
+    modelId,
+    modelRef: modelRefForModel(provider, modelId, modelConfig),
   };
 }
 

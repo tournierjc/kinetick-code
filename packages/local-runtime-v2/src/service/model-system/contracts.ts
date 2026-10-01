@@ -254,6 +254,36 @@ export interface LocalResolvedModelConfig extends LLMModelConfig {
 
 export interface LocalModelResolverLike {
   resolveModel(input: LocalModelResolveInput): Promise<LocalResolvedModelConfig>;
+  /**
+   * Optional: resolves the primary and the Agent-owned fallback routes in one
+   * pass. Hosts whose resolver lacks it keep plain retry-only behavior.
+   */
+  resolveModelRecord?(input: LocalModelResolveInput): Promise<LocalModelResolutionRecord>;
+}
+
+/**
+ * A fallback route the host resolved: everything `withLLMFallback` needs to
+ * issue the same provider call the primary makes, bound to one candidate.
+ */
+export interface LocalFallbackRouteResolution {
+  readonly model: LocalResolvedModelConfig['model'];
+  readonly apiKey?: string;
+  readonly headers?: Record<string, string>;
+  readonly streamFn?: StreamFn;
+}
+
+/** Primary route plus the resolved Agent-owned fallback routes (absent when none). */
+export interface LocalModelResolutionRecord {
+  readonly primary: LocalResolvedModelConfig;
+  /** Resolved candidates keyed by their declared `provider/model` (dropped entries absent). */
+  readonly fallbackRoutes?: readonly LocalFallbackRouteWithKey[];
+}
+
+/** One resolved candidate with the `provider/model` key it was declared under. */
+export interface LocalFallbackRouteWithKey extends LocalFallbackRouteResolution {
+  readonly modelKey: string;
+  /** Mandatory on resolved routes: the candidate must be callable on its own. */
+  readonly streamFn: NonNullable<LocalFallbackRouteResolution['streamFn']>;
 }
 
 export type MiniMaxM3ThinkingMode = 'on' | 'off';

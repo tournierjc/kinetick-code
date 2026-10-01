@@ -336,6 +336,12 @@ export interface IAgentConfig {
   plugins?: Array<IPluginRef>;
   tool_list_authoritative?: boolean;
   agent_role?: number;
+  /**
+   * Ordered fallback model chain (`provider/model` keys) resolved from the
+   * Agent config; the primary `model` is the implicit chain head and is NOT
+   * repeated here. Empty/absent means failover is disabled for this Turn.
+   */
+  model_fallback_chain?: Array<string>;
 }
 
 export interface IRuntimeUsage {

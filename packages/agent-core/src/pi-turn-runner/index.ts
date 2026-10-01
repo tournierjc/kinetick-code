@@ -27,6 +27,18 @@ export {
 export { composeStreamFn } from './llm.js';
 export { normalizeAbortSource } from './types.js';
 export {
+  DEFAULT_LLM_FALLBACK_POLICY,
+  normalizeModelChain,
+  resolveFallbackChain,
+  withLLMFallback,
+  type LLMFallbackCandidate,
+  type LLMFallbackEvent,
+  type LLMFallbackOptions,
+  type LLMFallbackPolicy,
+  type LLMFallbackStatus,
+  type LLMResolvedFallbackRoute,
+} from './llm-fallback.js';
+export {
   DEFAULT_LLM_RETRY_POLICY,
   LLM_RETRY_CALL_IDENTITY,
   LLM_RETRY_REQUEST_SETTLED_OBSERVER,

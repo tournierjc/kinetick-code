@@ -505,7 +505,13 @@ function bindAgentConfigModelPorts(ports: {
       // default, which is how `definitionOnly` Agents and most Custom Agents
       // are created. Passing no source lets the resolver apply that default,
       // and only a runtime with no default at all yields `undefined`.
-      const sources = configuredModelSelection.model
+      const sources: Array<{
+        source: string;
+        selection: Record<string, unknown>;
+        requireCatalog: boolean;
+        allowCustomProviderPrefixFallback: boolean;
+        defaultMissingEffortOff?: boolean;
+      }> = configuredModelSelection.model
         ? [
             {
               source: 'agent-config-save',
@@ -516,6 +522,17 @@ function bindAgentConfigModelPorts(ports: {
             },
           ]
         : [];
+      // Every declared fallback entry is validated as its own whole group
+      // (catalog-gated): saving a chain that includes a retired model would
+      // surface at failover time, far from the action that caused it.
+      for (const model of configuredModelSelection.fallbackModels ?? []) {
+        sources.push({
+          source: 'agent-config-save-fallback',
+          selection: { model },
+          requireCatalog: true,
+          allowCustomProviderPrefixFallback: true,
+        });
+      }
       // `resolveEffectiveAgentModelSelection` returns `undefined` only for
       // MODEL_SELECTION_INCOMPLETE (nothing configured anywhere) and throws
       // `AgentModelSelectionError` when a selection is present but unusable

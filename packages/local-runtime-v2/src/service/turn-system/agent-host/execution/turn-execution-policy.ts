@@ -2,6 +2,8 @@ import type { RunTurnInput } from '@mavis/agent-core/pi-turn-runner';
 import type { ToolExecutionContext } from '@mavis/agent-core/tools';
 
 import type { AgentExecutionSnapshot } from '../preparation/contracts.js';
+import type { LocalFallbackRouteWithKey } from '../../../model-system/index.js';
+import type { LLMResolvedFallbackRoute } from '@mavis/agent-core/pi-turn-runner';
 import type {
   AgentHostCommittedFacts,
   AgentHostFileChangeObservation,
@@ -50,7 +52,36 @@ export async function resolveLlmRetryOptions<
   input: LocalTurnExecutionInput<TAgent>,
   options: Pick<LocalRuntimeTurnExecutorOptions<TAgent, TContext>, 'resolveLlmRetry'>,
 ): Promise<NonNullable<RunTurnInput['llmRetry']>> {
-  return (await options.resolveLlmRetry?.(input)) ?? {};
+  const base = (await options.resolveLlmRetry?.(input)) ?? {};
+  const routes = agentFallbackRoutes(input);
+  if (routes.length === 0) return base;
+  return {
+    ...base,
+    modelFallbackChain: routes.map((route) => route.modelKey),
+    resolveFallbackRoute: async (modelKey): Promise<LLMResolvedFallbackRoute | undefined> => {
+      const route = routes.find((candidate) => candidate.modelKey === modelKey);
+      if (!route) return undefined;
+      return {
+        model: route.model,
+        ...(route.apiKey ? { apiKey: route.apiKey } : {}),
+        ...(route.headers ? { headers: route.headers } : {}),
+        streamFn: route.streamFn,
+      };
+    },
+  };
+}
+
+/** Reads the resolved Agent-owned fallback routes off the prepared turn facts. */
+function agentFallbackRoutes(input: LocalTurnExecutionInput): readonly LocalFallbackRouteWithKey[] {
+  const raw = (input.preparation as { fallbackRoutes?: unknown }).fallbackRoutes;
+  return Array.isArray(raw)
+    ? raw.filter(
+        (route): route is LocalFallbackRouteWithKey =>
+          typeof route === 'object' &&
+          route !== null &&
+          typeof (route as { modelKey?: unknown }).modelKey === 'string',
+      )
+    : [];
 }
 
 export function attachCommittedFacts(

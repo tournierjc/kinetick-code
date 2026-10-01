@@ -128,6 +128,17 @@ export interface LLMRetryOptions {
   observer?: (event: LLMRetryEvent) => void | Promise<void>;
   /** Final logical outcome observer. It is isolated from provider-call behavior. */
   onCallSettled?: (event: LLMCallSettledEvent) => void | Promise<void>;
+  /**
+   * Agent-owned ordered fallback model chain (`provider/model` keys; primary
+   * is chain head and not included). The host resolves each entry into a
+   * route via `resolveFallbackRoute`; absent/empty keeps retry-only behavior.
+   */
+  modelFallbackChain?: readonly string[];
+  resolveFallbackRoute?: (
+    modelKey: string,
+  ) => Promise<import('./llm-fallback.js').LLMResolvedFallbackRoute | undefined>;
+  /** Emits per-promotion events (activated/cooldown/exhausted) to the host. */
+  onFallbackEvent?: (event: import('./llm-fallback.js').LLMFallbackEvent) => void | Promise<void>;
   generateCallId?: () => string;
   nowMs?: () => number;
   random?: () => number;

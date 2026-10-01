@@ -136,7 +136,7 @@ export class PiTurnRunner {
         sessionId: input.sessionId,
         turnId: input.turnId,
       });
-      const turn = newTurn(input, {
+      const turn = await newTurn(input, {
         allocator: this.messageIdAllocator,
         nowMs: this.now,
         logger: this.logger,

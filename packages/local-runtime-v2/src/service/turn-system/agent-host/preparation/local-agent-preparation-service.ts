@@ -2,6 +2,7 @@ import type { IAgentConfig } from '@mavis/protocol';
 
 import type { SessionRecord } from '../../../session-system/index.js';
 import type {
+  LocalFallbackRouteResolution,
   LocalModelResolverLike,
   LocalModelResolveInput,
 } from '../../../model-system/index.js';
@@ -12,6 +13,7 @@ import type {
   LocalTurnPreparation,
   LocalTurnPreparationInput,
   LocalTurnPreparationSource,
+  LocalTurnPreparationWithFallback,
 } from './contracts.js';
 import {
   LocalAgentConfigBuilder,
@@ -58,6 +60,30 @@ export class LocalAgentPreparationService
     });
   }
 
+  /**
+   * Turn preparation with the Agent-owned fallback routes resolved alongside
+   * the primary. The AgentHost runner path uses this so the executor can wire
+   * `withLLMFallback` with concrete candidate routes.
+   */
+  async prepareWithFallback(
+    input: LocalTurnPreparationInput,
+  ): Promise<LocalTurnPreparationWithFallback> {
+    const model = toModelOverride(input.request.input.model);
+    return this.prepareResolved(
+      {
+        session: input.session,
+        agent: input.agent,
+        turnId: input.turnId,
+        isSessionFirstTurn: input.history.messages.length === 0,
+        ...(input.desktopCapabilities ? { desktopCapabilities: input.desktopCapabilities } : {}),
+        ...(model ? { model } : {}),
+        ...(input.request.clientIntent ? { clientIntent: input.request.clientIntent } : {}),
+        ...(input.promptRead ? { promptRead: input.promptRead } : {}),
+      },
+      { withFallbackRoutes: true },
+    );
+  }
+
   prepareCompaction(input: ContextCompactionPreparationInput): Promise<LocalTurnPreparation> {
     return this.prepareResolved({
       session: input.session,
@@ -87,23 +113,40 @@ export class LocalAgentPreparationService
     return this.options.modelResolver.resolveModel(input);
   }
 
-  private async prepareResolved(input: {
-    readonly session: SessionRecord;
-    readonly agent: AgentExecutionSnapshot;
-    readonly turnId: string;
-    readonly model?: LocalAgentModelOverride;
-    readonly isSessionFirstTurn: boolean;
-    readonly desktopCapabilities?: LocalTurnPreparationInput['desktopCapabilities'];
-    readonly clientIntent?: string;
-    readonly promptRead?: LocalTurnPreparationInput['promptRead'];
-  }): Promise<LocalTurnPreparation> {
+  private async prepareResolved(
+    input: {
+      readonly session: SessionRecord;
+      readonly agent: AgentExecutionSnapshot;
+      readonly turnId: string;
+      readonly model?: LocalAgentModelOverride;
+      readonly isSessionFirstTurn: boolean;
+      readonly desktopCapabilities?: LocalTurnPreparationInput['desktopCapabilities'];
+      readonly clientIntent?: string;
+      readonly promptRead?: LocalTurnPreparationInput['promptRead'];
+    },
+    options: { withFallbackRoutes?: boolean } = {},
+  ): Promise<LocalTurnPreparationWithFallback> {
     const built = await this.options.configBuilder.buildPrepared(input);
     const builtAgentConfig = built.agentConfig;
-    const llm = await this.resolveModel({
+    const resolveInput = {
       sessionId: input.session.sessionId,
       turnId: input.turnId,
       agentConfig: builtAgentConfig,
-    });
+    };
+    if (options.withFallbackRoutes && this.options.modelResolver.resolveModelRecord) {
+      const record = await this.options.modelResolver.resolveModelRecord(resolveInput);
+      return {
+        agentConfig: Object.freeze({ ...builtAgentConfig }),
+        llm: record.primary,
+        ...(record.fallbackRoutes ? { fallbackRoutes: record.fallbackRoutes } : {}),
+        outputRevisionInstruction: built.outputRevisionInstruction,
+        ...(built.retryContinuationPrompt
+          ? { retryContinuationPrompt: built.retryContinuationPrompt }
+          : {}),
+        ...(built.promptRead ? { promptRead: built.promptRead } : {}),
+      };
+    }
+    const llm = await this.resolveModel(resolveInput);
     return {
       agentConfig: Object.freeze({ ...builtAgentConfig }),
       llm,

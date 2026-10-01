@@ -150,13 +150,14 @@ function readConfigSelection(
     ...optionalStringArray(source, 'mcpServers'),
     ...optionalStringArray(source, 'skills'),
     ...optionalStringArray(source, 'extensionSkills'),
+    ...optionalStringArray(source, 'fallbackModels'),
   };
   return Object.keys(selection).length > 0 ? selection : undefined;
 }
 
 function optionalStringArray(
   record: Readonly<Record<string, unknown>>,
-  key: 'tools' | 'disallowedTools' | 'mcpServers' | 'skills' | 'extensionSkills',
+  key: 'tools' | 'disallowedTools' | 'mcpServers' | 'skills' | 'extensionSkills' | 'fallbackModels',
 ): Partial<NonNullable<LocalTurnAgentProfileFacts['configSelection']>> {
   const value = record[key];
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) return {};

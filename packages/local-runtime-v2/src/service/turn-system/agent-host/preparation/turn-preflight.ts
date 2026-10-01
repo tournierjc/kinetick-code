@@ -150,15 +150,25 @@ export class TurnPreflight<TAgent extends AgentExecutionSnapshot = AgentExecutio
       logContext,
       'agent_preparation',
       () =>
-        this.dependencies.preparation.prepare({
-          turnId: input.lease.turnId,
-          request: input.request,
-          session,
-          agent,
-          history: runnerHistory,
-          ...(desktopCapabilities ? { desktopCapabilities } : {}),
-          ...(internalPromptRead ? { promptRead: internalPromptRead } : {}),
-        }),
+        this.dependencies.preparation.prepareWithFallback
+          ? this.dependencies.preparation.prepareWithFallback({
+              turnId: input.lease.turnId,
+              request: input.request,
+              session,
+              agent,
+              history: runnerHistory,
+              ...(desktopCapabilities ? { desktopCapabilities } : {}),
+              ...(internalPromptRead ? { promptRead: internalPromptRead } : {}),
+            })
+          : this.dependencies.preparation.prepare({
+              turnId: input.lease.turnId,
+              request: input.request,
+              session,
+              agent,
+              history: runnerHistory,
+              ...(desktopCapabilities ? { desktopCapabilities } : {}),
+              ...(internalPromptRead ? { promptRead: internalPromptRead } : {}),
+            }),
     );
     const effectiveUserInput = replaceRetryContinuationPrompt(canonicalUserInput, preparation);
     const assemblyContext = createSecretFreeTurnAssemblyContext({

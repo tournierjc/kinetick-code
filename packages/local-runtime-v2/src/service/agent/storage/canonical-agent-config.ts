@@ -54,6 +54,13 @@ export interface CanonicalAgentMavisConfig {
   readonly maxOutputTokens?: number;
   readonly defaultWorkspaceDir?: string;
   readonly extensionSkills?: readonly string[];
+  /**
+   * Ordered fallback model chain (`provider/model` keys). The primary model
+   * (top-level `model`) is implicit chain head; this list is tried only
+   * after the primary's retry budget is exhausted on a failover-class
+   * failure. `[]` explicitly disables fallback for this Agent.
+   */
+  readonly fallbackModels?: readonly string[];
 }
 
 interface AgentConfigDiagnostic {
@@ -119,6 +126,7 @@ const KNOWN_MAVIS_FIELDS = new Set([
   'maxOutputTokens',
   'defaultWorkspaceDir',
   'extensionSkills',
+  'fallbackModels',
 ]);
 const LEGACY_DESCRIPTION_NON_PLAIN_PREFIXES = '"\'[]{}&,*!|>@`#';
 const loggedAgentDirectoryLinks = new Set<string>();
@@ -946,6 +954,7 @@ function mavisFields(
   const contextWindow = optionalPositiveInteger(source, 'contextWindow');
   const maxOutputTokens = optionalPositiveInteger(source, 'maxOutputTokens');
   const extensionSkills = optionalTextArray(source, 'extensionSkills');
+  const fallbackModels = parseFallbackModels(source);
   return {
     ...(displayName ? { displayName } : {}),
     ...(avatar ? { avatar } : {}),
@@ -953,7 +962,42 @@ function mavisFields(
     ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
     ...(defaultWorkspaceDir ? { defaultWorkspaceDir } : {}),
     ...(extensionSkills === undefined ? {} : { extensionSkills }),
+    ...(fallbackModels === undefined ? {} : { fallbackModels }),
   };
+}
+
+/** Upper bound on the declared fallback tail; the primary model is chain head. */
+const MAX_FALLBACK_MODELS = 3;
+
+function parseFallbackModels(
+  source: Record<string, unknown>,
+): readonly string[] | undefined {
+  const value = source['fallbackModels'];
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
+    throw invalid('x-mavis.fallbackModels', 'fallbackModels must be an array of provider/model strings.');
+  }
+  const seen = new Set<string>();
+  const chain: string[] = [];
+  for (const entry of value) {
+    const trimmed = (entry as string).trim();
+    if (!/^[^/\s]+\/[^/\s]+$/u.test(trimmed)) {
+      throw invalid(
+        'x-mavis.fallbackModels',
+        `fallbackModels entries must use the provider/model form; got "${trimmed}".`,
+      );
+    }
+    if (seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    chain.push(trimmed);
+    if (chain.length > MAX_FALLBACK_MODELS) {
+      throw invalid(
+        'x-mavis.fallbackModels',
+        `fallbackModels accepts at most ${MAX_FALLBACK_MODELS} entries.`,
+      );
+    }
+  }
+  return Object.freeze(chain);
 }
 
 function serializeMavis(
@@ -967,6 +1011,7 @@ function serializeMavis(
   if (value.maxOutputTokens !== undefined) result.maxOutputTokens = value.maxOutputTokens;
   if (value.defaultWorkspaceDir) result.defaultWorkspaceDir = value.defaultWorkspaceDir;
   if (value.extensionSkills !== undefined) result.extensionSkills = [...value.extensionSkills];
+  if (value.fallbackModels !== undefined) result.fallbackModels = [...value.fallbackModels];
   return Object.keys(result).length === 0 ? undefined : result;
 }
 

@@ -570,6 +570,9 @@ function toConfigSelection(config: CanonicalAgentConfig): AgentConfigurationSele
     ...(config.xMavis?.maxOutputTokens === undefined
       ? {}
       : { maxOutputTokens: config.xMavis.maxOutputTokens }),
+    ...(config.xMavis?.fallbackModels === undefined
+      ? {}
+      : { fallbackModels: [...config.xMavis.fallbackModels] }),
     ...(config.tools === undefined ? {} : { tools: config.tools }),
     ...(config.disallowedTools === undefined ? {} : { disallowedTools: config.disallowedTools }),
     ...(config.mcpServers === undefined ? {} : { mcpServers: config.mcpServers }),

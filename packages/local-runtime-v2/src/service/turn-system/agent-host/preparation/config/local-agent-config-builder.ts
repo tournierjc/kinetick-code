@@ -11,7 +11,12 @@ import {
   OUTPUT_REVISION_PROMPT_KEY,
   RETRY_CONTINUATION_PROMPT_KEY,
 } from './prompt-templates.js';
-import { resolveAgentCapabilities, type ResolvedAgentCapabilities } from '@mavis/config';
+import {
+  resolveAgentCapabilities,
+  getRuntimePresetKey,
+  resolveModelAvailability,
+  type ResolvedAgentCapabilities,
+} from '@mavis/config';
 import type { SessionRecord, TaskSessionBinding } from '../../../../session-system/index.js';
 import {
   isSkillAllowedBySessionPolicy,
@@ -31,6 +36,7 @@ import {
   modelConfigForRef,
   modelRefForModel,
   savedSessionModel,
+  parseSourceQualifiedModelKey,
   type LocalConversationRuntimeConfig,
 } from '../../../../model-system/index.js';
 import {
@@ -271,7 +277,37 @@ export class LocalAgentConfigBuilder {
       customConfig,
       runtimeFacts,
       profile,
+      modelFallbackChain: this.agentFallbackModels(config, profile),
     });
+  }
+
+  /**
+   * The Agent-owned fallback tail, gated against the current catalog so an
+   * entry that was retired after the config was saved degrades to "no
+   * fallback" (never a broken Turn). Session/task model overrides own their
+   * model; the fallback tail follows the Agent, not the session override.
+   */
+  private agentFallbackModels(
+    config: LocalConversationRuntimeConfig,
+    profile: LocalAgentExecutionProfile | undefined,
+  ): readonly string[] {
+    const declared = profile?.configSelection?.fallbackModels;
+    if (declared === undefined || declared.length === 0) return [];
+    const preset = getRuntimePresetKey();
+    const chain: string[] = [];
+    for (const entry of declared) {
+      const parsed = parseSourceQualifiedModelKey(entry);
+      if (!parsed) continue;
+      const availability = resolveModelAvailability({
+        config,
+        providerId: parsed.providerId,
+        modelId: parsed.modelId,
+        preset,
+        source: 'config_default',
+      });
+      if (availability.available) chain.push(entry);
+    }
+    return chain;
   }
 
   private async resolveTurnModel(
@@ -882,6 +918,7 @@ function createAgentConfig(scope: {
   readonly customConfig: LocalAgentCustomConfigResult | undefined;
   readonly runtimeFacts: AgentRuntimeFacts;
   readonly profile?: LocalAgentExecutionProfile;
+  readonly modelFallbackChain?: readonly string[];
 }): IAgentConfig {
   const {
     input,
@@ -893,6 +930,7 @@ function createAgentConfig(scope: {
     customConfig,
     runtimeFacts,
     profile,
+    modelFallbackChain,
   } = scope;
   const agentConfig: IAgentConfig & {
     customConfig?: LocalAgentCustomConfigResult['evidence'];
@@ -936,6 +974,9 @@ function createAgentConfig(scope: {
     builtinCapabilities: runtimeFacts.builtinCapabilities,
     cuModeActive: runtimeFacts.cuModeActive,
     desktopPluginSkills: layers.desktopPluginSkills,
+    ...(modelFallbackChain && modelFallbackChain.length > 0
+      ? { model_fallback_chain: [...modelFallbackChain] }
+      : {}),
     ...(typeof input.agent.metadata?.id === 'string' ? { agent_id: input.agent.metadata.id } : {}),
     ...(profile
       ? {
