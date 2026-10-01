@@ -58,13 +58,14 @@
     },
     {
       "path": "components/markdown.ts",
-      "currentSha256": "59eaf8bc4ef1c3a900892248fc3ab9a1483d18d84e63a888711c289f2bdf6e8d",
+      "currentSha256": "1d32aa3553e99178db5a96130f9a18c1add235d5d70100a8cd2d47c4189ddd1b",
       "changeIds": [
         "L005",
         "L007",
         "L013",
         "L029",
-        "L026"
+        "L026",
+        "L048"
       ],
       "reason": "Keep strict TypeScript fixes and product Markdown hooks, plus Pi's post-baseline wrapped-table style restoration. 链接标签使用独立样式上下文，防止外层正文或标题颜色覆盖链接颜色。 稳定 Markdown 块缓存",
       "behaviorImpact": "MCode keeps its compact code presentation without reimplementing Pi Markdown or leaking wrapped link styles into table borders and adjacent cells. 链接保留嵌套强调与行内代码，并在结束后恢复外层样式。 保留两个尾部块并对引用回退全文。"
@@ -231,7 +232,7 @@
     },
     {
       "path": "tui-main-screen.ts",
-      "currentSha256": "f57eab79552763ae29bc39e2ced4c7905eb44fa163f538ba3ff6000136e0f493",
+      "currentSha256": "f38671720867d2baa633a0e8ca826bd36474edefc281efe6b6e6a2f81e7d3ddb",
       "changeIds": [
         "L005",
         "L017",
@@ -245,7 +246,8 @@
         "L044",
         "L045",
         "L046",
-        "L047"
+        "L047",
+        "L049"
       ],
       "upstreamCommit": "6c4f360264397c59801f6da2bdac13e3b1fcbe91",
       "reason": "Align bounded regular-mode projections with emitted row identities and preserve native history across folding, footer shrink, redraw and resize. Diff isolated overlay frames and align short conversations at welcome rows. Preserve admitted row identity and observe deferred or inactive main-buffer resizes.. Align bounded regular-mode projections with emitted row identities and preserve native history across folding, footer shrink, redraw and resize. Diff isolated overlay frames and align short conversations at welcome rows. Preserve admitted row identity and observe deferred or inactive main-buffer resizes. Keep strict TypeScript fixes and stream full and differential renders through Pi's bounded terminal writer. 缩放期间仅重绘可见尾部 常规模式在差分比较前剥离行首 OSC 133 zone 标记。 内容收缩或历史内容变化触发回退重绘时仅更新可见区域。 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
@@ -253,7 +255,7 @@
     },
     {
       "path": "tui.ts",
-      "currentSha256": "660739ee74e61ba1e4deadb6f026ba116d080c03e6d350ff0230f7a838d4809a",
+      "currentSha256": "027764f4460428a10ca873c78a294174169208a99316ab81450f3268404d443c",
       "changeIds": [
         "L005",
         "L015",
@@ -266,7 +268,8 @@
         "L044",
         "L045",
         "L046",
-        "L047"
+        "L047",
+        "L049"
       ],
       "reason": "Expose bounded row anchors, source-block retention and the transcript/footer boundary for regular-mode output snapshots. Distinguish prelude anchors and expose physical cursor hiding to cached renderers. Publish layout padding and physical resize observations for inactive main state.. Keep strict TypeScript fixes, expose Pi's existing immediate scheduler as a non-destructive product interaction contract, dispatch the input left over after terminal color sequences are removed, and coalesce synchronous submission renders. 提供 resize hook 及焦点输入过滤 独立面板声明键盘分页归属。 Preserve ordered asynchronous terminal output under POSIX TTY backpressure.",
       "behaviorImpact": "Regular renderers can distinguish projection eviction from retained-block presentation changes. Prelude rows cannot mask transcript replacement; nested overlays and coalesced cursor preference changes restore cursor visibility. Owners observe physical geometry before render scheduling, and row anchors can ignore only layout-owned leading padding.. Urgent product interactions render immediately without resetting differential state or clearing native scrollback, and a coalesced color answer no longer discards the keystrokes sharing its chunk. A synchronous submission frame dismisses the previous interrupted footer without a second input render. 焦点先交给 viewport listener，不进入编辑器。 handlesViewportKeys 为 true 时，fullscreen 分页交给焦点面板；默认仍由外层视口处理。 Slow terminal output does not block input; pending frames coalesce and terminal handoffs drain ordered output."
