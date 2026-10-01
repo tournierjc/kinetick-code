@@ -7,6 +7,7 @@ import type {
   TuiSessionUsageSummary,
   TuiContextSnapshotResponse,
 } from '../../runtime/port.js';
+import type { SessionCostBreakdown } from '../../application/session-cost.js';
 import type { TuiTransportAttachment } from '../../types/invocation.js';
 import type { TranscriptStore } from '../transcript/store.js';
 import type { TuiTodoItem } from '../todo/model.js';
@@ -26,6 +27,8 @@ export interface TuiChatSnapshot {
   session?: TuiSession;
   account?: TuiAccountStatus;
   sessionUsage?: TuiSessionUsageSummary;
+  /** Session-tree cost aggregate (root + delegated children), model-aware. */
+  sessionCost?: SessionCostBreakdown;
   contextSnapshot?: TuiContextSnapshotResponse;
   activeTurnId?: string;
   cancelling?: boolean;

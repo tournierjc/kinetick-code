@@ -1,7 +1,7 @@
 import type {
-  McodeProviderView,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
+  KcodeProviderView,
+  KcodeSaveProviderCandidateInput,
+  KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 import { getKeybindings, Input, Key, matchesKey } from '../../engine/public.js';
@@ -19,6 +19,8 @@ export class TuiProviderEditor implements Component, Focusable {
   private readonly textInput = new Input({ prompt: '' });
   private readonly secretInput = new Input({ prompt: '', mask: '•' });
   private apiKey = '';
+  /** True once an empty API Key field was submitted, meaning "send none". */
+  private apiKeyCleared = false;
   private baseUrl: string;
   private modelIds: string[];
   private name: string;
@@ -30,10 +32,10 @@ export class TuiProviderEditor implements Component, Focusable {
 
   constructor(
     private readonly options: {
-      readonly provider: McodeProviderView;
+      readonly provider: KcodeProviderView;
       readonly onSave: (
-        input: McodeSaveProviderCandidateInput,
-      ) => Promise<McodeSaveProviderCandidateResult>;
+        input: KcodeSaveProviderCandidateInput,
+      ) => Promise<KcodeSaveProviderCandidateResult>;
       readonly onSaved: (keyChanged: boolean) => void;
       readonly onCancel: () => void;
       readonly requestRender: () => void;
@@ -77,9 +79,11 @@ export class TuiProviderEditor implements Component, Focusable {
     const values = [
       this.apiKey
         ? 'Replacement entered'
-        : this.options.provider.hasApiKey
-          ? 'Saved key (unchanged)'
-          : 'Not configured',
+        : this.apiKeyCleared
+          ? 'Cleared · no credential will be sent'
+          : this.options.provider.hasApiKey
+            ? 'Saved key (unchanged)'
+            : 'Not set · a request carries no credential',
       sanitizeTuiUrl(this.baseUrl),
       this.modelIds.join(', ') || 'No models',
       this.name,
@@ -141,11 +145,24 @@ export class TuiProviderEditor implements Component, Focusable {
 
   private commitField(value: string): void {
     const trimmed = value.trim();
+    if (this.selected === 0) {
+      // Empty means "send no credential": it is how a connection whose server
+      // needs no authentication is set up, or an existing key is removed. The
+      // runtime reads an empty value as "clear", not as "keep".
+      if (trimmed) {
+        this.apiKey = trimmed;
+        this.apiKeyCleared = false;
+      } else {
+        this.apiKey = '';
+        this.apiKeyCleared = true;
+      }
+      this.cancelField();
+      return;
+    }
     if (!trimmed) {
       this.status = 'A value is required. Press Esc to keep the saved value.';
       return;
     }
-    if (this.selected === 0) this.apiKey = trimmed;
     if (this.selected === 1) {
       try {
         const url = new URL(trimmed);
@@ -194,10 +211,9 @@ export class TuiProviderEditor implements Component, Focusable {
         : 'Connection details are stale. Reopen /provider.';
       return;
     }
-    if (!provider.hasApiKey && !this.apiKey) {
-      this.status = 'API Key is required.';
-      return;
-    }
+    // A connection without a key is a valid target: the test runs as an
+    // endpoint that needs no authentication, and a rejection is reported as a
+    // connection failure rather than being guessed at beforehand.
     this.busy = true;
     this.status = '';
     this.syncFocus();
@@ -208,7 +224,11 @@ export class TuiProviderEditor implements Component, Focusable {
         name: this.name,
         baseUrl: this.baseUrl,
         ...(provider.apiFormat ? { apiFormat: provider.apiFormat } : {}),
-        ...(this.apiKey ? { apiKey: this.apiKey } : {}),
+        ...(this.apiKey
+          ? { apiKey: this.apiKey }
+          : this.apiKeyCleared
+            ? { apiKey: '' }
+            : {}),
         ...(this.modelsEdited ? { models: this.modelIds.map((id) => ({ modelId: id })) } : {}),
         modelId,
         saveAndUse: false,
@@ -216,7 +236,7 @@ export class TuiProviderEditor implements Component, Focusable {
       if (this.disposed) return;
       if (!result.success)
         throw new Error(result.status?.lastErrorMessage ?? 'Connection test failed.');
-      this.options.onSaved(Boolean(this.apiKey));
+      this.options.onSaved(Boolean(this.apiKey) || this.apiKeyCleared);
     } catch (error) {
       if (this.disposed) return;
       const message = formatTuiActionFailure(error, {

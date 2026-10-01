@@ -15,7 +15,7 @@ Open `/statusline` to configure ordinary items:
 - Both regular and fullscreen modes adapt the panel to available height. Small windows prioritize search, the selected option, and save / cancel hints.
 - The panel is unavailable during pending permission / question interactions and in side sessions. It may open during ordinary execution without sending a model request.
 
-The panel manages ordinary items only. For automation, edit the current profile's `config.yaml` (default in this distribution: `~/.minimax/config.yaml`):
+The panel manages ordinary items only. For automation, edit the current profile's `config.yaml` (default in this distribution: `~/.kinetick/config.yaml`):
 
 ```yaml
 tui:
@@ -27,7 +27,7 @@ Restart mcode after saving to enable the `[V]` line. `build-mode` is not in the 
 
 ## Configuration location
 
-- File: `config.yaml` in the runtime data directory, normally `~/.minimax/config.yaml`.
+- File: `config.yaml` in the runtime data directory, normally `~/.kinetick/config.yaml`.
 - Key: `tui.statusLine`, a **string array** of item IDs.
 - List order is display order, left to right. Items not listed are hidden.
 
@@ -58,10 +58,13 @@ Configuration loading checks that the value is an array. The TUI validates indiv
 | `context-window` | Configured context capacity before usage is available |
 | `subagent` | Subagent indicator |
 | `token-quota` | Token quota / plan |
+| `session-cost` | Session cost, e.g. `💰$0.4200`; hidden until the Runtime reports one |
 | `cache-read-ratio` | Aggregate cache read ratio for the current session, such as `Cache 80%` |
 | `context-remaining` | Remaining context percentage from the same runtime snapshot as `/context`; hidden if unavailable |
 | `context-meter` | Remaining context gauge, e.g. `Context ▕██████░░▏ 77% left`, from the same runtime snapshot as `/context`; hidden if unavailable; opt-in |
 | `custom-command` | External command stdout; first line inline by default, optional separate multiline block; opt-in |
+
+`session-cost` shows the provider-reported USD cost for the whole Session tree: the current Session plus every delegated sub-agent Session (including nested delegations). The Runtime records the cost and the model on each assistant message, so a mid-session model switch is aggregated per model and summed — never attributed to the currently selected model. Sessions on local or free endpoints, or models with no usable token rate, report no cost; those rows count as $0 and the total gains a `~` prefix to mark it approximate. A custom provider is priced from the token rates its model config declares (`/provider` writes the rates the provider's catalog publishes), and a model the Runtime knows by name uses the rate Pi's catalog lists for that provider. A model that neither declares a rate nor matches the catalog reports no cost, which keeps the item hidden — a custom provider whose model entry carries no `cost` is the usual cause. `/usage` (and `/cost`) expand the per-model table with tokens, cache hits, and the agent / sub-agent split. In-process usage notifications refresh the number after each assistant message; a settled sub-agent refreshes the parent total immediately. Read failures keep the last value rather than showing a partial total.
 
 `cache-read-ratio` aggregates persisted session usage as `cacheRead / (input + cacheRead + cacheWrite)`, where `input` is fresh uncached input. It uses existing provider usage fields; missing cache counts contribute zero, so sessions mixing providers can underestimate cache reads. The item is hidden before any prompt tokens exist. In-process notifications refresh the session after usage persists; read failures stay silent. `/usage` also shows Read, Fresh, and Write token counts.
 
@@ -78,6 +81,7 @@ Configuration loading checks that the value is an array. The TUI validates indiv
 | `sub-agent` | `subagent` |
 | `quota` / `token-plan` | `token-quota` |
 | `cache-read` | `cache-read-ratio` |
+| `cost` / `$` | `session-cost` |
 | `context` / `context-left` | `context-remaining` |
 | `context-bar` / `context-gauge` | `context-meter` |
 | `custom` | `custom-command` |
@@ -87,7 +91,7 @@ Configuration loading checks that the value is an array. The TUI validates indiv
 Without `tui.statusLine`, items render in this order:
 
 ```text
-current-dir · session-title · git-branch · review-link · plan-mode · approval-mode · model-with-reasoning · context-window · subagent · token-quota · context-remaining
+current-dir · session-title · git-branch · review-link · plan-mode · approval-mode · model-with-reasoning · context-window · subagent · token-quota · session-cost · context-remaining
 ```
 
 `build-mode` is **not a default**. Explicitly listing it is the only way to enable the machine-readable protocol; the build type does not matter. It may appear anywhere in the list and takes over the entire line to keep free text out of the strict record. Remove it to disable the protocol.
@@ -245,7 +249,7 @@ A command may ignore stdin. stdout is accepted only after exit code `0` without 
 - A deterministic selection changes every 30-second time bucket, using existing redraws rather than a dedicated timer. An idle terminal does not redraw merely to rotate tips; the next normal redraw selects the current bucket.
 - Left-side composer mode and action hints remain stable. Prefer a full tip, then a short version, then hide it if space is insufficient.
 - Welcome, active execution, follow-ups, goals, permission / question interactions, attachments, nonempty drafts, and temporary hints take precedence and suppress tips.
-- Tips are enabled by default. Disable them in `~/.minimax/config.yaml`:
+- Tips are enabled by default. Disable them in `~/.kinetick/config.yaml`:
 
 ```yaml
 tui:

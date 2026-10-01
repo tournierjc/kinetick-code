@@ -58,7 +58,7 @@ describe("built-in model fallback", () => {
         max_attachments_count: 4,
       },
     });
-    expect(config.defaultModel).toBe("minimax/MiniMax-M3.1-Flash-Preview");
+    expect(config.defaultModel).toBe("minimax/MiniMax-M3");
     resetConfig();
     expect(getConfig().provider.minimax?.models?.[modelId]).toEqual(model);
   });

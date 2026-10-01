@@ -1,7 +1,7 @@
-import type { McodeProviderApplication } from '../../../provider/application.js';
+import type { KcodeProviderApplication } from '../../../provider/application.js';
 import type {
-  McodeCodexOAuthLoginMethod,
-  McodeCodexOAuthStatus,
+  KcodeCodexOAuthLoginMethod,
+  KcodeCodexOAuthStatus,
 } from '../../../provider/contract.js';
 import { getKeybindings, Key, matchesKey } from '../../engine/public.js';
 import type { Component } from '../../rendering/component.js';
@@ -13,7 +13,7 @@ import { tuiChalk as chalk, tuiColors as colors, tuiSelectListTheme } from '../.
 
 interface CodexLoginOptions {
   application: Pick<
-    McodeProviderApplication,
+    KcodeProviderApplication,
     'connectCodexOAuth' | 'getCodexOAuthStatus' | 'cancelCodexOAuthLogin'
   >;
   openExternalTarget(url: string): Promise<void>;
@@ -28,8 +28,8 @@ export class TuiCodexLogin implements Component {
   readonly handlesViewportKeys = true;
   private readonly methods: SelectList;
   private phase: 'loading' | 'select' | 'starting' | 'waiting' | 'failed' = 'loading';
-  private method: McodeCodexOAuthLoginMethod = 'browser';
-  private status: McodeCodexOAuthStatus | undefined;
+  private method: KcodeCodexOAuthLoginMethod = 'browser';
+  private status: KcodeCodexOAuthStatus | undefined;
   private error: string | undefined;
   private browserHint: string | undefined;
   private openedUrl: string | undefined;
@@ -55,7 +55,7 @@ export class TuiCodexLogin implements Component {
       tuiSelectListTheme,
     );
     this.methods.onSelect = (item) => {
-      void this.start(item.value as McodeCodexOAuthLoginMethod);
+      void this.start(item.value as KcodeCodexOAuthLoginMethod);
     };
     this.methods.onCancel = () => {
       void this.cancel();
@@ -153,7 +153,7 @@ export class TuiCodexLogin implements Component {
     ];
   }
 
-  private async start(method: McodeCodexOAuthLoginMethod): Promise<void> {
+  private async start(method: KcodeCodexOAuthLoginMethod): Promise<void> {
     this.method = method;
     this.phase = 'starting';
     this.error = undefined;
@@ -171,7 +171,7 @@ export class TuiCodexLogin implements Component {
     }
   }
 
-  private update(status: McodeCodexOAuthStatus): void {
+  private update(status: KcodeCodexOAuthStatus): void {
     if (this.cancelling) return;
     this.status = status;
     this.error = undefined;

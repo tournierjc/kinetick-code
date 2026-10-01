@@ -19,7 +19,7 @@ export interface TuiReviewFinding {
   readonly content: string;
 }
 
-/** Stable Review payload embedded in an `exec.result` for `mcode exec review`. */
+/** Stable Review payload embedded in an `exec.result` for `kcode exec review`. */
 export interface ReviewResultV1 {
   readonly schemaVersion: 1;
   readonly type: 'review.result';

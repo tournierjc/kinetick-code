@@ -1,4 +1,77 @@
-# Releasing MiniMax Code
+# Releasing Kinetick Code
+
+## Fork release process (tournierjc/kinetick-code)
+
+This repository is a public fork; its released archives are downloadable by
+anyone, and `kcode update` reads them. Its release channel is **GitHub Releases
+on `tournierjc/kinetick-code` only**. Nothing else on the MiniMax side — the npm package
+`@minimax-ai/code`, the `filecdn.minimax.chat` installers, the `agent.minimax.io`
+site, or the desktop app — is built from this fork, and no fork release may publish
+to any of them. The repository's `package.json` and TUI manifests stay
+`private: true`; the release workflow publishes a GitHub release asset, never an
+npm package.
+
+A fork release is a normal upstream-style CLI release (below) plus fork rules:
+
+1. **Prerequisite — synchronization settled.** Do not cut a release while an
+   upstream synchronization PR (`merge/upstream-*` head, or a sync-branded PR) is
+   open, unless you are deliberately releasing without that pending sync. State
+   the last upstream revision carried (from `release/extraction.json`
+   `sourceRevision`, cross-checked against `upstream/main`) in the release notes.
+2. **Fork invariants must be green, not just CI.** Before releasing, confirm the
+   telemetry subsystem is still absent (`docs/telemetry.md` deleted, no
+   `requireTelemetryRunner` reference) and the default-deny egress guard is
+   installed from the CLI entry. `pnpm check:egress` covers the guard. A release
+   that would re-introduce an outbound reporting path is blocked by definition.
+3. **Branch/PR discipline.** Release via `pnpm release:cli` (below): it branches,
+   bumps both manifests, tags, and pushes atomically, then opens a version PR back
+   to `main`. Never push `main` directly and never move a distributed tag.
+   `gh` must be authenticated as the fork owner (`gh auth status`); pushes go
+   through the gh git-credential helper — no tokens embedded in remotes.
+4. **Version numbering.** Releases carry plain versions: tag `v<X.Y.Z>`, archive
+   `kinetick-code-X.Y.Z.tar.gz`. The sequence belongs to this repository and is
+   not tied to the upstream core — the tree differs from upstream at every
+   revision anyway (egress guard, telemetry removal, fork docs) — so the only
+   rule `release:cli` enforces is that the new version is newer than the
+   committed one, in canonical SemVer order. The `-fork.N` suffix used before
+   this product had its own identity is retired: `release:cli` refuses it, and
+   the releases published under it (`v0.5.2-fork.1`, whose tag is immutable)
+   keep their names. Pick the next number by meaning: a patch for fixes on the
+   released line, a minor for the new upstream core, a major for a deliberate
+   break in this product's own behaviour. A genuinely newer *prerelease* tag
+   (`v0.6.0-rc.1`) is still allowed: it publishes as a GitHub prerelease and the
+   `stable` channel ignores it, while `preview` offers it.
+5. **CI and publication.** A version-tag push, or a push to `main` whose
+   package version has no GitHub release yet, runs the `CLI release` workflow:
+   full `pnpm verify` + gitleaks scans, one `kinetick-code-X.Y.Z.tar.gz` archive,
+   then install validation on Linux and macOS (Node 22.19.0, 24.2.0, 25, 26).
+   Only if every install passes, a GitHub Release with the archive and `.sha256`
+   is created on this fork. A `main` push whose version already has a published
+   release stops before that build. Windows validation remains paused upstream-wide.
+6. **Post-release read-back.** After CI publishes, record: tag, commit SHA,
+   upstream `sourceRevision` carried, archive SHA-256, which live-service checks
+   were NOT RUN, and the release URL. Merge the version PR so `main` carries the
+   released version before the next release or the next upstream sync.
+7. **Installation docs.** The fork README and
+   [installation guide](installation.md#install-a-github-release-archive) are the
+   authoritative install instructions for this fork. Upstream installer/npm
+   commands that appear in mirrored docs are labeled as upstream-product-only;
+   keep those labels when re-syncing docs.
+8. **Assets the updater consumes.** `kcode update` reads this repository's
+   releases through `https://api.github.com/repos/tournierjc/kinetick-code/releases` and installs the
+   asset named `kinetick-code-X.Y.Z.tar.gz` together with its `.sha256`
+   (`<digest>  <archive name>`). A release it cannot read or verify is a release
+   the updater refuses. Therefore: publish the release as a published release,
+   not a draft (drafts are ignored); keep both assets in every release; never
+   replace an asset under a published tag — publish a new version instead. The
+   default `preview` channel takes every published release, including a
+   prerelease tag if one is ever cut; `stable` skips GitHub prereleases and
+   therefore follows plain releases only. Archives published under the
+   pre-rename `minimax-code-X.Y.Z.tar.gz` name stay installable by an
+   installation that predates the rename.
+
+Rollback: a released tag is immutable. To retract a bad release, unlist the GitHub
+Release and publish a new patch version; do not move or delete the tag.
 
 ## Tag-triggered CLI installation packages
 
@@ -19,22 +92,58 @@ files, creating commits or pushing. The release command then:
 4. Atomically pushes the release branch and tag, without pushing `main`.
 5. Opens a version PR back to `main`; merge it through the normal review process.
 
-CI requires the tag, both committed source versions and `mcode --version` to agree.
-It does not override the source version during a build. An existing tag or release
-branch, a non-increasing version, uncommitted files, or a starting commit other
-than the latest `origin/main` stops the command before version changes.
+CI requires the release tag and both committed source versions to agree with
+`kcode --version`. It does not override the source version during a build. On a
+tag push, that tag must already point at the workflow commit. On a `main` push,
+the tag is created only after validation, and only when it does not already exist.
+An existing tag or release branch, a non-increasing version, uncommitted files,
+or a starting commit other than the latest `origin/main` stops the release
+command before version changes.
 
 The tag starts the release workflow independently of the version PR. If a network
 or PR-creation failure occurs, inspect the local and remote branch/tag before
 retrying: the version commit and tag are retained for recovery. If both refs were
 pushed but opening the PR failed, open that version PR manually. Never delete and
 recreate an already distributed tag. Merge the version PR before starting the
-next release so `main` carries the released version.
+next release so `main` carries the released version. That merge does not publish
+a second time: the `main` push sees the release created from the tag and stops.
+
+A push to `main` can also publish without a separate tag push. The workflow reads
+the root and TUI versions (they must match) and checks the GitHub release for
+`v` plus that version:
+
+| State of `v<version>` | Result |
+| --- | --- |
+| A published GitHub release already exists | The workflow succeeds without building, tagging, or publishing. Upstream-sync merges that leave the version unchanged take this path. |
+| No release and no tag | After the install matrix passes, the workflow creates an annotated `v<version>` tag on that `main` commit and publishes the release. |
+| No release, and the tag already points at that commit | The tag is kept. The release is published. |
+| No release, and the tag points at a different commit | The workflow fails. The tag is not moved. |
+| A draft release exists | The workflow fails and leaves the draft in place. Finish it by hand or remove the draft; this workflow never deletes a release. |
+
+The automated tag is created with the Actions token after validation, so that tag
+push does not start a second CLI release run. Tag pushes and manual dispatches
+still work. A dispatch only builds and validates, even when the requested tag
+already exists. Pull requests that change release tooling still run the build
+and install matrix using the committed source version, without creating a tag
+or publishing a release.
+
+To see the gate decision locally, without creating a tag or a release, authenticate
+`gh` and run:
+
+```bash
+GH_REPO=tournierjc/kinetick-code node scripts/gate-cli-release.mjs
+```
+
+`GitHub release vX.Y.Z is already published` means a merge of that version will
+not publish again. To exercise the full workflow without publication, dispatch
+`CLI release` on the selected branch. An optional tag input must match the
+committed source version. To publish once, merge a commit on `main` whose root
+and TUI versions have no GitHub release yet, or push the matching `v*` tag.
 
 The workflow runs the full verification profile and secret scans, builds one
-`minimax-code-X.Y.Z.tar.gz` npm installation package, and authenticates and installs
+`kinetick-code-X.Y.Z.tar.gz` npm installation package, and authenticates and installs
 that same archive on Linux and macOS with Node 22.19.0, 24.2.0, 25 and 26. Each
-installation checks the generated `mcode` launcher, native SQLite, ripgrep, and
+installation checks the generated `kcode` launcher, native SQLite, ripgrep, and
 the offline smoke/BYOK suites. Windows validation remains paused.
 
 Only after every installation succeeds does CI create a GitHub Release with the
@@ -45,12 +154,6 @@ creation, inspect the draft and workflow artifacts before deciding whether to
 finish publication manually or delete only the incomplete draft and rerun.
 Never move an already distributed tag to different code.
 
-To exercise this workflow without publication, dispatch `CLI release` on a
-selected branch. An optional tag input must match the committed source version. A manual dispatch only builds and
-validates Actions artifacts, even when the requested tag already exists.
-PRs that change release tooling also run the build/install matrix using the
-committed source version, without creating a tag or publishing a release.
-
 To reproduce the packaging and installation checks locally, use a clean reviewed
 commit and keep output outside the repository:
 
@@ -58,7 +161,7 @@ commit and keep output outside the repository:
 export MCODE_RELEASE_TAG="v$(node -p 'require("./package.json").version')"
 pnpm verify
 node scripts/package-cli-release.mjs "$MCODE_RELEASE_TAG" /tmp/mcode-release
-MCODE_RELEASE_ARCHIVE="/tmp/mcode-release/minimax-code-${MCODE_RELEASE_TAG#v}.tar.gz" pnpm verify --profile package
+MCODE_RELEASE_ARCHIVE="/tmp/mcode-release/kinetick-code-${MCODE_RELEASE_TAG#v}.tar.gz" pnpm verify --profile package
 ```
 
 The `package` profile validates installation of an existing archive; it does not
@@ -70,7 +173,7 @@ This workflow does not publish to the npm registry or change the official instal
 
 ## Source previews
 
-The current source target is MiniMax Code 0.4.12. Workspace and local-build manifests remain `private: true` to prevent accidental npm publication. A source release, npm package, and installer are separate artifacts with separate verification.
+The current source target is Kinetick Code 0.4.12. Workspace and local-build manifests remain `private: true` to prevent accidental npm publication. A source release, npm package, and installer are separate artifacts with separate verification.
 
 ## Prepare a release
 
@@ -91,7 +194,7 @@ Windows full validation is temporarily paused for Node compatibility and source 
 
 After both platform jobs pass, the workflow creates a `source-candidate-<full-SHA>` artifact containing:
 
-- `minimax-code-source.tar.gz`
+- `kinetick-code-source.tar.gz`
 - The archive receipt and SHA-256 file
 - `candidate.json` with the revision and platform summary
 - Per-platform verification reports
@@ -107,6 +210,6 @@ The intermediate `unverified-source-<full-SHA>` artifact is not a release candid
 
 ## Initial repository import
 
-The initial CLI source snapshot was imported on 2026-09-18 at `c59cf5377045aa1a3e699c242d089b73b7cdc2ad`, on top of the existing MiniMax Code Desktop support history. The follow-up commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image. The import kept the existing issue forms and Feishu support workflow, used `README_ZH.md` as the Chinese entry point, and excluded internal Git history.
+The initial CLI source snapshot was imported on 2026-09-18 at `c59cf5377045aa1a3e699c242d089b73b7cdc2ad`, on top of the existing Kinetick Code Desktop support history. The follow-up commit `4e2e7bb5f771e9c42b2edefb1046483819b9032f` restored the Desktop image. The import kept the existing issue forms and Feishu support workflow, used `README_ZH.md` as the Chinese entry point, and excluded internal Git history.
 
 `release/extraction.json` remains the shared-source baseline. Future updates arrive through reviewed synchronization PRs; the initial import is not repeated.

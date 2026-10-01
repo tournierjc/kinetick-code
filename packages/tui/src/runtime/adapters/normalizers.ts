@@ -40,6 +40,7 @@ export function normalizeSessionInfoView(session: SessionInfoView): TuiSession {
       : undefined) as 'hidden' | 'visible' | undefined,
     purpose: session.purpose,
     archived: session.archived,
+    pinned: session.pinned,
     workspaceDir: session.workspaceDir,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
@@ -51,6 +52,14 @@ export function normalizeSessionInfoView(session: SessionInfoView): TuiSession {
     errorProviderId: session.status?.errorProviderId,
     interactionMode: session.interactionMode === 1 ? ('plan' as const) : undefined,
     model: normalizeSessionModelSelection(session.model),
+    skillPolicy: session.skillPolicy
+      ? {
+          closed: session.skillPolicy.closed,
+          mandatory: [...session.skillPolicy.mandatory],
+          optional: [...session.skillPolicy.optional],
+          forbidden: [...session.skillPolicy.forbidden],
+        }
+      : undefined,
   });
 }
 

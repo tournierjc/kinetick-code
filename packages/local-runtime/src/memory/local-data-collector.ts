@@ -28,6 +28,17 @@ import { detectProjectInstructions } from "../project/instructions.js";
 import { resolveLocalRuntimeLocale } from "../runtime/locale.js";
 import { formatLocalDate } from "./local-memory-store-utils.js";
 import {
+  formatPromptMemoryLookup,
+  matchMemoryForPrompt,
+} from "./prompt-memory-lookup.js";
+import {
+  applyPromptSkillSessionPolicy,
+  formatPromptSkillMatchReminder,
+  matchSkillsForPrompt,
+  type PromptSkillCandidate,
+  type PromptSkillSessionPolicy,
+} from "../skills/prompt-skill-lookup.js";
+import {
   agentDetailToIdentity,
   isBuiltinAgentDetail,
   isPersonaMissing,
@@ -61,6 +72,8 @@ export type LocalReminderSessionInfo = SessionInfo & {
   memoryRecallEnabled?: boolean;
   memoryWriteEnabled?: boolean;
   taskResultDelivery?: "runtime-managed";
+  /** Session require/optional/forbid policy. Absent means the catalog stays open. */
+  skillPolicy?: PromptSkillSessionPolicy;
 };
 export type LocalReminderMessageRequest = MessageRequest;
 export type LocalReminderInput = SystemReminderInput;
@@ -87,6 +100,13 @@ export class LocalDataCollector {
       cliSunsetNotice?: CliSunsetNoticeEvaluator;
       agentFacts?: () => LocalAgentFactsReader | undefined;
       userConfiguredName?: () => string | undefined;
+      /**
+       * Optional Skill catalog for prompt-conditioned Skill match reminders.
+       * Hosts that can list runtime Skills for the session should supply this.
+       */
+      listSkillCandidates?: (
+        session: LocalReminderSessionInfo,
+      ) => Promise<readonly PromptSkillCandidate[]> | readonly PromptSkillCandidate[];
     },
   ) {}
 
@@ -212,6 +232,13 @@ export class LocalDataCollector {
         : "worker";
     const sessionType = session.sessionType === SessionType.Root ? 1 : 0;
     const userConfiguredName = this.input.userConfiguredName?.()?.trim();
+    const promptLookups = await this.collectPromptLookups({
+      prompt: msg.content,
+      memoryRecallEnabled,
+      canonicalSnapshot,
+      userMemory,
+      session,
+    });
     return {
       env: {
         environmentInSystemPrompt: session.environmentInSystemPrompt,
@@ -277,6 +304,52 @@ export class LocalDataCollector {
       ...(memoryRecallEnabled && canonicalSnapshot && turnCount <= 1
         ? await this.collectCliSunsetNotice(canonicalSnapshot)
         : {}),
+      ...promptLookups,
+    };
+  }
+
+  private async collectPromptLookups(input: {
+    readonly prompt: string;
+    readonly memoryRecallEnabled: boolean;
+    readonly canonicalSnapshot: MemorySnapshot | undefined;
+    readonly userMemory: string | undefined;
+    readonly session: LocalReminderSessionInfo;
+  }): Promise<
+    Partial<Pick<LocalReminderInput, "relevantMemory" | "promptSkillMatch">>
+  > {
+    const relevantMemory =
+      input.memoryRecallEnabled
+        ? formatPromptMemoryLookup(
+            matchMemoryForPrompt(input.prompt, [
+              ...(input.canonicalSnapshot?.main.trim()
+                ? [{ source: "agent-memory", content: input.canonicalSnapshot.main }]
+                : []),
+              ...(input.canonicalSnapshot?.summary.trim()
+                ? [{ source: "memory-summary", content: input.canonicalSnapshot.summary }]
+                : []),
+              ...(input.userMemory?.trim()
+                ? [{ source: "user-memory", content: input.userMemory }]
+                : []),
+            ]),
+          )
+        : "";
+    let promptSkillMatch = "";
+    try {
+      const candidates = this.input.listSkillCandidates
+        ? await this.input.listSkillCandidates(input.session)
+        : [];
+      promptSkillMatch = formatPromptSkillMatchReminder(
+        matchSkillsForPrompt(
+          input.prompt,
+          applyPromptSkillSessionPolicy(candidates, input.session.skillPolicy),
+        ),
+      );
+    } catch {
+      promptSkillMatch = "";
+    }
+    return {
+      ...(relevantMemory ? { relevantMemory } : {}),
+      ...(promptSkillMatch ? { promptSkillMatch } : {}),
     };
   }
 

@@ -27,7 +27,7 @@ export function resolveFeatureAwareBuiltinSkillNames(
   if (capabilities.features.mavis) {
     selected.add('mavis');
     selected.add('create-agent');
-    selected.add('minimax-code-product');
+    selected.add('kinetick-code-product');
   }
   if (
     gates.miniappAvailable === true &&
@@ -77,7 +77,7 @@ function isStandaloneSkillUsable(
       return hasTools(capabilities, ['read', 'write', 'bash']);
     case 'lark-tools':
     case 'llm-call':
-    case 'mcode-tools-master':
+    case 'kcode-tools-master':
     case 'mavis-doctor':
       return isAgentBuiltinToolEnabled(capabilities, 'bash');
     case 'skill-refiner':

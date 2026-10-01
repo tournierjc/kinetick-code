@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { LocalModelProviderError, type LocalModelConfig } from '../contracts.js';
+import { providerFamilyForLookup } from '../catalog/provider-families.js';
 import {
   assertValidRawApiKey,
   mergeModelsFromInputs,
@@ -98,6 +99,7 @@ describe('model provider input normalization', () => {
           temperature: true,
           modalities: { input: ['text', 'image'], output: ['text'] },
           limit: { context: 200_000, output: 32_000 },
+          cost: { input: 0.14, output: 0.28 },
           thinkingConfig: { mode: 'switchable', defaultValue: 'true' },
           effortOptions: ['low', 'high'],
         },
@@ -115,6 +117,7 @@ describe('model provider input normalization', () => {
       temperature: true,
       modalities: { input: ['text', 'image'], output: ['text'] },
       limit: { context: 200_000, output: 32_000 },
+      cost: { input: 0.14, output: 0.28 },
       thinking_config: { mode: 'switchable', default_value: 'true' },
       thinking: { effortOptions: ['low', 'high'] },
       capabilities: { experimental: true },
@@ -242,5 +245,54 @@ describe('model provider input normalization', () => {
     expect(() => modelsFromInputs([{ modelId: 'model', limit: { output: 1.5 } }])).toThrowError(
       expect.objectContaining({ code: 'VALIDATION_ERROR' }),
     );
+  });
+});
+
+describe('provider family effort vocabulary', () => {
+  const deepseek = providerFamilyForLookup({ providerId: 'deepseek' });
+
+  it('seeds the endpoint levels when the caller supplies none', () => {
+    const models = modelsFromInputs(
+      [{ modelId: 'deepseek-v4-flash', reasoning: true }],
+      undefined,
+      false,
+      deepseek,
+    );
+
+    // Without this a DeepSeek model has no selectable level, and `--effort`
+    // refuses to run at all.
+    expect(models['deepseek-v4-flash']?.thinking?.effortOptions).toEqual([
+      'low',
+      'medium',
+      'high',
+      'max',
+    ]);
+  });
+
+  it('keeps the levels the caller supplied and leaves other providers alone', () => {
+    const explicit = modelsFromInputs(
+      [{ modelId: 'deepseek-v4-flash', reasoning: true, effortOptions: ['high'] }],
+      undefined,
+      false,
+      deepseek,
+    );
+    expect(explicit['deepseek-v4-flash']?.thinking?.effortOptions).toEqual(['high']);
+
+    const otherProvider = modelsFromInputs(
+      [{ modelId: 'deepseek-v4-flash', reasoning: true }],
+      undefined,
+      false,
+      providerFamilyForLookup({ providerId: 'openai' }),
+    );
+    expect(otherProvider['deepseek-v4-flash']?.thinking?.effortOptions).toBeUndefined();
+
+    // V3 has no thinking mode, so the V4 vocabulary must not be attached to it.
+    const v3 = modelsFromInputs(
+      [{ modelId: 'deepseek-v3', reasoning: true }],
+      undefined,
+      false,
+      deepseek,
+    );
+    expect(v3['deepseek-v3']?.thinking?.effortOptions).toBeUndefined();
   });
 });

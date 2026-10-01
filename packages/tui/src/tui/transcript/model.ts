@@ -99,6 +99,19 @@ export interface TranscriptContextVisualization {
   readonly components: readonly TranscriptContextComponent[];
 }
 
+export interface TranscriptUsageCostModelRow {
+  readonly model: string;
+  readonly scope: 'agent' | 'subagent' | 'both';
+  readonly costUsd: number;
+  readonly unpricedRows: number;
+  readonly totalTokens: number;
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheReadTokens: number;
+  readonly cacheReadRatio: number;
+  readonly turns: number;
+}
+
 export interface TranscriptUsageVisualization {
   readonly kind: 'usage';
   readonly model: string;
@@ -113,6 +126,13 @@ export interface TranscriptUsageVisualization {
     readonly utilization: number;
   } | null;
   readonly accountRows?: readonly TranscriptUsageAccountRow[];
+  /** Provider-reported USD cost for the whole Session tree (root + sub-agents). */
+  readonly costTotalUsd?: number;
+  /** Provider-reported USD cost for the root Session only. */
+  readonly rootCostUsd?: number;
+  /** True when some folded-in rows had no provider-reported cost. */
+  readonly costUnpriced?: boolean;
+  readonly costModels?: readonly TranscriptUsageCostModelRow[];
 }
 
 export interface TranscriptUsageAccountRow extends TranscriptInspectionRow {
@@ -140,6 +160,8 @@ export interface TranscriptInspectionReport {
 
 export interface TranscriptCell {
   id: string;
+  /** Retained output identity when an optimistic cell is admitted under a new store id. */
+  scrollbackId?: string;
   kind: TranscriptCellKind;
   status: TranscriptCellStatus;
   content: string;
@@ -176,6 +198,8 @@ export interface TranscriptToolPayloadBudget {
 
 export interface CreateTranscriptCellInput {
   id: string;
+  /** Retained output identity when an optimistic cell is admitted under a new store id. */
+  scrollbackId?: string;
   kind: TranscriptCellKind;
   status: TranscriptCellStatus;
   content: string;

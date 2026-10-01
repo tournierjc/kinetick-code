@@ -55,10 +55,6 @@ import type { LocalCronRuntime } from "../cron/index.js";
 import { SqliteLocalCronStore } from "../cron/index.js";
 import { createCuScreenshotPrunerHook } from "../cu/cu-screenshot-pruner.js";
 import {
-  createLLMFailureReportHook,
-  type DesktopErrorReporter,
-} from "../error-reporting/index.js";
-import {
   createGlobalEventSource,
   type GlobalEventSubscriber,
 } from "../events/global-events.js";
@@ -174,6 +170,7 @@ import {
 import { LocalSkillHubStore } from "../skills/hub-api.js";
 import { resolveBuiltinSkillsDir } from "../skills/roots.js";
 import { seedBuiltinSkills } from "../skills/seed-builtin.js";
+import { applyPromptSkillSessionPolicy } from "../skills/prompt-skill-lookup.js";
 import {
   initSkillService,
   type LocalSkillService,
@@ -334,7 +331,6 @@ export class LocalRuntimeApiHost {
     completion: LocalBashCompletion,
   ) => void;
   public readonly observeLLMRequest: PiLLMRequestObserver;
-  private readonly errorReporter: DesktopErrorReporter | undefined;
   private readonly configUpdater: (
     body: Record<string, unknown>,
   ) => Promise<LocalConfigUpdateResult>;
@@ -471,12 +467,7 @@ export class LocalRuntimeApiHost {
     this.isContextWindowUsageEnabled =
       options.isContextWindowUsageEnabled ?? (() => false);
     this.fetchImpl = options.fetchImpl;
-    this.errorReporter = options.errorReporter;
-    this.llmRequestFailureHook =
-      options.llmRequestFailureHook ??
-      (this.errorReporter
-        ? createLLMFailureReportHook(this.errorReporter)
-        : undefined);
+    this.llmRequestFailureHook = options.llmRequestFailureHook;
     this.configUpdater = options.configUpdater ?? updateLocalConfigFile;
     this.legacyRuntime = options.legacyOpencodeRuntime;
     this.legacyOpencodeEnabled = options.legacyOpencodeEnabled;
@@ -591,7 +582,6 @@ export class LocalRuntimeApiHost {
         authContextGetter: this.authContextGetter,
         routingContextGetter: this.routingContextGetter,
         fetchImpl: this.fetchImpl,
-        ...(this.errorReporter ? { errorReporter: this.errorReporter } : {}),
         ...(this.llmRequestFailureHook
           ? { llmRequestFailureHook: this.llmRequestFailureHook }
           : {}),
@@ -640,6 +630,17 @@ export class LocalRuntimeApiHost {
       cliSunsetNotice: options.cliSunsetNotice,
       agentFacts: () => this.agentRuntimePort,
       userConfiguredName: () => this.authContextGetter?.()?.subUserName,
+      listSkillCandidates: async (session) => {
+        const result = await this.skillService.listRuntimeSkills({
+          agentName: session.agentName,
+          ...(session.workspaceDir ? { workspaceDir: session.workspaceDir } : {}),
+        });
+        const listed = (result.skills ?? []).map((skill) => ({
+          name: skill.name,
+          ...(skill.description ? { description: skill.description } : {}),
+        }));
+        return applyPromptSkillSessionPolicy(listed, session.skillPolicy);
+      },
     });
     this.memoryFacade = memory.memoryFacade;
     this.localDataCollector = memory.localDataCollector;
@@ -1455,7 +1456,6 @@ export class LocalRuntimeApiHost {
       () => this.questionnaireAutoReplyScheduler.close(),
       () => this.globalEvents.close(),
       () => drainBackgroundTasks(this),
-      () => this.errorReporter?.close(),
     ];
     for (const close of cleanups) {
       try {

@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { watchFile, unwatchFile } from 'node:fs';
 
 import {
-  MCODE_OAUTH_AUDIENCE,
-  MCODE_OAUTH_CLIENT_ID,
-  MCODE_OAUTH_SCOPES,
+  KCODE_OAUTH_AUDIENCE,
+  KCODE_OAUTH_CLIENT_ID,
+  KCODE_OAUTH_SCOPES,
   type AccessTokenLease,
   type UnauthorizedContext,
 } from './contracts.js';
@@ -31,7 +31,7 @@ export class AuthRequiredError extends Error {
   readonly code = 'AUTH_REQUIRED';
 
   constructor(options?: ErrorOptions) {
-    super('MCode authentication is required.', options);
+    super('KCode authentication is required.', options);
     this.name = 'AuthRequiredError';
   }
 }
@@ -40,7 +40,7 @@ export class AuthLoginCancelledError extends Error {
   readonly code = 'AUTH_LOGIN_CANCELLED';
 
   constructor() {
-    super('MCode OAuth device authorization was cancelled.');
+    super('KCode OAuth device authorization was cancelled.');
     this.name = 'AuthLoginCancelledError';
   }
 }
@@ -66,7 +66,7 @@ export class AuthScopeUpgradeRequiredError extends Error {
   readonly code = 'AUTH_SCOPE_UPGRADE_REQUIRED';
 
   constructor(readonly missingScopes: string[]) {
-    super('The current MCode authorization does not include the required scope.');
+    super('The current KCode authorization does not include the required scope.');
     this.name = 'AuthScopeUpgradeRequiredError';
   }
 }
@@ -75,7 +75,7 @@ export class AuthResourceContractMismatchError extends Error {
   readonly code = 'AUTH_RESOURCE_CONTRACT_MISMATCH';
 
   constructor() {
-    super('The stored credential does not match the MCode resource contract.');
+    super('The stored credential does not match the KCode resource contract.');
     this.name = 'AuthResourceContractMismatchError';
   }
 }
@@ -96,13 +96,13 @@ export class AuthDomainConflictError extends Error {
     readonly requested: Pick<AuthNamespace, 'buildEnv' | 'region'>,
   ) {
     super(
-      `MCode is signed in to ${active.buildEnv}/${active.region}; sign out before using ${requested.buildEnv}/${requested.region}.`,
+      `KCode is signed in to ${active.buildEnv}/${active.region}; sign out before using ${requested.buildEnv}/${requested.region}.`,
     );
     this.name = 'AuthDomainConflictError';
   }
 }
 
-export interface MCodeOAuthCoreOptions {
+export interface KCodeOAuthCoreOptions {
   namespace: AuthNamespace;
   credentialStore: CredentialStore;
   oauthClient: OAuthClient;
@@ -149,7 +149,7 @@ export interface AuthStatusSnapshot {
   expiresAtMs?: number;
 }
 
-export class MCodeOAuthCore {
+export class KCodeOAuthCore {
   private readonly stateStore: AuthStateStore;
   private readonly lock: CrossProcessAuthLock;
   private readonly now: () => number;
@@ -161,7 +161,7 @@ export class MCodeOAuthCore {
   private loginAbortController: AbortController | undefined;
   private initializePromise: Promise<void> | undefined;
 
-  constructor(private readonly options: MCodeOAuthCoreOptions) {
+  constructor(private readonly options: KCodeOAuthCoreOptions) {
     this.stateStore = new AuthStateStore(options.namespace.statePath);
     this.lock = new CrossProcessAuthLock(options.namespace.lockPath);
     this.now = options.now ?? Date.now;
@@ -188,7 +188,7 @@ export class MCodeOAuthCore {
         return toStatusSnapshot({ ...state, status: 'error' });
       }
       try {
-        assertCredentialContract(credential, [...MCODE_OAUTH_SCOPES]);
+        assertCredentialContract(credential, [...KCODE_OAUTH_SCOPES]);
       } catch (error) {
         if (error instanceof AuthScopeUpgradeRequiredError) {
           return toStatusSnapshot({
@@ -286,7 +286,7 @@ export class MCodeOAuthCore {
     await this.initialize();
     try {
       return await this.lock.withLock(async () => {
-        const current = await this.readUsableCredential([...MCODE_OAUTH_SCOPES]);
+        const current = await this.readUsableCredential([...KCODE_OAUTH_SCOPES]);
         if (context.loginEpoch !== undefined) {
           assertSameLoginEpoch(context.loginEpoch, current.credential.loginEpoch);
         } else if (current.credential.generation > context.generation) {
@@ -401,7 +401,7 @@ export class MCodeOAuthCore {
             state.status === 'refreshing')
         ) {
           try {
-            assertCredentialContract(credential, [...MCODE_OAUTH_SCOPES]);
+            assertCredentialContract(credential, [...KCODE_OAUTH_SCOPES]);
             if (state.status === 'authenticated' && credential.expiresAtMs > this.now()) {
               return { kind: 'authenticated' as const, generation: credential.generation };
             }
@@ -446,7 +446,7 @@ export class MCodeOAuthCore {
       if (decision.kind === 'refresh') {
         try {
           await this.lock.withLock(async () => {
-            const current = await this.readUsableCredential([...MCODE_OAUTH_SCOPES]);
+            const current = await this.readUsableCredential([...KCODE_OAUTH_SCOPES]);
             if (
               current.credential.generation > decision.generation &&
               this.satisfiesMinValidity(current, 1)
@@ -566,7 +566,7 @@ export class MCodeOAuthCore {
           this.options.namespace.credentialKey,
         );
         if (credential && credential.generation === state.generation) {
-          assertCredentialContract(credential, [...MCODE_OAUTH_SCOPES]);
+          assertCredentialContract(credential, [...KCODE_OAUTH_SCOPES]);
           return { status: 'authenticated', generation: state.generation };
         }
       }
@@ -626,7 +626,7 @@ export class MCodeOAuthCore {
     if (!observedCredential || observedCredential.generation <= observedState.generation) {
       return observedState;
     }
-    assertCredentialContract(observedCredential, [...MCODE_OAUTH_SCOPES]);
+    assertCredentialContract(observedCredential, [...KCODE_OAUTH_SCOPES]);
     return this.lock.withLock(async () => {
       const state = await this.stateStore.read();
       const credential = await this.options.credentialStore.get(
@@ -640,7 +640,7 @@ export class MCodeOAuthCore {
       ) {
         return state ?? observedState;
       }
-      assertCredentialContract(credential, [...MCODE_OAUTH_SCOPES]);
+      assertCredentialContract(credential, [...KCODE_OAUTH_SCOPES]);
       const recovered = authenticatedState(
         credential,
         this.options.credentialStore.kind,
@@ -778,9 +778,9 @@ function baseState(
     schemaVersion: AUTH_STATE_SCHEMA_VERSION,
     status: input.status,
     storeKind: input.storeKind,
-    clientId: MCODE_OAUTH_CLIENT_ID,
-    scopes: [...MCODE_OAUTH_SCOPES],
-    audience: MCODE_OAUTH_AUDIENCE,
+    clientId: KCODE_OAUTH_CLIENT_ID,
+    scopes: [...KCODE_OAUTH_SCOPES],
+    audience: KCODE_OAUTH_AUDIENCE,
     buildEnv: namespace.buildEnv,
     region: namespace.region,
     generation: input.generation,
@@ -813,31 +813,31 @@ function credentialFromGrant(
     accessToken: grant.accessToken,
     refreshToken: grant.refreshToken,
     tokenType: grant.tokenType,
-    clientId: MCODE_OAUTH_CLIENT_ID,
+    clientId: KCODE_OAUTH_CLIENT_ID,
     scopes: grant.scopes,
-    audience: MCODE_OAUTH_AUDIENCE,
+    audience: KCODE_OAUTH_AUDIENCE,
     expiresAtMs: now + grant.expiresInSec * 1_000,
     generation,
     loginEpoch,
     ...(grant.subject ? { subject: grant.subject } : {}),
     ...(grant.accountId ? { accountId: grant.accountId } : {}),
   };
-  assertCredentialContract(credential, [...MCODE_OAUTH_SCOPES]);
-  if (grant.audience !== MCODE_OAUTH_AUDIENCE) throw new AuthResourceContractMismatchError();
+  assertCredentialContract(credential, [...KCODE_OAUTH_SCOPES]);
+  if (grant.audience !== KCODE_OAUTH_AUDIENCE) throw new AuthResourceContractMismatchError();
   return credential;
 }
 
 function validateRequestedScopes(requiredScopes: string[]): void {
   const unsupported = requiredScopes.filter(
-    (scope) => !MCODE_OAUTH_SCOPES.includes(scope as 'agent.default'),
+    (scope) => !KCODE_OAUTH_SCOPES.includes(scope as 'agent.default'),
   );
   if (unsupported.length > 0) throw new AuthScopeUpgradeRequiredError(unsupported);
 }
 
 function assertCredentialContract(credential: StoredCredential, requiredScopes: string[]): void {
   if (
-    credential.clientId !== MCODE_OAUTH_CLIENT_ID ||
-    credential.audience !== MCODE_OAUTH_AUDIENCE ||
+    credential.clientId !== KCODE_OAUTH_CLIENT_ID ||
+    credential.audience !== KCODE_OAUTH_AUDIENCE ||
     credential.tokenType !== 'Bearer'
   ) {
     throw new AuthResourceContractMismatchError();
@@ -879,7 +879,7 @@ function toAccessTokenLease(credential: StoredCredential): AccessTokenLease {
     ...(credential.loginEpoch ? { loginEpoch: credential.loginEpoch } : {}),
     expiresAtMs: credential.expiresAtMs,
     generation: credential.generation,
-    scopes: MCODE_OAUTH_SCOPES,
-    audience: MCODE_OAUTH_AUDIENCE,
+    scopes: KCODE_OAUTH_SCOPES,
+    audience: KCODE_OAUTH_AUDIENCE,
   };
 }

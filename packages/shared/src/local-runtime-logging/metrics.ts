@@ -1,7 +1,5 @@
 import {
   MetricsClient,
-  createDesktopReporter,
-  type CreateDesktopReporterOptions,
   type MetricLabels,
   type MetricsBatchReporter,
 } from '../metrics-proxy.js';
@@ -55,9 +53,9 @@ export interface LocalRuntimeMetricsClientOptions {
    */
   histogramBucketsByName?: Record<string, number[]>;
   /**
-   * Pre-built reporter. Tests inject a fake; production typically passes
-   * `createLocalRuntimeDesktopReporter(...)` (see below) or omits this and
-   * lets the noop reporter swallow batches when telemetry is not wired up.
+   * Pre-built reporter. Tests inject a fake; a host that wants metrics to
+   * leave the process must supply its own transport here, because this build
+   * ships none — the omitted case keeps the noop reporter.
    */
   reporter?: MetricsBatchReporter;
   onError?: (error: unknown) => void;
@@ -101,16 +99,6 @@ export function createLocalRuntimeMetricsClient(
     ...(options.onError ? { onError: options.onError } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
-}
-
-/**
- * Thin wrapper around `createDesktopReporter` so callers do not need to
- * remember the upstream import path — the facade is the only allowed entry.
- */
-export function createLocalRuntimeDesktopReporter(
-  options: CreateDesktopReporterOptions,
-): ReturnType<typeof createDesktopReporter> {
-  return createDesktopReporter(options);
 }
 
 /**

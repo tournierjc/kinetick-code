@@ -15,7 +15,7 @@ export interface WorkspaceGitWorktree {
   isMain: boolean;
   isLocked: boolean;
   isActive: boolean;
-  isMcodeManaged: boolean;
+  isKcodeManaged: boolean;
   lastModifiedMs?: number;
 }
 
@@ -76,7 +76,7 @@ export async function listWorkspaceGitWorktrees(
     .filter((item) => item.worktree);
   const mainWorktreePath = options.usePrimaryWorktree ? entries[0]?.worktree : root;
   const activeWorktreePath = await realpath(workspace).catch(() => resolve(workspace));
-  const mcodeWorktreeParent =
+  const kcodeWorktreeParent =
     typeof mainWorktreePath === 'string'
       ? await realpath(join(mainWorktreePath, '.worktrees')).catch(() => undefined)
       : undefined;
@@ -98,9 +98,9 @@ export async function listWorkspaceGitWorktrees(
           resolve(worktreePath) === resolve(mainWorktreePath),
         isLocked: 'locked' in item,
         isActive: canonicalWorktreePath === activeWorktreePath,
-        isMcodeManaged:
-          mcodeWorktreeParent !== undefined &&
-          isPathInside(mcodeWorktreeParent, canonicalWorktreePath),
+        isKcodeManaged:
+          kcodeWorktreeParent !== undefined &&
+          isPathInside(kcodeWorktreeParent, canonicalWorktreePath),
       } satisfies WorkspaceGitWorktree;
     }),
   );

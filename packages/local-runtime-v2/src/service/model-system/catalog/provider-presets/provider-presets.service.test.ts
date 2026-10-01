@@ -307,6 +307,31 @@ describe('models.dev Provider Presets', () => {
     ]);
   });
 
+  it('resolves an aggregator package through its provider family', async () => {
+    const presets = await parsePresetsForTest({
+      openrouter: {
+        name: 'OpenRouter',
+        npm: '@openrouter/ai-sdk-provider',
+        api: 'https://openrouter.ai/api/v1',
+        models: { 'openai/gpt-5-mini': { name: 'GPT-5 mini', tool_call: true } },
+      },
+      // A package no family knows is still dropped rather than guessed at.
+      unsupported: {
+        name: 'Unsupported',
+        npm: '@ai-sdk/google',
+        api: 'https://google.example',
+        models: { model: { tool_call: true } },
+      },
+    });
+
+    expect(presets.map((preset) => preset.providerId)).toEqual(['openrouter']);
+    expect(presets[0]).toMatchObject({
+      providerId: 'openrouter',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiFormat: 'openai-completions',
+    });
+  });
+
   it('keeps non-native transports only when they declare an API base', async () => {
     const presets = await parsePresetsForTest({
       meta: {
@@ -412,6 +437,39 @@ describe('models.dev Provider Presets', () => {
         ],
       },
     ]);
+  });
+
+  it('projects the catalog token rates and drops one-sided or zero ones', async () => {
+    const presets = await parsePresetsForTest({
+      priced: {
+        name: 'Priced',
+        npm: '@ai-sdk/openai-compatible',
+        api: 'https://priced.example/v1',
+        models: {
+          rated: {
+            name: 'Rated',
+            tool_call: true,
+            cost: { input: 0.14, output: 0.28, cache_read: 0.0028 },
+          },
+          // The Runtime prices a turn from both directions, so a one-sided rate
+          // and a rate that says "free" are both left out rather than written as
+          // a price nobody published.
+          partial: { name: 'Partial', tool_call: true, cost: { input: 0.14 } },
+          free: { name: 'Free', tool_call: true, cost: { input: 0, output: 0 } },
+          malformed: { name: 'Malformed', tool_call: true, cost: '0.14' },
+        },
+      },
+    });
+
+    const models = presets[0]?.models ?? [];
+    expect(models.find((model) => model.modelId === 'rated')?.cost).toEqual({
+      input: 0.14,
+      output: 0.28,
+      cache_read: 0.0028,
+    });
+    expect(
+      models.filter((model) => model.modelId !== 'rated').map((model) => model.cost),
+    ).toEqual([undefined, undefined, undefined]);
   });
 
   it('parses declared reasoning effort options for Kimi K3 on both Moonshot providers', async () => {
@@ -912,5 +970,50 @@ describe('Provider Preset ordering', () => {
       catalog.listProviderPresets().then((items) => items.map((item) => item.providerId)),
     ).resolves.toEqual(['tencent-tokenhub', 'openai', 'anthropic', 'deepseek', 'zhipuai']);
     expect(commonConfigFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a fork-anchored family on the shelf when the remote pins omit it', async () => {
+    // The live remote shelf sells no OpenRouter slot, yet the fork promises the
+    // aggregator. The shelf keeps its own order; the anchored family joins the
+    // pinned block behind it instead of sinking into the alphabetical tail.
+    const paths = await catalogPaths();
+    await writeFile(
+      paths.bundledCatalogPath,
+      gzipSync(
+        JSON.stringify({
+          version: 1,
+          source: 'https://models.dev/api.json',
+          updatedAt: 1,
+          catalog: {
+            openai: { name: 'OpenAI', npm: '@ai-sdk/openai', models: { gpt: { tool_call: true } } },
+            openrouter: {
+              name: 'OpenRouter',
+              npm: '@openrouter/ai-sdk-provider',
+              api: 'https://openrouter.ai/api/v1',
+              models: { 'anthropic/claude-opus-4': { tool_call: true } },
+            },
+            legacy: {
+              name: 'Legacy',
+              npm: '@ai-sdk/openai-compatible',
+              api: 'https://legacy.example/v1',
+              models: { model: { tool_call: true } },
+            },
+          },
+        }),
+      ),
+    );
+    const catalog = new ProviderPresetCatalog({
+      ...paths,
+      modelsDevFetch: vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch,
+      commonConfigFetch: vi.fn(async () =>
+        commonConfigResponse(['minimax', 'openai', 'anthropic', 'deepseek', 'moonshotai', 'ai']),
+      ) as typeof fetch,
+      commonConfigOriginGetter: () => 'https://gateway.example',
+      regionGetter: () => 'en',
+    });
+
+    await expect(
+      catalog.listProviderPresets().then((items) => items.map((item) => item.providerId)),
+    ).resolves.toEqual(['openai', 'openrouter', 'legacy']);
   });
 });

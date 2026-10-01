@@ -33,6 +33,9 @@ export function createTuiSessionLifecycleBridge(runtime: CreateTuiAppOptions['ru
       sessionId: string,
       reason: 'clear' | 'resume_other',
     ): Promise<void> {
+      // A tab/UI switch (`resume_other`) only changes which Session is on screen.
+      // The previous Session stays open and its Runtime turn must keep running.
+      if (reason === 'resume_other') return;
       await abortLocalPluginHookSessionTurn(sessionId, async (executionSessionId) => {
         // `session_leave`, not `user_stop`: switching Sessions or running `/clear`
         // still stops the live Turn and pauses the Goal/Queue, but it is not a stop

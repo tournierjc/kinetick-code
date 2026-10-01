@@ -12,8 +12,8 @@ import { TuiThemeRegistry } from '../../../../src/tui/theme/registry.js';
 import type { TuiThemeDefinition } from '../../../../src/tui/theme/contracts.js';
 import {
   DEFAULT_THEME_ID,
-  MINIMAX_CODE_DARK_THEME,
-  MINIMAX_CODE_LIGHT_THEME,
+  KCODE_DARK_THEME,
+  KCODE_LIGHT_THEME,
 } from '../../../../src/tui/theme/palettes.js';
 
 vi.mock('node:fs', async (importOriginal) => {
@@ -120,7 +120,7 @@ describe('custom TUI theme files', () => {
     expect(theme.label).toBe('mine');
     expect(theme.dark.colors.brand).toBe('#112233');
     // Untouched roles keep the default palette so the theme is usable immediately.
-    expect(theme.dark.colors.error).toBe(MINIMAX_CODE_DARK_THEME.colors.error);
+    expect(theme.dark.colors.error).toBe(KCODE_DARK_THEME.colors.error);
   });
 
   it('resolves vars references and normalizes case', async () => {
@@ -165,8 +165,8 @@ describe('custom TUI theme files', () => {
     expect(theme.dark.colors.brand).toBe('#010101');
     // The light variant is a complete, usable palette borrowed from the default
     // light theme — not a blank object and not the dark value.
-    expect(theme.light.colors.brand).toBe(MINIMAX_CODE_LIGHT_THEME.colors.brand);
-    expect(theme.light.colors.text).toBe(MINIMAX_CODE_LIGHT_THEME.colors.text);
+    expect(theme.light.colors.brand).toBe(KCODE_LIGHT_THEME.colors.brand);
+    expect(theme.light.colors.text).toBe(KCODE_LIGHT_THEME.colors.text);
     expect(theme.light.id).toBe('dark-only');
   });
 

@@ -24,7 +24,7 @@ function palette(
  * Default MCode palette. The values are frozen in place so a theme switch can
  * never mutate a palette another theme still references.
  */
-export const MINIMAX_CODE_DARK_THEME = palette(
+export const KCODE_DARK_THEME = palette(
   'minimax',
   'dark',
   {
@@ -52,7 +52,7 @@ export const MINIMAX_CODE_DARK_THEME = palette(
   CATPPUCCIN_SYNTAX_TONES.dark,
 );
 
-export const MINIMAX_CODE_LIGHT_THEME = palette(
+export const KCODE_LIGHT_THEME = palette(
   'minimax',
   'light',
   {
@@ -82,7 +82,7 @@ export const MINIMAX_CODE_LIGHT_THEME = palette(
 
 /** Default palette for the active appearance. */
 export function defaultPalette(appearance: TuiResolvedAppearance) {
-  return appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+  return appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
 }
 
 // ---------------------------------------------------------------------------
@@ -369,12 +369,12 @@ export const DEFAULT_THEME_ID = 'minimax';
  * never have to assert a built-in exists.
  */
 export const DEFAULT_THEME: TuiThemeDefinition = Object.freeze({
-  id: MINIMAX_CODE_DARK_THEME.id,
+  id: KCODE_DARK_THEME.id,
   label: 'MCode',
   description: 'The default MCode blue palette',
   source: 'builtin',
-  dark: MINIMAX_CODE_DARK_THEME,
-  light: MINIMAX_CODE_LIGHT_THEME,
+  dark: KCODE_DARK_THEME,
+  light: KCODE_LIGHT_THEME,
 });
 
 export const BUILT_IN_THEMES: readonly TuiThemeDefinition[] = Object.freeze([

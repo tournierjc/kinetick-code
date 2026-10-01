@@ -1,5 +1,5 @@
 import { stripVTControlCharacters } from 'node:util';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { visibleWidth } from '../../src/tui/rendering/text.js';
 import { TuiSessionManager } from '../../src/tui/features/session/manager.js';
 import type { TuiSession } from '../../src/runtime/port.js';
@@ -57,6 +57,7 @@ function createManager(
       return { ...(session ?? { sessionId }), title };
     }),
     onSetArchived: vi.fn(async () => undefined),
+    onDelete: vi.fn(async () => undefined),
     onCancel: vi.fn(),
     requestRender: vi.fn(),
   };
@@ -630,5 +631,236 @@ describe('TuiSessionManager', () => {
 
     expect(requestRender).toHaveBeenCalledTimes(rendersBeforeDispose);
     expect(renderPlain(manager)).not.toContain('Loaded after disposal');
+  });
+});
+
+describe('TuiSessionManager delete', () => {
+  it('opens on Ctrl+X, defaults to archiving and keeps the history', async () => {
+    const { manager, callbacks } = createManager();
+
+    manager.handleInput('\x18');
+
+    const confirmation = renderPlain(manager);
+    expect(confirmation).toContain('Delete this session?');
+    expect(confirmation).toContain('Fix the login flow');
+    expect(confirmation).toContain('Deleting cannot be undone.');
+    expect(confirmation).toContain('› Archive instead');
+    expect(confirmation).toContain('Delete permanently');
+
+    manager.handleInput('\r');
+    await vi.waitFor(() =>
+      expect(callbacks.onSetArchived).toHaveBeenCalledWith('session-current', true),
+    );
+    expect(callbacks.onDelete).not.toHaveBeenCalled();
+  });
+
+  it('deletes the Session with its history only after choosing the permanent row', async () => {
+    const { manager, callbacks } = createManager();
+
+    manager.handleInput('\x18');
+    manager.handleInput('\u001b[B');
+    expect(renderPlain(manager)).toContain('› Delete permanently');
+    manager.handleInput('\r');
+
+    await vi.waitFor(() => expect(callbacks.onDelete).toHaveBeenCalledWith('session-current'));
+    await flushActions();
+    expect(callbacks.onSetArchived).not.toHaveBeenCalled();
+    const after = renderPlain(manager);
+    expect(after).toContain('Session deleted with its history files. This cannot be undone.');
+    expect(after).not.toContain('Fix the login flow');
+  });
+
+  it('cancels without touching the Session or the list', () => {
+    const { manager, callbacks } = createManager();
+
+    manager.handleInput('\x18');
+    manager.handleInput('\u001b');
+    manager.handleInput('\u001b[B');
+
+    expect(renderPlain(manager)).not.toContain('Delete this session?');
+    expect(callbacks.onDelete).not.toHaveBeenCalled();
+    expect(callbacks.onSetArchived).not.toHaveBeenCalled();
+    expect(renderPlain(manager)).toContain('Fix the login flow');
+  });
+
+  it('advertises the delete binding next to archive', () => {
+    const { manager } = createManager();
+
+    expect(renderPlain(manager)).toContain('Ctrl+X delete');
+  });
+});
+
+describe('TuiSessionManager project grouping', () => {
+  it('groups the list by project and reports the mode', () => {
+    const { manager } = createManager();
+
+    expect(renderPlain(manager)).toContain('Today');
+
+    manager.handleInput('\u0007');
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Grouped by project.');
+    expect(rendered).toContain('workspace (1)');
+    expect(rendered).not.toContain('Today');
+    expect(rendered).toContain('Ctrl+O fold');
+
+    manager.handleInput('\u0007');
+
+    expect(renderPlain(manager)).toContain('Grouped by recency.');
+    expect(renderPlain(manager)).toContain('Today');
+  });
+
+  it('folds every other project and keeps the selected one open', async () => {
+    const onScopeChange = vi.fn(async () => ({ sessions, hasMore: false }));
+    const { manager } = createManager({ onScopeChange });
+
+    manager.handleInput('\u0001');
+    await flushActions();
+    manager.handleInput('\u0007');
+
+    const grouped = renderPlain(manager);
+    expect(grouped).toContain('workspace (1)');
+    expect(grouped).toContain('other-workspace (1)');
+    expect(grouped).toContain('Fix the login flow');
+    expect(grouped).toContain('Refactor the runtime');
+
+    manager.handleInput('\u000f');
+
+    const folded = renderPlain(manager);
+    expect(folded).toContain('stays open; the other groups are folded.');
+    expect(folded).toContain('▸ other-workspace (1 folded)');
+    expect(folded).not.toContain('Refactor the runtime');
+    expect(folded).toContain('Fix the login flow');
+
+    manager.handleInput('\u000f');
+
+    const unfolded = renderPlain(manager);
+    expect(unfolded).toContain('Showing every group again.');
+    expect(unfolded).toContain('Refactor the runtime');
+    expect(unfolded).not.toContain('folded)');
+  });
+
+  it('says so when there is only one group to fold', () => {
+    const { manager } = createManager();
+
+    manager.handleInput('\u0007');
+    manager.handleInput('\u000f');
+
+    expect(renderPlain(manager)).toContain('Only one group is listed, so there is nothing to fold.');
+  });
+
+  it('folds a project only while the selected Session keeps it open', async () => {
+    const onScopeChange = vi.fn(async () => ({ sessions, hasMore: false }));
+    const { manager } = createManager({ onScopeChange });
+
+    manager.handleInput('\u0001');
+    await flushActions();
+    manager.handleInput('\u0007');
+    manager.handleInput('\u000f');
+    expect(renderPlain(manager)).not.toContain('Refactor the runtime');
+
+    manager.handleInput('\u001b[B');
+
+    const moved = renderPlain(manager);
+    expect(moved).toContain('Refactor the runtime');
+    expect(moved).toContain('Fix the login flow');
+  });
+
+  it('never folds while a query is active, where the list is flat', () => {
+    const { manager } = createManager();
+
+    manager.handleInput('login');
+    manager.handleInput('\u0007');
+
+    const rendered = renderPlain(manager);
+    expect(rendered).not.toContain('Grouped by project.');
+    expect(rendered).toContain('Fix the login flow');
+  });
+});
+
+describe('TuiSessionManager saved-prompt search', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('lists Sessions matched by a saved prompt with the prompt quoted back', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => [
+      { sessionId: 'session-current', snippet: 'Fix the login flow with a redirect' },
+    ]);
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('redirect');
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(onSearchHistory).toHaveBeenCalledWith('redirect', ['session-current']);
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Fix the login flow');
+    expect(rendered).toContain('prompt match');
+    expect(rendered).toContain('Matched “Fix the login flow with a redirect”');
+    expect(rendered).toContain('1 Session matched a saved prompt.');
+  });
+
+  it('never searches prompts when the query matches a title', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => []);
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('login');
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(onSearchHistory).not.toHaveBeenCalled();
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Fix the login flow');
+    expect(rendered).not.toContain('prompt match');
+  });
+
+  it('reports a query that matched neither titles nor saved prompts', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => []);
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('kubernetes');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('No matching sessions.');
+    expect(rendered).toContain('No title or saved prompt matched.');
+  });
+
+  it('reports a failed prompt search without listing anything', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => {
+      throw new Error('history unavailable');
+    });
+    const { manager } = createManager({ onSearchHistory });
+
+    manager.handleInput('kubernetes');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain("Couldn't search saved prompts.");
+    expect(rendered).not.toContain('prompt match');
+  });
+
+  it('drops prompt matches as soon as the query matches a title again', async () => {
+    vi.useFakeTimers();
+    const onSearchHistory = vi.fn(async () => [
+      { sessionId: 'session-current', snippet: 'Fix the login flow with a redirect' },
+    ]);
+    const { manager } = createManager({ onSearchHistory, initialQuery: 'redirect' });
+
+    await vi.advanceTimersByTimeAsync(250);
+    expect(renderPlain(manager)).toContain('prompt match');
+
+    manager.handleInput('\u0001');
+    for (let index = 0; index < 'redirect'.length; index += 1) manager.handleInput('\u0004');
+    manager.handleInput('login');
+    await vi.advanceTimersByTimeAsync(250);
+
+    const rendered = renderPlain(manager);
+    expect(rendered).toContain('Fix the login flow');
+    expect(rendered).not.toContain('prompt match');
+    expect(rendered).not.toContain('Matched');
   });
 });

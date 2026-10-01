@@ -1,5 +1,5 @@
 import {
-  MCODE_OAUTH_SCOPES,
+  KCODE_OAUTH_SCOPES,
   type AccessTokenLease,
   type UnauthorizedContext,
 } from './contracts.js';
@@ -9,35 +9,35 @@ import type {
   LoginOptions,
   LoginResult,
   LogoutResult,
-  MCodeOAuthCore,
+  KCodeOAuthCore,
 } from './auth-core.js';
 
-export interface MCodeTokenProvider {
+export interface KCodeTokenProvider {
   getStatus(): Promise<AuthStatusSnapshot>;
   getAccessToken(options: { minValidityMs: number }): Promise<AccessTokenLease>;
   handleUnauthorized(context: UnauthorizedContext): Promise<'retry' | 'logout'>;
 }
 
-export interface MCodeAuthManager extends MCodeTokenProvider {
+export interface KCodeAuthManager extends KCodeTokenProvider {
   login(options?: LoginOptions): Promise<LoginResult>;
   cancelLogin(): Promise<void>;
   logout(options: { revoke: boolean }): Promise<LogoutResult>;
   watch(listener: (status: AuthStatusSnapshot) => void): () => void;
 }
 
-export function createTokenProvider(core: MCodeOAuthCore): MCodeTokenProvider {
+export function createTokenProvider(core: KCodeOAuthCore): KCodeTokenProvider {
   return Object.freeze({
     getStatus: () => core.getStatus(),
     getAccessToken: (options: { minValidityMs: number }) =>
       core.getAccessToken({
-        requiredScopes: [...MCODE_OAUTH_SCOPES],
+        requiredScopes: [...KCODE_OAUTH_SCOPES],
         minValidityMs: options.minValidityMs,
       }),
     handleUnauthorized: (context: UnauthorizedContext) => core.handleUnauthorized(context),
   });
 }
 
-export function createAuthManager(core: MCodeOAuthCore): MCodeAuthManager {
+export function createAuthManager(core: KCodeOAuthCore): KCodeAuthManager {
   const provider = createTokenProvider(core);
   return Object.freeze({
     ...provider,

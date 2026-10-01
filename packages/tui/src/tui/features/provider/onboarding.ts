@@ -1,12 +1,13 @@
-import type {
-  McodeProviderApiFormat,
-  McodeDiscoverProviderModelsInput,
-  McodeProviderModel,
-  McodeProviderModelInput,
-  McodeProviderView,
-  McodeProviderTemplate,
-  McodeSaveProviderCandidateInput,
-  McodeSaveProviderCandidateResult,
+import {
+  KCODE_LOCAL_SETUP,
+  type KcodeProviderApiFormat,
+  type KcodeDiscoverProviderModelsInput,
+  type KcodeProviderModel,
+  type KcodeProviderModelInput,
+  type KcodeProviderView,
+  type KcodeProviderTemplate,
+  type KcodeSaveProviderCandidateInput,
+  type KcodeSaveProviderCandidateResult,
 } from '../../../provider/contract.js';
 import { additiveProviderModels, matchesProviderTemplate } from './connections.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
@@ -18,8 +19,16 @@ import { tuiChalk as chalk, tuiColors as colors, tuiSelectListTheme } from '../.
 import { SelectList } from '../../widgets/select-list.js';
 
 const CUSTOM_PROVIDER_VALUE = '\u0000custom-provider';
+const LOCAL_PROVIDER_VALUE = '\u0000local-provider';
+/**
+ * Where the local-model flow starts: the OpenAI-compatible base URL the most
+ * common local servers expose (Ollama's default port). Editable, since the base
+ * URL step is the next one and nothing is contacted before the connection test.
+ */
+const LOCAL_PROVIDER_BASE_URL = KCODE_LOCAL_SETUP.baseUrl;
+const LOCAL_PROVIDER_NAME = 'Local model';
 const CUSTOM_FORMATS: readonly {
-  readonly value: McodeProviderApiFormat;
+  readonly value: KcodeProviderApiFormat;
   readonly label: string;
   readonly description: string;
 }[] = [
@@ -56,15 +65,15 @@ export interface TuiProviderOnboardingResult {
 }
 
 export interface TuiProviderOnboardingOptions {
-  readonly templates: readonly McodeProviderTemplate[];
-  readonly providers?: readonly McodeProviderView[];
+  readonly templates: readonly KcodeProviderTemplate[];
+  readonly providers?: readonly KcodeProviderView[];
   readonly catalogWarning?: string;
   readonly onDiscover?: (
-    input: McodeDiscoverProviderModelsInput,
-  ) => Promise<readonly McodeProviderModel[]>;
+    input: KcodeDiscoverProviderModelsInput,
+  ) => Promise<readonly KcodeProviderModel[]>;
   readonly onSave: (
-    input: McodeSaveProviderCandidateInput,
-  ) => Promise<McodeSaveProviderCandidateResult>;
+    input: KcodeSaveProviderCandidateInput,
+  ) => Promise<KcodeSaveProviderCandidateResult>;
   readonly onComplete: (result: TuiProviderOnboardingResult) => void | Promise<void>;
   readonly onCancel: () => void;
   readonly requestRender: () => void;
@@ -76,8 +85,8 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private readonly searchInput = new Input({ prompt: '' });
   private readonly textInput = new Input({ prompt: '' });
   private readonly secretInput = new Input({ prompt: '', mask: '•' });
-  private template?: McodeProviderTemplate;
-  private connection?: McodeProviderView;
+  private template?: KcodeProviderTemplate;
+  private connection?: KcodeProviderView;
   private alias = '';
   private selectedModelId = '';
   private modelFocus: ModelFocus = 'models';
@@ -86,11 +95,13 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private presetBaseUrl = '';
   private customName = '';
   private customBaseUrl = '';
-  private customApiFormat: McodeProviderApiFormat = 'openai-completions';
+  private customApiFormat: KcodeProviderApiFormat = 'openai-completions';
   private customModelId = '';
   private customApiKey = '';
-  private discoveredModels: readonly McodeProviderModelInput[] = [];
+  private discoveredModels: readonly KcodeProviderModelInput[] = [];
   private discovering = false;
+  /** Set when the flow was started from the catalogue's local-model entry. */
+  private localEndpoint = false;
   private busy = false;
   private status = '';
   private _focused = false;
@@ -363,6 +374,14 @@ export class TuiProviderOnboarding implements Component, Focusable {
         groupLabel: 'Manual',
       });
     }
+    if (!query || 'local model'.includes(query)) {
+      items.push({
+        value: LOCAL_PROVIDER_VALUE,
+        label: 'Local model',
+        description: 'OpenAI-compatible server · API key optional',
+        groupLabel: 'Manual',
+      });
+    }
     const list = this.createList(items);
     list.onSelect = (item) => this.selectProvider(item.value);
     return list;
@@ -395,7 +414,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     return list;
   }
 
-  private filteredModels(): McodeProviderTemplate['models'] {
+  private filteredModels(): KcodeProviderTemplate['models'] {
     const query = this.searchInput.getValue().trim().toLocaleLowerCase();
     return (this.template?.models ?? []).filter((model) =>
       `${model.modelId} ${model.displayName ?? ''}`.toLocaleLowerCase().includes(query),
@@ -405,8 +424,8 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private createFormatList(): SelectList {
     const list = this.createList([...CUSTOM_FORMATS]);
     list.onSelect = (item) => {
-      this.customApiFormat = item.value as McodeProviderApiFormat;
-      this.enterMode('api-key');
+      this.customApiFormat = item.value as KcodeProviderApiFormat;
+      this.enterMode('custom-model-source');
     };
     return list;
   }
@@ -510,6 +529,16 @@ export class TuiProviderOnboarding implements Component, Focusable {
 
   private selectProvider(value: string): void {
     this.status = '';
+    if (value === LOCAL_PROVIDER_VALUE) {
+      this.resetKnownProviderDraft();
+      this.template = undefined;
+      this.localEndpoint = true;
+      this.customName = LOCAL_PROVIDER_NAME;
+      this.customBaseUrl = LOCAL_PROVIDER_BASE_URL;
+      this.customApiFormat = 'openai-completions';
+      this.enterTextMode('custom-name', LOCAL_PROVIDER_NAME);
+      return;
+    }
     if (value === CUSTOM_PROVIDER_VALUE) {
       this.resetKnownProviderDraft();
       this.template = undefined;
@@ -522,7 +551,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     this.enterMode(this.matchingConnections().length ? 'connection' : 'model');
   }
 
-  private matchingConnections(): readonly McodeProviderView[] {
+  private matchingConnections(): readonly KcodeProviderView[] {
     const template = this.template;
     return template
       ? (this.options.providers ?? []).filter(
@@ -624,6 +653,12 @@ export class TuiProviderOnboarding implements Component, Focusable {
         return;
       }
       this.customBaseUrl = trimmed;
+      if (this.localEndpoint) {
+        // The local-model entry is OpenAI-compatible by definition, so the
+        // protocol step is skipped and the flow asks for the model.
+        this.enterTextMode('custom-model', this.customModelId);
+        return;
+      }
       this.enterMode('custom-format');
       return;
     }
@@ -636,8 +671,9 @@ export class TuiProviderOnboarding implements Component, Focusable {
   private submitApiKey(value: string): void {
     const apiKey = value.trim();
     if (!apiKey) {
-      this.status = 'API Key is required.';
-      this.options.requestRender();
+      // An empty field is a decision, not an omission: the endpoint is saved
+      // without a credential and its requests carry none.
+      void this.save(apiKey || undefined);
       return;
     }
     this.customApiKey = apiKey;
@@ -646,7 +682,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     this.enterMode('custom-model-source');
   }
 
-  private async save(apiKey: string): Promise<void> {
+  private async save(apiKey?: string): Promise<void> {
     const input = this.saveInput(apiKey);
     if (!input) return;
     this.busy = true;
@@ -669,7 +705,9 @@ export class TuiProviderOnboarding implements Component, Focusable {
     } catch (error) {
       this.status = formatTuiActionFailure(error, {
         summary: "Couldn't save the provider.",
-        nextStep: 'Check the URL, API key, and model, then retry.',
+        nextStep: this.localEndpoint
+          ? 'Check that the server is running and that the base URL answers on that port, then retry.'
+          : 'Check the URL, API key, and model, then retry.',
       });
     } finally {
       if (apiKey) this.status = this.status.split(apiKey).join('[redacted]');
@@ -678,7 +716,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     }
   }
 
-  private saveInput(apiKey: string): McodeSaveProviderCandidateInput | undefined {
+  private saveInput(apiKey?: string): KcodeSaveProviderCandidateInput | undefined {
     if (this.template) {
       if (!this.selectedModelId) return undefined;
       return {
@@ -703,7 +741,9 @@ export class TuiProviderOnboarding implements Component, Focusable {
     return {
       name: this.customName,
       baseUrl: this.customBaseUrl,
-      apiKey,
+      // Absent saves an endpoint that needs no authentication: the connection is
+      // created with no credential, and requests carry none.
+      ...(apiKey ? { apiKey } : {}),
       apiFormat: this.customApiFormat,
       models:
         this.mode === 'custom-discovered'
@@ -774,7 +814,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
             : this.createFormatList();
   }
 
-  private selectedModel(): McodeProviderTemplate['models'][number] | undefined {
+  private selectedModel(): KcodeProviderTemplate['models'][number] | undefined {
     return this.template?.models.find((model) => model.modelId === this.selectedModelId);
   }
 
@@ -791,6 +831,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     this.modelFocus = 'models';
     this.editingModelApiKey = false;
     this.modelApiKeyDraft = '';
+    this.localEndpoint = false;
     this.secretInput.setValue('');
   }
 
@@ -819,7 +860,10 @@ export class TuiProviderOnboarding implements Component, Focusable {
     if (this.mode === 'custom-model' || this.mode === 'custom-discovered')
       return this.enterMode('custom-model-source');
     if (this.mode === 'custom-model-source') return this.enterMode('api-key');
-    if (this.mode === 'api-key') return this.enterMode('custom-format');
+    if (this.mode === 'api-key')
+      return this.localEndpoint
+        ? this.enterTextMode('custom-url', this.customBaseUrl)
+        : this.enterMode('custom-format');
     if (this.template) return this.enterMode('model');
     this.enterTextMode('custom-model', this.customModelId);
   }
@@ -835,7 +879,8 @@ export class TuiProviderOnboarding implements Component, Focusable {
     if (this.mode === 'custom-model-source') return 'Import the model list or enter a model ID';
     if (this.mode === 'custom-discovered')
       return `Import ${this.discoveredModels.length} models · choose one to test and use`;
-    if (this.mode === 'api-key') return 'The key is stored locally and never shown in output';
+    if (this.mode === 'api-key')
+      return 'Optional: a server that needs no authentication is connected with the field left empty';
     return 'Custom provider';
   }
 
@@ -844,6 +889,7 @@ export class TuiProviderOnboarding implements Component, Focusable {
     if (this.mode === 'custom-name') return 'Provider name';
     if (this.mode === 'custom-url' || this.mode === 'preset-url') return 'Base URL';
     if (this.mode === 'custom-model') return 'Model ID';
+    if (this.mode === 'api-key') return 'API Key (optional)';
     return 'API Key';
   }
 
@@ -858,7 +904,10 @@ export class TuiProviderOnboarding implements Component, Focusable {
         return 'enter test, save, and use · tab API Key · esc close details';
       return '↑↓ select · type to search · tab API Key · enter details · esc back';
     }
-    if (this.mode === 'api-key') return 'enter continue to models · esc back';
+    if (this.mode === 'api-key')
+      return this.localEndpoint
+        ? 'enter connect without a key · type a key for a guarded server · esc back'
+        : 'enter continue to models · esc back';
     if (this.mode === 'custom-model') return 'enter test, save, and use · esc back';
     if (
       this.mode === 'preset-url' ||

@@ -36,8 +36,6 @@ describe('explicit headless config', () => {
         '  minSavingsKiB: 192',
         '  minCandidateKiB: 3',
         '  keepRecentRounds: 2',
-        'telemetry:',
-        '  enabled: true',
       ].join('\n'),
     );
 
@@ -58,7 +56,6 @@ describe('explicit headless config', () => {
         minCandidateKiB: 3,
         keepRecentRounds: 2,
       },
-      telemetry: { enabled: true, metrics: false, diagnostics: false },
     });
   });
 
@@ -87,7 +84,6 @@ describe('explicit headless config', () => {
         minCandidateKiB: 2,
         keepRecentRounds: 5,
       },
-      telemetry: { enabled: false, metrics: false, diagnostics: false },
     });
   });
 });

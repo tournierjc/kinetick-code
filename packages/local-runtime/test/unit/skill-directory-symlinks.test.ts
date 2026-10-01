@@ -50,7 +50,7 @@ async function linkDirectory(target: string, link: string, relativeTarget = fals
 }
 
 describe('configured workspace skill directory links', () => {
-  it.each(['.agents', '.claude', '.minimax'])(
+  it.each(['.agents', '.claude', '.kinetick', '.minimax'])(
     'discovers a linked %s/skills root',
     async (source) => {
       const target = join(workspace, 'skills', 'linked');

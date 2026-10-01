@@ -183,7 +183,7 @@ describe.skipIf(process.platform === "win32")(
     });
 
     it("copies default-profile credentials into a private config", () => {
-      const defaults = join(root, ".minimax");
+      const defaults = join(root, ".kinetick");
       fs.mkdirSync(defaults);
       fs.writeFileSync(join(defaults, "config.yaml"), document, {
         mode: 0o644,

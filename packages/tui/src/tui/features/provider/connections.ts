@@ -1,13 +1,13 @@
 import type {
-  McodeProviderModelInput,
-  McodeProviderTemplate,
-  McodeProviderView,
+  KcodeProviderModelInput,
+  KcodeProviderTemplate,
+  KcodeProviderView,
 } from '../../../provider/contract.js';
 
 /** Suggest a saved connection; only the user's choice authorizes updating it. */
 export function matchesProviderTemplate(
-  provider: McodeProviderView,
-  template: McodeProviderTemplate,
+  provider: KcodeProviderView,
+  template: KcodeProviderTemplate,
 ): boolean {
   return (
     provider.kind === 'custom' &&
@@ -20,9 +20,9 @@ export function matchesProviderTemplate(
 
 /** An edit retains existing model fields by sending only their IDs. */
 export function additiveProviderModels(
-  provider: McodeProviderView,
-  models: readonly McodeProviderModelInput[],
-): McodeProviderModelInput[] {
+  provider: KcodeProviderView,
+  models: readonly KcodeProviderModelInput[],
+): KcodeProviderModelInput[] {
   const saved = new Set(provider.models.map((model) => model.modelId));
   return [
     ...provider.models.map(({ modelId }) => ({ modelId })),

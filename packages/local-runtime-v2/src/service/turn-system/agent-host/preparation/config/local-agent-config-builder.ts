@@ -13,6 +13,12 @@ import {
 } from './prompt-templates.js';
 import { resolveAgentCapabilities, type ResolvedAgentCapabilities } from '@mavis/config';
 import type { SessionRecord, TaskSessionBinding } from '../../../../session-system/index.js';
+import {
+  isSkillAllowedBySessionPolicy,
+  listSkillsByDisposition,
+  effectiveSessionSkillPolicy,
+  resolveSessionSkillAllowlist,
+} from '../../../../session-system/index.js';
 import type {
   AgentExecutionSnapshot,
   ContextUsagePromptRange,
@@ -27,7 +33,11 @@ import {
   savedSessionModel,
   type LocalConversationRuntimeConfig,
 } from '../../../../model-system/index.js';
-import { INSTRUCTIONS_CONTEXT_PREAMBLE } from '../prompt-blocks.js';
+import {
+  buildUntrustedProjectInstructionsBlock,
+  PROJECT_INSTRUCTIONS_PREAMBLE,
+  USER_INSTRUCTIONS_PREAMBLE,
+} from '../prompt-blocks.js';
 import {
   createLocalStaticPromptReader,
   type LocalStaticPromptReader,
@@ -503,7 +513,10 @@ async function loadPromptLayers(parameters: {
   ]);
   const [{ basePrompt, sessionPrompt }, projectInstructions, globalInstructions, memory, skills] =
     loaded;
-  const filteredRuntimeSkills = skills.skills.filter((skill) =>
+  const sessionFilteredSkills = skills.skills.filter((skill) =>
+    isSkillAllowedBySessionPolicy(input.session.skillPolicy, skill.name),
+  );
+  const filteredRuntimeSkills = sessionFilteredSkills.filter((skill) =>
     isRuntimeSkillSelected(profile?.configSelection, skill),
   );
   const standaloneNames = new Set(
@@ -516,6 +529,7 @@ async function loadPromptLayers(parameters: {
     return (
       !(hideCodeReviewSkill && name === CODE_REVIEW_SKILL_NAME) &&
       !standaloneNames.has(name) &&
+      isSkillAllowedBySessionPolicy(input.session.skillPolicy, skill.name) &&
       isExtensionSkillSelected(allowedExtensionSkills, skill.pluginName, skill.name)
     );
   });
@@ -550,14 +564,32 @@ function createExecutionScope(
   profile: LocalAgentExecutionProfile | undefined,
   miniappAvailable: boolean,
 ): LocalPromptSkillCatalogScope {
+  const profileScope = profileSelectionScope(profile);
   return {
     agentName: profile?.resourceReadRef ?? runtimeFacts.resourceAgentName,
     ...profileResourceScope(profile),
     workspaceDir: session.workspaceDir,
     ...builtinSkillScope(session, runtimeFacts),
-    ...profileSelectionScope(profile),
+    ...composeSkillAllowlists(profileScope, session),
     ...runtimeFeatureScope(runtimeFacts, profile, miniappAvailable),
   };
+}
+
+function composeSkillAllowlists(
+  profileScope: ReturnType<typeof profileSelectionScope>,
+  session: SessionRecord,
+): ReturnType<typeof profileSelectionScope> {
+  const policy = effectiveSessionSkillPolicy(session.skillPolicy);
+  const profileAllowed = profileScope.allowedSkillNames;
+  const catalogNames = [
+    ...(profileAllowed ?? []),
+    ...listSkillsByDisposition(policy, 'mandatory'),
+    ...listSkillsByDisposition(policy, 'optional'),
+    ...listSkillsByDisposition(policy, 'forbidden'),
+  ];
+  const allowedSkillNames = resolveSessionSkillAllowlist(policy, profileAllowed, catalogNames);
+  if (allowedSkillNames === undefined) return profileScope;
+  return { ...profileScope, allowedSkillNames: [...allowedSkillNames] };
 }
 
 function profileResourceScope(profile: LocalAgentExecutionProfile | undefined) {
@@ -762,11 +794,15 @@ function buildIdentityPrompt(scope: {
   const { agent, layers, profile, interactiveSurface } = scope;
   const persona = (profile?.persona ?? agent.persona)?.trim();
   const globalInstructions = layers.globalInstructions.trim();
-  const projectInstructions = layers.projectInstructions.trim();
-  // The preamble only renders when at least one instruction layer is present, so
-  // an empty workspace never claims that context follows.
-  const instructionsPreamble =
-    globalInstructions || projectInstructions ? INSTRUCTIONS_CONTEXT_PREAMBLE : '';
+  const projectInstructions = buildUntrustedProjectInstructionsBlock(layers.projectInstructions);
+  // Each preamble renders only for the layer it describes, so an empty workspace
+  // never claims that untrusted repository instructions follow.
+  const instructionsPreamble = [
+    globalInstructions ? USER_INSTRUCTIONS_PREAMBLE : '',
+    projectInstructions ? PROJECT_INSTRUCTIONS_PREAMBLE : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const corePrompt = (profile?.corePrompt ?? agent.systemPrompt).trim();
   const hasIdentity = [
     persona,

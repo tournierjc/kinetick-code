@@ -43,6 +43,35 @@ export {
 } from "./questionnaire/fork.js";
 export { readPreviewTrainPinnedItemsOrderPreference } from "./pin/legacy-preferences.js";
 export type { LocalSkillService } from "./skills/skill-service.js";
+export { LocalMemoryFacade } from "./memory/local-memory-facade.js";
+
+export {
+  KnowledgeProposalStore,
+  KnowledgeProposalError,
+  type KnowledgeProposal,
+  type KnowledgeProposalKind,
+  type KnowledgeProposalAction,
+  type KnowledgeProposalStatus,
+  type CreateKnowledgeProposalInput,
+  type ReviewKnowledgeProposalInput,
+} from "./knowledge/proposal-store.js";
+export { createIdleKnowledgeProposals } from "./knowledge/idle-proposals.js";
+export {
+  KnowledgeReviewApplication,
+  createKnowledgeReviewApplication,
+  type KnowledgeReviewApplicationOptions,
+} from "./knowledge/review-application.js";
+export {
+  matchSkillsForPrompt,
+  formatPromptSkillMatchReminder,
+  type PromptSkillCandidate,
+  type PromptSkillMatch,
+} from "./skills/prompt-skill-lookup.js";
+export {
+  matchMemoryForPrompt,
+  formatPromptMemoryLookup,
+  type PromptMemoryMatch,
+} from "./memory/prompt-memory-lookup.js";
 
 export { resolveLocalRuntimeMode } from "./runtime/mode.js";
 

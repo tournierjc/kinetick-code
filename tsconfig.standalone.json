@@ -130,6 +130,9 @@
       "@mavis/browser-core": [
         "./packages/browser-core/src/index.ts"
       ],
+      "@mavis/code/package.json": [
+        "./packages/tui/package.json"
+      ],
       "@mavis/config": [
         "./packages/config/src/index.ts"
       ],
@@ -174,6 +177,9 @@
       ],
       "@mavis/local-runtime-v2/process-local": [
         "./packages/local-runtime-v2/src/local/host-contract.ts"
+      ],
+      "@mavis/local-runtime-v2/project-mcp-trust": [
+        "./packages/local-runtime-v2/src/service/mcp/project-stdio-trust.ts"
       ],
       "@mavis/local-runtime-v2/session-system": [
         "./packages/local-runtime-v2/src/service/session-system/index.ts"
@@ -249,6 +255,9 @@
       ],
       "@mavis/shared/daily-signin": [
         "./packages/shared/src/daily-signin.ts"
+      ],
+      "@mavis/shared/egress-guard": [
+        "./packages/shared/src/egress-guard.ts"
       ],
       "@mavis/shared/eval-meta-info": [
         "./packages/shared/src/eval-meta-info.ts"
@@ -375,9 +384,6 @@
       ],
       "@mavis/system-reminder": [
         "./packages/agent-modules/system-reminder/src/index.ts"
-      ],
-      "@minimax/code/package.json": [
-        "./packages/tui/package.json"
       ],
       "@minimax/mcode-sandbox-runtime": [
         "./third_party/sandbox-runtime/src/index.ts"

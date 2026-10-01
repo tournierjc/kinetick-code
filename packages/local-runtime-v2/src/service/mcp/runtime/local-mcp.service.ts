@@ -111,7 +111,7 @@ export class LocalMcpService {
     private options: LocalMcpServiceOptions = {},
   ) {
     this.sessionServers = new SessionMcpServers(options.connectionPool);
-    this.projectMcp = new ProjectMcpRuntime(options.connectionPool);
+    this.projectMcp = new ProjectMcpRuntime(options.connectionPool, dataDir);
   }
 
   getSessionMcpServers(sessionId: string) {
