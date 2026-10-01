@@ -163,6 +163,38 @@ Offline regression tests cover cascade ownership, delivery suppression, late
 task creation, repeated stops, append completion/shutdown, and queue fallback.
 The host integration tests use a scripted runner and real background processes;
 they do not establish live-model or cross-platform acceptance.
+## Agent model fallback chains
+
+Custom Agents may declare an ordered tail of backup models that the runtime
+promotes to when the primary model fails before any output is committed.
+The tail lives in the agent's `agent.md` frontmatter:
+
+- `x-mavis.fallbackModels: [provider/model, ...]` — at most three entries,
+  each in the exact `provider/model` form (same grammar as `model:`). A
+  malformed entry, a non-array value, or a fourth entry is a hard
+  `AGENT_CONFIG_INVALID` error, mirroring the strict `model:` contract.
+- Resolution is per candidate and per turn: an entry whose provider route
+  cannot be resolved (missing key, removed provider, unregistered model) is
+  dropped for that turn; the chain degrades to its resolvable head.
+- Promotion is failover-only: a candidate is tried only when the previous one
+  ends in a provider-side failure with **no committed output** (text,
+  thinking, tool call, or usage). A mid-stream failure after output is
+  reported as-is — the answer is never silently restarted on another model.
+- A candidate that shares the primary's backend identity (same provider,
+  model id, and base URL) is never promoted to, matching the credential
+  rotation behavior of `x-mavis.rotatingKeys`.
+- A candidate that just failed enters a short cooldown (rate-limit style
+  failures honor the provider's `retry-after` hint when present) so a
+  consecutive turn does not re-burn the same dead backend; the primary is
+  always retried first when its own budget allows.
+- Per-candidate retry budgets are independent: one bad model cannot consume
+  the whole turn's retry budget from the others.
+- Agents without `fallbackModels` behave exactly as before: single-model
+  retry behavior is unchanged.
+
+Chain activation is observable through `sessionEvent` telemetry
+(`llm_fallback` events with from/to models and the failover reason).
+
 ## Skill directory links
 Workspace `.agents/skills`, `.claude/skills`, and `.minimax/skills` support
 directory symlinks, both for the entire skill root and for individual skill

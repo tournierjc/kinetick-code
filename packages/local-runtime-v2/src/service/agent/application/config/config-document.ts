@@ -46,6 +46,7 @@ export function toConfiguredModelSelection(config: CanonicalAgentConfig): Pick<
   'effort' | 'contextWindow' | 'maxOutputTokens'
 > & {
   readonly model?: string;
+  readonly fallbackModels?: readonly string[];
 } {
   return {
     ...(config.model ? { model: config.model } : {}),
@@ -56,6 +57,9 @@ export function toConfiguredModelSelection(config: CanonicalAgentConfig): Pick<
     ...(config.xMavis?.maxOutputTokens === undefined
       ? {}
       : { maxOutputTokens: config.xMavis.maxOutputTokens }),
+    ...(config.xMavis?.fallbackModels === undefined
+      ? {}
+      : { fallbackModels: [...config.xMavis.fallbackModels] }),
   };
 }
 

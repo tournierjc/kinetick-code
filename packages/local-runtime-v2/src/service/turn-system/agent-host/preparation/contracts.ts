@@ -7,7 +7,10 @@ import type {
 } from '@mavis/config';
 import type { PromptReadScope } from '@mavis/agent-runtime';
 import type { InputSafetyDecision } from '../../../content-safety/index.js';
-import type { LocalResolvedModelConfig } from '../../../model-system/index.js';
+import type {
+  LocalFallbackRouteWithKey,
+  LocalResolvedModelConfig,
+} from '../../../model-system/index.js';
 import type {
   SessionRecord,
   TaskSessionBinding,
@@ -211,6 +214,8 @@ export interface LocalAgentConfigurationSelection {
   readonly effort?: string;
   readonly contextWindow?: number;
   readonly maxOutputTokens?: number;
+  /** Ordered fallback tail (`provider/model` keys); the primary is chain head. */
+  readonly fallbackModels?: readonly string[];
   readonly tools?: readonly string[];
   readonly disallowedTools?: readonly string[];
   readonly mcpServers?: readonly string[];
@@ -262,6 +267,11 @@ export interface LocalTurnPreparation {
   readonly promptRead?: PromptReadScope;
 }
 
+/** Preparation extended with the resolved Agent-owned fallback routes (absent = no chain). */
+export interface LocalTurnPreparationWithFallback extends LocalTurnPreparation {
+  readonly fallbackRoutes?: readonly LocalFallbackRouteWithKey[];
+}
+
 export interface LocalTurnPreparationInput<
   TAgent extends AgentExecutionSnapshot = AgentExecutionSnapshot,
 > {
@@ -283,6 +293,14 @@ export interface LocalTurnPreparationSource<
   TAgent extends AgentExecutionSnapshot = AgentExecutionSnapshot,
 > {
   prepare(input: LocalTurnPreparationInput<TAgent>): Promise<LocalTurnPreparation>;
+  /**
+   * Optional variant that also resolves the Agent-owned fallback routes.
+   * Turn preflight prefers it when present; sources without it keep plain
+   * retry-only behavior.
+   */
+  prepareWithFallback?(
+    input: LocalTurnPreparationInput<TAgent>,
+  ): Promise<LocalTurnPreparationWithFallback>;
 }
 
 export interface ContextCompactionPreparationInput<

@@ -475,6 +475,8 @@ export interface AgentConfigurationSelection {
   readonly effort?: string;
   readonly contextWindow?: number;
   readonly maxOutputTokens?: number;
+  /** Ordered fallback tail (`provider/model` keys); the primary is chain head. */
+  readonly fallbackModels?: readonly string[];
   readonly tools?: readonly string[];
   readonly disallowedTools?: readonly string[];
   readonly mcpServers?: readonly string[];

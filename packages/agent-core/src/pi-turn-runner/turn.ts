@@ -21,6 +21,7 @@ import type {
 } from './hooks.js';
 import { composeStreamFn } from './llm.js';
 import { withLLMRetry, type LLMCallScope, type LLMCallSettledEvent } from './llm-retry.js';
+import { withLLMFallback, resolveFallbackChain } from './llm-fallback.js';
 import type { TurnMetricsRecorder } from './metrics.js';
 import { newTools } from './tools.js';
 import type {
@@ -124,10 +125,10 @@ export interface turnState<TCtx extends ToolExecutionContext = ToolExecutionCont
   nextRuntimeSeq(): number;
 }
 
-export function newTurn<TCtx extends ToolExecutionContext>(
+export async function newTurn<TCtx extends ToolExecutionContext>(
   input: PiRunTurnInput<TCtx>,
   deps: turnDeps,
-): turnState<TCtx> {
+): Promise<turnState<TCtx>> {
   const resolved = input.llm;
   const composedStreamFn = composeStreamFn(resolved);
   const retryStream = (scope: LLMCallScope): StreamFn => {
@@ -167,11 +168,27 @@ export function newTurn<TCtx extends ToolExecutionContext>(
       : capturedStreamFn;
   };
   const mainStreamFn =
-    input.llmRetry || deps.llmCapture
-      ? retryStream('agent')
-      : deps.metrics
-        ? deps.metrics.wrapStreamFn(composedStreamFn)
-        : composedStreamFn;
+    input.llmRetry?.modelFallbackChain &&
+    input.llmRetry.modelFallbackChain.length > 0 &&
+    input.llmRetry.resolveFallbackRoute
+      ? withLLMFallback(retryStream('agent'), {
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          scope: 'agent',
+          chain: await resolveFallbackChain(
+            input.llmRetry.modelFallbackChain,
+            input.llmRetry.resolveFallbackRoute,
+          ),
+          ...(input.llmRetry.policy ? { policy: input.llmRetry.policy } : {}),
+          ...(input.llmRetry.onFallbackEvent
+            ? { observer: input.llmRetry.onFallbackEvent }
+            : {}),
+        })
+      : input.llmRetry || deps.llmCapture
+        ? retryStream('agent')
+        : deps.metrics
+          ? deps.metrics.wrapStreamFn(composedStreamFn)
+          : composedStreamFn;
   const auxiliaryStreamFn = input.llmRetry ? retryStream('compaction') : undefined;
   const syntheticResponse: turnState['syntheticResponse'] = {};
   let eventSeq = 0;
