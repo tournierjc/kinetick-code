@@ -366,6 +366,9 @@ export class TuiChatController {
    */
   beginBackgroundTurn(sessionId: string, turnId: string, startedAtMs: number): void {
     const key = backgroundTurnKey(sessionId, turnId);
+    // Record before the same-turn return so the ledger keeps the earliest start
+    // even when a watcher for this Turn is already running.
+    this.turnStarts.record(turnId, startedAtMs);
     if (this.backgroundTurnAnchors.has(key)) return;
     this.backgroundTurnAnchors.add(key);
     this.backgroundTurnProjection(sessionId).beginTurn(turnId, startedAtMs);
