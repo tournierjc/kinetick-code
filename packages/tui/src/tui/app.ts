@@ -852,6 +852,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     planMode: () => planModeFlow.snapshot(),
     sideConversation: () => sessionFlow.sideConversationSnapshot(),
     sessionState: () => stateStore.snapshot(),
+    turnStartedAtMs: (turnId) => controller.turnStartedAtMs(turnId),
     welcome,
     status,
     activity,

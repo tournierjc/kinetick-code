@@ -556,6 +556,11 @@ export class TuiRuntimeEventFlow {
     }
     const currentSessionId = this.options.controller.snapshot().session?.sessionId;
     const matchesCurrentSession = Boolean(currentSessionId) && event.sessionId === currentSessionId;
+    if (event.type === 'session.start' && event.turnId && event.timestampMs !== undefined) {
+      // Also for hidden Sessions (e.g. the main Session behind a side view), so
+      // switching back later shows the true elapsed time.
+      this.options.controller.recordTurnStart(event.turnId, event.timestampMs);
+    }
     if (!matchesCurrentSession && event.sessionId && event.type === 'session.start' && event.turnId) {
       this.adoptRuntimeTurn(event.sessionId, event.turnId, event.timestampMs);
     }
@@ -775,8 +780,24 @@ export class TuiRuntimeEventFlow {
     timestampMs: number | undefined,
     afterMsgId?: string,
   ): void {
+    // Re-adopting a Turn after a projection switch passes the adoption time;
+    // keep the earliest observed start so the visible timer does not reset.
+    // Record before the same-turn return so a watcher that is already running
+    // still keeps the original start for the settled duration.
+    const startedAtMs =
+      timestampMs === undefined
+        ? this.options.controller.turnStartedAtMs(turnId)
+        : this.options.controller.recordTurnStart(turnId, timestampMs);
     const previousLiveTurn = this.liveTurns.get(sessionId);
-    if (previousLiveTurn?.turnId === turnId) return;
+    if (previousLiveTurn?.turnId === turnId) {
+      if (
+        startedAtMs !== undefined &&
+        (previousLiveTurn.startedAtMs === undefined || startedAtMs < previousLiveTurn.startedAtMs)
+      ) {
+        this.liveTurns.set(sessionId, { ...previousLiveTurn, startedAtMs });
+      }
+      return;
+    }
     if (previousLiveTurn) {
       previousLiveTurn.controller.abort();
       void previousLiveTurn.task.catch(() => undefined);
@@ -784,18 +805,18 @@ export class TuiRuntimeEventFlow {
 
     const controller = new AbortController();
     if (this.isVisibleSession(sessionId)) {
-      this.options.controller.beginRuntimeTurn(turnId, timestampMs ?? Date.now());
+      this.options.controller.beginRuntimeTurn(turnId, startedAtMs ?? Date.now());
       this.options.runProjection.markRecoveredTurn(turnId);
     } else {
       // A turn whose Session is not on screen anchors in that Session's own pane.
-      this.options.controller.beginBackgroundTurn(sessionId, turnId, timestampMs ?? Date.now());
+      this.options.controller.beginBackgroundTurn(sessionId, turnId, startedAtMs ?? Date.now());
     }
     const liveTurn: TuiLiveTurnSeed = {
       sessionId,
       turnId,
       controller,
       afterMsgId,
-      startedAtMs: timestampMs,
+      startedAtMs,
     };
     // The stream can end before the lifecycle terminal event supplies the end time.
     // Retain the turn until that event settles its projection.
