@@ -44,6 +44,8 @@ function createFlow(events: readonly TuiStreamEvent[], options: HarnessOptions =
       }),
       beginRuntimeTurn,
       beginBackgroundTurn,
+      recordTurnStart: (_turnId: string, timestampMs: number) => timestampMs,
+      turnStartedAtMs: () => undefined,
       applyRuntimeTurnEvent,
       applyBackgroundTurnEvent,
       settleBackgroundTurn,

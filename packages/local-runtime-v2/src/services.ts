@@ -20,6 +20,7 @@ import {
   LocalMemoryFacade,
 } from "@mavis/local-runtime";
 import { createGoalBudgetSummaryExtension } from "./application/agent/goal-budget-summary-reminder.js";
+import { createGoalFinalReply } from "./application/agent/goal-final-reply.js";
 import {
   combineLocalTurnToolPolicyGuards,
   createGoalBudgetToolPolicyGuard,
@@ -1013,6 +1014,7 @@ async function initializeRuntimeTurnSystem(
       turnFacts,
       pluginHookSessionOwnership,
     }) => {
+      const goalFinalReply = createGoalFinalReply();
       const production = await createLocalAgentHost({
         product: input.product,
         db: input.options.db,
@@ -1041,6 +1043,7 @@ async function initializeRuntimeTurnSystem(
           input.product.executor.reportFailure,
         ),
         toolPolicyGuard: combineLocalTurnToolPolicyGuards(
+          goalFinalReply.toolPolicyGuard,
           plan.toolGuard,
           createGoalBudgetToolPolicyGuard(),
         ),
@@ -1057,6 +1060,7 @@ async function initializeRuntimeTurnSystem(
           plan.extension,
           goalVerifierExtension,
           createGoalBudgetSummaryExtension(),
+          goalFinalReply.extension,
           ...normalExtensions,
         ],
         eventObserver: combineAgentEventObservers(

@@ -1258,7 +1258,7 @@ describe('custom provider candidate persistence', () => {
     expect(outcome.provider?.models).toEqual([]);
     expect(h.config.custom_provider?.work?.models).toEqual({});
     expect(h.testCalls).toEqual([]);
-    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3');
+    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3.1-Flash-Preview');
     expect(h.config.defaultModelVariant).toBeUndefined();
   });
 
@@ -2287,7 +2287,7 @@ describe('custom provider default model recovery', () => {
       models: [{ modelId: 'kept' }],
     });
 
-    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3');
+    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3.1-Flash-Preview');
     expect(h.config.defaultModelVariant).toBeUndefined();
   });
 });
@@ -2459,7 +2459,7 @@ describe('custom provider deletion', () => {
     await h.service.deleteUserProvider({ providerId: 'custom_provider:work' });
     expect(h.config.custom_provider?.work).toBeUndefined();
     expect(h.cache.load().provider_status['custom_provider:work']).toBeUndefined();
-    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3');
+    expect(h.config.defaultModel).toBe('minimax/MiniMax-M3.1-Flash-Preview');
     expect(h.config.defaultModelVariant).toBeUndefined();
   });
 

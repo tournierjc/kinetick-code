@@ -1059,7 +1059,10 @@ describe('TranscriptView', () => {
     const lines = view.render(50);
     const rendered = lines.join('\n');
 
-    expect(rendered).toContain('› Please inspect this.');
+    // The prompt is quoted source: its `**` markers stay literal. Assistant
+    // content below still renders as Markdown, which is why `one` loses its
+    // backticks there but not here.
+    expect(rendered).toContain('› Please **inspect** this.');
     expect(rendered).not.toContain('YOU');
     expect(rendered).toContain('├ • Thinking…');
     expect(rendered).toContain('│   Reading the repository');

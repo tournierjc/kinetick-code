@@ -36,8 +36,12 @@ export interface TuiCommandContext {
  * auth, and process controls stay unavailable even when typed directly.
  * `/parent` stays available as the explicit "switch back to the main
  * conversation" command; it mirrors the Ctrl+/ toggle, not a close.
+ * `/retry` stays available because it only resends the side Session's own
+ * failed message, and a failed side response tells the user to run it.
+ * `/doctor` and `/feedback` stay available so a failed side response can be
+ * diagnosed and reported where it happened; neither mutates either Session.
  */
-export const SIDE_MODE_READ_ONLY_COMMANDS = new Set([
+export const SIDE_MODE_COMMANDS = new Set([
   'help',
   'changelog',
   'context',
@@ -48,6 +52,9 @@ export const SIDE_MODE_READ_ONLY_COMMANDS = new Set([
   'transcript',
   'copy',
   'parent',
+  'retry',
+  'doctor',
+  'feedback',
 ]);
 
 export interface TuiCommand {
@@ -790,13 +797,13 @@ export function resolveTuiCommandVisibility(
   });
 }
 
-/** Side mode restricts the surface to the read-only whitelist at every layer. */
+/** Side mode restricts the surface to the side-mode whitelist at every layer. */
 export function isTuiCommandAllowedInSideMode(
   command: TuiCommand,
   context: TuiCommandContext,
 ): boolean {
   if (!context.sideMode) return true;
-  return SIDE_MODE_READ_ONLY_COMMANDS.has(command.name.toLocaleLowerCase());
+  return SIDE_MODE_COMMANDS.has(command.name.toLocaleLowerCase());
 }
 
 /** Mirrors Codex's side-conversation copy so a rejected command explains the exit path. */

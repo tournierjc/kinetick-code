@@ -12,6 +12,15 @@
   },
   "files": [
     {
+      "path": "alt-screen-search.ts",
+      "changeIds": [
+        "L025"
+      ],
+      "currentSha256": "5d4a8f5434bebe91e2fd01700bb331807ee9b9107ad96c33b730f663fae1e063",
+      "reason": "活动搜索索引与命中复用",
+      "behaviorImpact": "内容或宽度变化失效，避免重复 Unicode 映射。"
+    },
+    {
       "path": "autocomplete.ts",
       "currentSha256": "e18a02778ea3d6cfb3b5465132eca96c9c19a50e181cb4d19dc86217616a48ca",
       "changeIds": [
@@ -65,7 +74,8 @@
         "L013",
         "L029",
         "L026",
-        "L048"
+        "L048",
+        "L045"
       ],
       "reason": "Keep strict TypeScript fixes and product Markdown hooks, plus Pi's post-baseline wrapped-table style restoration. 链接标签使用独立样式上下文，防止外层正文或标题颜色覆盖链接颜色。 稳定 Markdown 块缓存",
       "behaviorImpact": "MCode keeps its compact code presentation without reimplementing Pi Markdown or leaking wrapped link styles into table borders and adjacent cells. 链接保留嵌套强调与行内代码，并在结束后恢复外层样式。 保留两个尾部块并对引用回退全文。"
@@ -81,15 +91,6 @@
       "behaviorImpact": "The fullscreen transcript reserves three columns; other scroll views retain the default one-column gutter. A detached viewport stays detached across layout changes until scrolling or an explicit follow request restores following."
     },
     {
-      "path": "components/settings-list.ts",
-      "currentSha256": "959f7db23190e0e526ca84c3032443d7d15248d891809f28c837cfa958692b5c",
-      "changeIds": [
-        "L005"
-      ],
-      "reason": "Make modulo-bounded value access explicit under the shared MCode strict TypeScript contract.",
-      "behaviorImpact": "none_intended"
-    },
-    {
       "path": "components/select-list.ts",
       "currentSha256": "9785ec8f02553795487e836cc2cebf7c59a5e173c422ed349725c59dc021561d",
       "changeIds": [
@@ -97,6 +98,15 @@
       ],
       "reason": "Add grouped Provider headings to replace the superseded MCode SelectList copy while retaining Pi filtering and single-line descriptions.",
       "behaviorImpact": "MCode decision and picker lists retain Provider grouping while using Pi selection and single-line description behavior."
+    },
+    {
+      "path": "components/settings-list.ts",
+      "currentSha256": "959f7db23190e0e526ca84c3032443d7d15248d891809f28c837cfa958692b5c",
+      "changeIds": [
+        "L005"
+      ],
+      "reason": "Make modulo-bounded value access explicit under the shared MCode strict TypeScript contract.",
+      "behaviorImpact": "none_intended"
     },
     {
       "path": "components/text.ts",
@@ -109,7 +119,7 @@
     },
     {
       "path": "index.ts",
-      "currentSha256": "f45ae2e2a6fdf78015b9877745ee374fe69462c89db88b8c92b5b790a0343cdf",
+      "currentSha256": "a82c68598f45fbc8b24978399f0599529ed2f238bb22d7dcb82ad68cdae9b6a1",
       "changeIds": [
         "L009",
         "L021",
@@ -171,6 +181,18 @@
       ],
       "reason": "Adapt Pi's post-baseline native module candidate resolver to the @minimax/code package layout.. Adapt Pi's post-baseline native module candidate resolver to the @minimax/code package layout.",
       "behaviorImpact": "Installed npm packages and standalone archives share one deterministic native helper resolution path.. Installed npm packages and standalone archives share one deterministic native helper resolution path."
+    },
+    {
+      "path": "public.ts",
+      "currentSha256": "f50b434a663debae58163927f41c70fbb4d2a948761db1ffaed1706c9df19010",
+      "changeIds": [
+        "L003",
+        "L006",
+        "L008",
+        "L011"
+      ],
+      "reason": "Provide the only product-facing Engine boundary and expose current Pi key, text, layout-frame and mouse utilities plus the recorded product input hooks.",
+      "behaviorImpact": "Product key, text, layout, mouse, Input and SelectList behavior, including regular feature viewport allocation, use the canonical Pi Engine implementation through one public barrel."
     },
     {
       "path": "stdin-buffer.ts",
@@ -255,7 +277,7 @@
     },
     {
       "path": "tui.ts",
-      "currentSha256": "027764f4460428a10ca873c78a294174169208a99316ab81450f3268404d443c",
+      "currentSha256": "571011dc9573e1ac6a362ac0f05300f35fc05d8c877df4aa17cc8d4f98310104",
       "changeIds": [
         "L005",
         "L015",
@@ -282,27 +304,6 @@
       ],
       "reason": "Preserve Unicode Sets behavior through RegExp construction while compiling with the shared ES2022 target, and make bounded access explicit.",
       "behaviorImpact": "none_intended"
-    },
-    {
-      "path": "public.ts",
-      "currentSha256": "f50b434a663debae58163927f41c70fbb4d2a948761db1ffaed1706c9df19010",
-      "changeIds": [
-        "L003",
-        "L006",
-        "L008",
-        "L011"
-      ],
-      "reason": "Provide the only product-facing Engine boundary and expose current Pi key, text, layout-frame and mouse utilities plus the recorded product input hooks.",
-      "behaviorImpact": "Product key, text, layout, mouse, Input and SelectList behavior, including regular feature viewport allocation, use the canonical Pi Engine implementation through one public barrel."
-    },
-    {
-      "path": "alt-screen-search.ts",
-      "changeIds": [
-        "L025"
-      ],
-      "currentSha256": "5d4a8f5434bebe91e2fd01700bb331807ee9b9107ad96c33b730f663fae1e063",
-      "reason": "活动搜索索引与命中复用",
-      "behaviorImpact": "内容或宽度变化失效，避免重复 Unicode 映射。"
     }
   ]
 }
