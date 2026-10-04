@@ -61,6 +61,7 @@ export interface LLMModelConfig {
    * would otherwise carry.
    */
   unauthenticatedEndpoint?: true;
+  /**
    * Per-attempt wait (ms) for the first provider stream event before the
    * request is aborted and reported as a retryable timeout. Absent: the
    * `MCODE_LLM_FIRST_EVENT_TIMEOUT_MS` environment value, else
