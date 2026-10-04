@@ -1,6 +1,6 @@
 import type { TuiMessage, TuiStreamEvent, TuiToolCall } from '../../../runtime/port.js';
 import type { TranscriptCellStatus } from '../../transcript/model.js';
-import type { TranscriptStore } from '../../transcript/store.js';
+import type { TranscriptProjectionTarget } from '../../transcript/store.js';
 import type { TuiToolProjection } from './turn-tool-projection.js';
 import type { TuiUserProjection } from './turn-user-projection.js';
 import {
@@ -17,14 +17,14 @@ import { projectTuiReviewMessage } from '../../../review/projection.js';
 type DeltaStreamEvent = Extract<TuiStreamEvent, { type: 'delta' }>;
 
 interface TuiLiveTurnProjectionOptions {
-  transcript: TranscriptStore;
+  transcript: TranscriptProjectionTarget;
   toolProjection: TuiToolProjection;
   userProjection: TuiUserProjection;
   now: () => number;
 }
 
 export class TuiLiveTurnProjection {
-  private readonly transcript: TranscriptStore;
+  private readonly transcript: TranscriptProjectionTarget;
   private readonly toolProjection: TuiToolProjection;
   private readonly userProjection: TuiUserProjection;
   private readonly now: () => number;

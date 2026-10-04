@@ -53,6 +53,14 @@ export interface LLMModelConfig {
   hostMaxOutputTokens?: number;
   headers?: Record<string, string>;
   /**
+   * The endpoint this model runs on needs no credential.
+   *
+   * The provider SDKs refuse to build a client without a key, so the resolver
+   * hands them one that is never meant to be sent; this flag is what keeps that
+   * placeholder off the wire, by clearing the credential headers each request
+   * would otherwise carry.
+   */
+  unauthenticatedEndpoint?: true;
    * Per-attempt wait (ms) for the first provider stream event before the
    * request is aborted and reported as a retryable timeout. Absent: the
    * `MCODE_LLM_FIRST_EVENT_TIMEOUT_MS` environment value, else

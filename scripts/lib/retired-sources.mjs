@@ -21,6 +21,11 @@ export const retiredSourceRoots = [
   "packages/local-runtime-v2/src/http/",
   "packages/protocol/src/generated/",
   "packages/local-runtime-v2/src/service/session-handoff/",
+  "packages/tui/src/analytics/",
+  "packages/tui/src/cli/telemetry-command.ts",
+  "packages/tui/src/observability/incident-reporter.ts",
+  "packages/config/src/telemetry-policy.ts",
+  "packages/local-runtime/src/error-reporting/",
 ];
 
 // May exist as public source, but must never be reachable from the standalone

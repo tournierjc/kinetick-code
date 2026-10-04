@@ -7,18 +7,20 @@ import {
   applyExecReviewCliContract,
   applyInteractiveCliContract,
   resolveInteractiveLaunchRequest,
+  resolveServerLaunchRequest,
   type RawTuiInteractiveOptions,
   type TuiInteractiveLaunchRequest,
+  type TuiServerLaunchRequest,
 } from './contract.js';
-import type { McodeProviderCliRequest } from './provider-command.js';
+import type { KcodeProviderCliRequest } from './provider-command.js';
 import {
+  defaultProviderApiFormatForBaseUrl,
   isModelProviderApiFormat,
-  MCODE_PROVIDER_API_FORMATS,
-  type McodeProviderApiFormat,
+  KCODE_PROVIDER_API_FORMATS,
+  type KcodeProviderApiFormat,
 } from '../provider/contract.js';
-import type { McodePluginCliRequest, McodePluginMarketplace } from '../plugin/contract.js';
+import type { KcodePluginCliRequest, KcodePluginMarketplace } from '../plugin/contract.js';
 import { resolveTuiManagedBackendLane } from './environment.js';
-import type { McodeTelemetryCliAction } from './telemetry-command.js';
 
 export type { TuiInteractiveLaunchRequest } from './contract.js';
 
@@ -38,12 +40,13 @@ export interface CreateTuiProgramOptions {
     lane?: string,
   ) => Promise<void>;
   runAcp?: (lane?: string) => Promise<void>;
+  runServer?: (request: TuiServerLaunchRequest, lane?: string) => Promise<void>;
   runLogin: (region?: MavisRegion, openBrowser?: boolean, lane?: string) => Promise<void>;
   runLogout: (region?: MavisRegion) => Promise<void>;
   runUpdate: () => Promise<void>;
-  runProvider?: (request: McodeProviderCliRequest, lane?: string) => Promise<void>;
-  runPlugin?: (request: McodePluginCliRequest, lane?: string) => Promise<void>;
-  runTelemetry?: (action: McodeTelemetryCliAction) => Promise<void>;
+  runProvider?: (request: KcodeProviderCliRequest, lane?: string) => Promise<void>;
+  runPlugin?: (request: KcodePluginCliRequest, lane?: string) => Promise<void>;
+  runMcpTrust?: (directory: string) => Promise<void>;
   resolveLane?: typeof resolveTuiManagedBackendLane;
   allowStartupEnvironmentSelection?: boolean;
   commandContributions?: readonly TuiCliCommandContribution[];
@@ -55,30 +58,47 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
     ...request,
     ...(activeLane ? { lane: activeLane } : {}),
   });
-  const runProvider = (request: McodeProviderCliRequest) =>
+  const runProvider = (request: KcodeProviderCliRequest) =>
     activeLane
       ? requireProviderRunner(options)(request, activeLane)
       : requireProviderRunner(options)(request);
-  const runPlugin = (request: McodePluginCliRequest) =>
+  const runPlugin = (request: KcodePluginCliRequest) =>
     activeLane
       ? requirePluginRunner(options)(request, activeLane)
       : requirePluginRunner(options)(request);
   const program = applyInteractiveCliContract(
     new Command()
-      .name('mcode')
-      .description('Minimax Code — terminal coding agent')
+      .name('kcode')
+      .description('Kinetick Code — terminal coding agent')
       .version(options.version)
       .enablePositionalOptions(),
     { allowStartupEnvironmentSelection: options.allowStartupEnvironmentSelection },
-  ).action((prompt: string | undefined, commandOptions: RawTuiInteractiveOptions) =>
-    options.launchTui(withLane(resolveInteractiveLaunchRequest(prompt, commandOptions))),
-  );
+  ).action((prompt: string | undefined, commandOptions: RawTuiInteractiveOptions) => {
+    const serverRequest = resolveServerLaunchRequest(prompt, commandOptions);
+    if (serverRequest) {
+      return activeLane
+        ? requireServerRunner(options)(serverRequest, activeLane)
+        : requireServerRunner(options)(serverRequest);
+    }
+    return options.launchTui(withLane(resolveInteractiveLaunchRequest(prompt, commandOptions)));
+  });
 
   program.hook('preAction', () => {
     activeLane = (options.resolveLane ?? resolveTuiManagedBackendLane)(
       program.opts<{ lane?: string }>().lane,
     );
   });
+
+  program
+    .command('mcp')
+    .description('Review workspace MCP servers')
+    .command('trust')
+    .description('Allow the current .mcp.json to run stdio commands')
+    .argument('[directory]', 'workspace directory', '.')
+    .action((directory: string) => {
+      if (!options.runMcpTrust) throw new Error('MCP trust is unavailable.');
+      return options.runMcpTrust(directory);
+    });
 
   program
     .command('init')
@@ -106,7 +126,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   const acp = program
     .command('acp')
-    .description('Run MiniMax Code as an Agent Client Protocol server over stdio')
+    .description('Run Kinetick Code as an Agent Client Protocol server over stdio')
     .allowExcessArguments(false)
     .action(() =>
       activeLane ? requireAcpRunner(options)(activeLane) : requireAcpRunner(options)(),
@@ -114,7 +134,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   acp
     .command('login')
-    .description('Sign in to use MiniMax Code Agent features')
+    .description('Sign in to use Kinetick Code Agent features')
     .option('--region <region>', 'account region: cn or global', parseLoginRegion)
     .option('--no-browser', 'print the authorization URL without opening a browser')
     .allowExcessArguments(false)
@@ -126,7 +146,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   program
     .command('login')
-    .description('Sign in to use MiniMax Code Agent features')
+    .description('Sign in to use Kinetick Code Agent features')
     .option('--region <region>', 'account region: cn or global', parseLoginRegion)
     .option('--no-browser', 'print the authorization URL without opening a browser')
     .allowExcessArguments(false)
@@ -145,29 +165,13 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   program
     .command('update')
-    .description('Check for and install a Minimax Code update')
+    .description('Check for and install a Kinetick Code update')
     .allowExcessArguments(false)
     .action(options.runUpdate);
 
-  const telemetry = program
-    .command('telemetry')
-    .description('Inspect anonymous TUI usage reporting');
-
-  telemetry
-    .command('status')
-    .description('Show whether usage reporting is enabled and why')
-    .allowExcessArguments(false)
-    .action(() => requireTelemetryRunner(options)('status'));
-
-  telemetry
-    .command('preview')
-    .description('Show a representative decoded request without sending it')
-    .allowExcessArguments(false)
-    .action(() => requireTelemetryRunner(options)('preview'));
-
   const provider = program
     .command('provider')
-    .description('Manage model providers and API keys')
+    .description('Manage model providers, including OpenRouter, DeepSeek, and Local')
     .allowExcessArguments(false)
     .action(() => options.launchTui(withLane({ initialPrompt: '/provider' })));
 
@@ -186,9 +190,8 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
     .requiredOption('--base-url <url>', 'provider API base URL')
     .option(
       '--api-format <format>',
-      MCODE_PROVIDER_API_FORMATS.join(', '),
+      KCODE_PROVIDER_API_FORMATS.join(', '),
       parseApiFormat,
-      'anthropic-messages',
     )
     .option('--model <id>', 'model ID (repeatable)', collectOptionValue, [])
     .option('--api-key-env <name>', 'environment variable containing the API key')
@@ -200,7 +203,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
       (commandOptions: {
         name: string;
         baseUrl: string;
-        apiFormat: McodeProviderApiFormat;
+        apiFormat?: KcodeProviderApiFormat;
         model: string[];
         contextLimit?: number;
         outputLimit?: number;
@@ -215,7 +218,9 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
           action: 'add',
           name: commandOptions.name,
           baseUrl: commandOptions.baseUrl,
-          apiFormat: commandOptions.apiFormat,
+          apiFormat:
+            commandOptions.apiFormat ??
+            defaultProviderApiFormatForBaseUrl(commandOptions.baseUrl),
           models: commandOptions.model,
           contextLimit: commandOptions.contextLimit,
           outputLimit: commandOptions.outputLimit,
@@ -273,7 +278,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   const plugin = program
     .command('plugin')
-    .description('Manage MiniMax Code Plugins')
+    .description('Manage Kinetick Code Plugins')
     .allowExcessArguments(false)
     .action(() => options.launchTui(withLane({ initialPrompt: '/plugins' })));
 
@@ -285,7 +290,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
     .option('--json', 'print a JSON document')
     .action(
       (commandOptions: {
-        marketplace?: McodePluginMarketplace;
+        marketplace?: KcodePluginMarketplace;
         available?: boolean;
         json?: boolean;
       }) =>
@@ -307,7 +312,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
       .action(
         (
           selector: string,
-          commandOptions: { marketplace?: McodePluginMarketplace; json?: boolean },
+          commandOptions: { marketplace?: KcodePluginMarketplace; json?: boolean },
         ) =>
           runPlugin({
             action,
@@ -320,7 +325,7 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   const marketplace = plugin
     .command('marketplace')
-    .description('List or refresh MiniMax Code Plugin sources');
+    .description('List or refresh Kinetick Code Plugin sources');
 
   marketplace
     .command('list')
@@ -382,9 +387,9 @@ function parseLoginRegion(value: string): MavisRegion {
   throw new InvalidArgumentError('expected "cn" or "global"');
 }
 
-function parseApiFormat(value: string): McodeProviderApiFormat {
+function parseApiFormat(value: string): KcodeProviderApiFormat {
   if (isModelProviderApiFormat(value)) return value;
-  throw new InvalidArgumentError(`expected one of: ${MCODE_PROVIDER_API_FORMATS.join(', ')}`);
+  throw new InvalidArgumentError(`expected one of: ${KCODE_PROVIDER_API_FORMATS.join(', ')}`);
 }
 
 function parseProviderSource(value: string): 'token_plan' | 'minimax_api_key' {
@@ -393,7 +398,7 @@ function parseProviderSource(value: string): 'token_plan' | 'minimax_api_key' {
   throw new InvalidArgumentError('expected "token-plan" or "api-key"');
 }
 
-function parsePluginMarketplace(value: string): McodePluginMarketplace {
+function parsePluginMarketplace(value: string): KcodePluginMarketplace {
   const normalized = value.trim().toLocaleLowerCase();
   if (normalized === 'official' || normalized === 'local') return normalized;
   throw new InvalidArgumentError('expected "official" or "local"');
@@ -420,9 +425,9 @@ function requireAcpRunner(options: CreateTuiProgramOptions) {
   return options.runAcp;
 }
 
-function requireTelemetryRunner(options: CreateTuiProgramOptions) {
-  if (!options.runTelemetry) throw new Error('Telemetry inspection is unavailable.');
-  return options.runTelemetry;
+function requireServerRunner(options: CreateTuiProgramOptions) {
+  if (!options.runServer) throw new Error('Session server is unavailable.');
+  return options.runServer;
 }
 
 function parsePositiveSafeInteger(value: string): number {

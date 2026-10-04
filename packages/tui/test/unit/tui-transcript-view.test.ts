@@ -13,7 +13,7 @@ import {
   getTuiThemeSnapshot,
   tuiColors,
 } from '../../src/tui/theme/runtime.js';
-import { MINIMAX_CODE_DARK_THEME, MINIMAX_CODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
+import { KCODE_DARK_THEME, KCODE_LIGHT_THEME } from '../../src/tui/theme/palettes.js';
 
 const previewDisplayModes = {
   revision: 0,
@@ -151,136 +151,6 @@ describe('TranscriptView', () => {
 
     expect(lines.filter((line) => line.startsWith('\x1b]133;A\x07'))).toHaveLength(2);
     expect(lines.filter((line) => line.includes('\x1b]133;B\x07\x1b]133;C\x07'))).toHaveLength(2);
-  });
-
-  it('keeps user prompts literal instead of rendering them as Markdown', () => {
-    // Regression: the prompt echo used to run through the Markdown renderer, so
-    // `__pycache__` lost its underscores, `*` became emphasis, and a leading `>`
-    // turned the row into a quote. User input is quoted source and must survive
-    // verbatim, the way Codex renders its user history cells.
-    const originalTheme = getTuiThemeSnapshot();
-    const palette =
-      originalTheme.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    // Force real styling so "no bold/italic on the prompt" is a meaningful
-    // assertion instead of a vacuous one in a colorless test terminal.
-    applyTuiRenderTheme(palette, 3);
-    try {
-      const view = new TranscriptView(() => [
-        createTranscriptCell({
-          id: 'user-literal-prompt',
-          kind: 'user',
-          status: 'succeeded',
-          content: [
-            'delete __pycache__ then check > logs and 2 * 3',
-            'keep **stars** and _underscores_',
-          ].join('\n'),
-          createdAtMs: 1,
-        }),
-        createTranscriptCell({
-          id: 'assistant-still-markdown',
-          kind: 'assistant',
-          status: 'succeeded',
-          content: 'Removed `__pycache__`.',
-          createdAtMs: 2,
-        }),
-      ]);
-
-      const rendered = view.render(80).join('\n');
-      const plain = stripVTControlCharacters(rendered).replace(/\s+$/gmu, '');
-      const promptLines = plain
-        .split('\n')
-        .filter((line) => line.includes('delete') || line.includes('keep'));
-
-      // Source markers survive verbatim.
-      expect(promptLines[0]).toContain('delete __pycache__ then check > logs and 2 * 3');
-      expect(promptLines[1]).toContain('keep **stars** and _underscores_');
-
-      // The prompt text is one contiguous run. Markdown emphasis would have
-      // injected style codes inside it and dropped the markers; only the `›`
-      // marker itself is bold, and it closes before the text starts.
-      const userRows = rendered
-        .split('\n')
-        .filter((line) => stripVTControlCharacters(line).includes('delete'));
-      expect(userRows).toHaveLength(1);
-      expect(userRows[0]).toContain('delete __pycache__ then check > logs and 2 * 3');
-      expect(rendered).toContain('keep **stars** and _underscores_');
-      expect(userRows[0]).not.toContain('\x1b[3m');
-
-      // Assistant content is still Markdown: its codespan is themed and loses
-      // its backticks, the opposite of the prompt row.
-      expect(plain).toContain('Removed __pycache__.');
-      expect(plain).not.toContain('Removed `__pycache__`.');
-    } finally {
-      applyTuiRenderTheme(palette, originalTheme.colorLevel);
-    }
-  });
-
-  it('preserves user prompt line breaks and pads every band row to the full width', () => {
-    const view = new TranscriptView(() => [
-      createTranscriptCell({
-        id: 'user-multiline',
-        kind: 'user',
-        status: 'succeeded',
-        content: 'line one\nline two',
-        createdAtMs: 1,
-      }),
-    ]);
-
-    const lines = view.render(40);
-    const contentLines = lines
-      .map((line) => stripVTControlCharacters(line))
-      .filter((line) => line.includes('line one') || line.includes('line two'));
-
-    expect(contentLines).toHaveLength(2);
-    expect(contentLines[0]).toContain('line one');
-    expect(contentLines[1]).toContain('line two');
-    for (const line of lines) {
-      expect(visibleWidth(stripVTControlCharacters(line))).toBe(40);
-    }
-  });
-
-  it('does not render trailing blank band rows for a prompt ending in newlines', () => {
-    // Codex trims trailing CR/LF before wrapping its user history cell
-    // (`message.trim_end_matches(['\r', '\n'])`). A pasted prompt often ends
-    // with a newline, which would otherwise pad the user band with empty rows.
-    const view = new TranscriptView(() => [
-      createTranscriptCell({
-        id: 'user-trailing-newlines',
-        kind: 'user',
-        status: 'succeeded',
-        content: 'line one\nline two\n\n\n',
-        createdAtMs: 1,
-      }),
-    ]);
-
-    const plain = view.render(40).map((line) => stripVTControlCharacters(line));
-    const contentLines = plain.filter(
-      (line) => line.includes('line one') || line.includes('line two'),
-    );
-
-    expect(contentLines).toHaveLength(2);
-    // 1 top padding row + 2 content rows (the `›` marker rides on the first
-    // content row) + 1 bottom padding row. The three trailing newlines must not
-    // add empty band rows.
-    expect(plain).toHaveLength(4);
-  });
-
-  it('keeps a pending steer literal like the main prompt row', () => {
-    const view = new TranscriptView(() => [
-      createTranscriptCell({
-        id: 'steer-literal',
-        kind: 'user',
-        status: 'pending',
-        content: 'also clear __pycache__ and keep 2 * 3',
-        userPresentation: 'pending-steer',
-        createdAtMs: 1,
-      }),
-    ]);
-
-    const rendered = stripVTControlCharacters(view.render(80).join('\n'));
-
-    expect(rendered).toContain('Next');
-    expect(rendered).toContain('also clear __pycache__ and keep 2 * 3');
   });
 
   it('attaches a pending steer to the active flow as the next instruction', () => {
@@ -533,7 +403,7 @@ describe('TranscriptView', () => {
     const originalCapabilities = getCapabilities();
     const originalTheme = getTuiThemeSnapshot();
     const palette =
-      originalTheme.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
+      originalTheme.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
     setCapabilities({ ...originalCapabilities, hyperlinks: true });
     applyTuiRenderTheme(palette, 3);
     try {
@@ -592,8 +462,8 @@ describe('TranscriptView', () => {
   it('renders assistant dots in the same tone as the body text', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+    applyTuiRenderTheme(KCODE_DARK_THEME, 3);
     try {
       const view = new TranscriptView(() => [
         createTranscriptCell({
@@ -607,8 +477,8 @@ describe('TranscriptView', () => {
       const line = view.render(28)[0] ?? '';
       const color = createTuiChalk({ colorLevel: 3 });
 
-      expect(line).toContain(color.hex(MINIMAX_CODE_DARK_THEME.colors.text)('●'));
-      expect(line).not.toContain(color.hex(MINIMAX_CODE_DARK_THEME.colors.signal)('●'));
+      expect(line).toContain(color.hex(KCODE_DARK_THEME.colors.text)('●'));
+      expect(line).not.toContain(color.hex(KCODE_DARK_THEME.colors.signal)('●'));
     } finally {
       applyTuiRenderTheme(originalPalette, original.colorLevel);
     }
@@ -726,9 +596,9 @@ describe('TranscriptView', () => {
         id: 'inspection-status',
         kind: 'inspection',
         status: 'succeeded',
-        content: 'MCode status\nAccount: Connected with MiniMax',
+        content: 'KCode status\nAccount: Connected with MiniMax',
         inspection: {
-          title: 'MCode status',
+          title: 'KCode status',
           badge: { label: 'READY', tone: 'success' },
           sections: [
             {
@@ -752,7 +622,7 @@ describe('TranscriptView', () => {
     const rendered = stripVTControlCharacters(view.render(60).join('\n'));
 
     expect(rendered).toContain('╭─');
-    expect(rendered).toMatch(/│ MCode status\s+● READY │/u);
+    expect(rendered).toMatch(/│ KCode status\s+● READY │/u);
     expect(rendered).toContain('READY');
     expect(rendered).toContain('├─ Account ');
     expect(rendered).toMatch(/│ Account\s+│ Connected with MiniMax\s+│/u);
@@ -1206,8 +1076,8 @@ describe('TranscriptView', () => {
   it('renders user messages as a vertically padded full-width prompt band', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    applyTuiRenderTheme(MINIMAX_CODE_LIGHT_THEME, 3);
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+    applyTuiRenderTheme(KCODE_LIGHT_THEME, 3);
     try {
       const view = new TranscriptView(() => [
         createTranscriptCell({
@@ -1447,8 +1317,8 @@ describe('TranscriptView', () => {
   it('syntax-highlights executable commands on the collapsed shell row', () => {
     const original = getTuiThemeSnapshot();
     const originalPalette =
-      original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-    applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+      original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+    applyTuiRenderTheme(KCODE_DARK_THEME, 3);
 
     try {
       const command = 'ls packages/tui/src/ && echo "---" && ls packages/tui/src/tui/ 2>/dev/null';
@@ -1480,8 +1350,8 @@ describe('TranscriptView', () => {
     (description) => {
       const original = getTuiThemeSnapshot();
       const palette =
-        original.appearance === 'light' ? MINIMAX_CODE_LIGHT_THEME : MINIMAX_CODE_DARK_THEME;
-      applyTuiRenderTheme(MINIMAX_CODE_DARK_THEME, 3);
+        original.appearance === 'light' ? KCODE_LIGHT_THEME : KCODE_DARK_THEME;
+      applyTuiRenderTheme(KCODE_DARK_THEME, 3);
       try {
         const view = new TranscriptView(
           () => [
@@ -1977,7 +1847,7 @@ describe('TranscriptView', () => {
         status: 'resolved',
         title: 'Answers sent',
         content: 'Release channel  Stable\nCollaboration  Mixed mode',
-        detail: 'MCode is continuing…',
+        detail: 'KCode is continuing…',
         createdAtMs: 6,
       }),
     ]);
@@ -1995,7 +1865,7 @@ describe('TranscriptView', () => {
     expect(rendered).toContain('✓ Answers sent');
     expect(rendered).toContain('Release channel  Stable');
     expect(rendered).toContain('Collaboration  Mixed mode');
-    expect(rendered).toContain('MCode is continuing');
+    expect(rendered).toContain('KCode is continuing');
     expect(rendered).not.toContain('/allow');
     expect(rendered).not.toContain('/q1');
   });

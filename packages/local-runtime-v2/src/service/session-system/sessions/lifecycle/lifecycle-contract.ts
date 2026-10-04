@@ -12,6 +12,7 @@ import type {
 } from '../repo/contract.js';
 import type { ConversationModelThinkingSelection } from '@mavis/conversation-contract';
 import type { SessionMemoryPolicyPatch } from '../memory-policy.js';
+import type { SessionSkillPolicy, SessionSkillPolicyPatch } from '../skill-policy.js';
 
 export interface SessionMutationFields {
   /** Internal selection receipt; stored only in the frozen definition JSON. */
@@ -31,6 +32,7 @@ export interface SessionMutationFields {
   readonly effectiveModelContextWindow?: number | null;
   readonly effectiveModelMaxOutputTokens?: number | null;
   readonly memoryPolicy?: SessionMemoryPolicyPatch;
+  readonly skillPolicy?: SessionSkillPolicyPatch;
 }
 
 export interface SessionToolLifecycleCapability {
@@ -38,8 +40,12 @@ export interface SessionToolLifecycleCapability {
   deleteSessionById(sessionId: string): Promise<void>;
 }
 
-export type SessionMetadataUpdateFields = Omit<SessionMutationFields, 'memoryPolicy'> & {
+export type SessionMetadataUpdateFields = Omit<
+  SessionMutationFields,
+  'memoryPolicy' | 'skillPolicy'
+> & {
   readonly memoryPolicy?: SessionRecord['memoryPolicy'];
+  readonly skillPolicy?: SessionSkillPolicy;
 };
 
 export interface SessionMetadataCreateInput {

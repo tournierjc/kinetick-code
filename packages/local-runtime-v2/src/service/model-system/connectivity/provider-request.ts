@@ -4,24 +4,27 @@ import type { ModelProviderApi } from '../identity.js';
 
 export type { ModelProviderApi } from '../identity.js';
 
+export { UNAUTHENTICATED_PROVIDER_API_KEY } from '@mavis/shared';
+
 const MESSAGES_VERSION_HEADER = 'anthropic-messages'.replace('-messages', '-version');
 
 export function buildProviderHeaders(input: {
   api: ModelProviderApi;
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   headers?: Record<string, string>;
 }): Headers {
+  const credential = input.apiKey?.trim();
   const defaults: Record<string, string> =
     input.api === 'anthropic-messages'
       ? {
           'content-type': 'application/json',
-          'x-api-key': input.apiKey,
+          ...(credential ? { 'x-api-key': credential } : {}),
           [MESSAGES_VERSION_HEADER]: '2023-06-01',
         }
       : {
           'content-type': 'application/json',
-          Authorization: `Bearer ${input.apiKey}`,
+          ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
         };
   const headers = new Headers(defaults);
   const attributedHeaders = withOpenCodeGoHeaders(
@@ -36,13 +39,15 @@ export function buildProviderHeaders(input: {
 
 export function buildModelDiscoveryHeaders(input: {
   api: ModelProviderApi;
-  apiKey: string;
+  apiKey?: string;
   baseUrl?: string;
   headers?: Record<string, string>;
 }): Headers {
   const headers = buildProviderHeaders(input);
-  if (!headers.has('authorization')) headers.set('authorization', `Bearer ${input.apiKey}`);
-  if (!headers.has('x-api-key')) headers.set('x-api-key', input.apiKey);
+  const credential = input.apiKey?.trim();
+  if (!credential) return headers;
+  if (!headers.has('authorization')) headers.set('authorization', `Bearer ${credential}`);
+  if (!headers.has('x-api-key')) headers.set('x-api-key', credential);
   return headers;
 }
 

@@ -225,8 +225,31 @@ export class TuiSessionAccess {
     return normalizeRequiredSession(response.session, sessionId);
   }
 
+  async updateSessionSkillPolicy(
+    sessionId: string,
+    skillPolicy: {
+      dispositions?: Record<string, 'mandatory' | 'optional' | 'forbidden' | null>;
+      closed?: boolean;
+    },
+  ): Promise<TuiSession> {
+    const response = await this.cliService.updateSession({ id: sessionId, skillPolicy });
+    return normalizeRequiredSession(response.session, sessionId);
+  }
+
   async archiveSession(sessionId: string, archived: boolean): Promise<void> {
     await this.cliService.archiveSession({ id: sessionId, archived });
+  }
+
+  async pinSession(input: {
+    sessionId: string;
+    pinned: boolean;
+    insertIndex?: number;
+  }): Promise<void> {
+    await this.cliService.pinSession({
+      id: input.sessionId,
+      pinned: input.pinned,
+      ...(typeof input.insertIndex === "number" ? { insertIndex: input.insertIndex } : {}),
+    });
   }
 
   async deleteSession(sessionId: string): Promise<void> {
@@ -337,6 +360,21 @@ export class TuiSessionAccess {
       hasMore: response.hasMore === true,
       ...(response.nextCursor ? { nextCursor: response.nextCursor } : {}),
     };
+  }
+
+  async getSessionTree(agentName = this.defaultAgentName): Promise<TuiSession[]> {
+    const response = await this.cliService.getSessionTree({ name: agentName });
+    return (response.sessions ?? []).flatMap((node) => {
+      const root = node.session ? [normalizeSessionInfoView(node.session)] : [];
+      const parentSessionId = node.session?.sessionId;
+      if (!parentSessionId) return root;
+      return [
+        ...root,
+        ...(node.childSessions ?? [])
+          .filter((child) => Boolean(child.sessionId))
+          .map((child) => normalizeSessionInfoView(toBranchSessionInfoView(child, parentSessionId))),
+      ];
+    });
   }
 }
 

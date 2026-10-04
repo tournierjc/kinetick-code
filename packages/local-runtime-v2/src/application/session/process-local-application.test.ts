@@ -152,7 +152,7 @@ describe("createProcessLocalApplication capabilities", () => {
       select: vi.fn(async () => true),
     };
     const modelProviders = {
-      listUserProviders: vi.fn(() => []),
+      listProviders: vi.fn(() => []),
       getMinimaxApiKeyStatus: vi.fn(() => ({ hasApiKey: false })),
       getMinimaxModelSource: vi.fn(() => "token_plan" as const),
       setMinimaxModelSource: vi.fn(async () => "minimax_api_key" as const),
@@ -232,6 +232,8 @@ describe("createProcessLocalApplication capabilities", () => {
       application.modelProviders?.getMiniMaxModelSource(),
     ).resolves.toBe("token_plan");
     expect(modelProviders.getMinimaxModelSource).toHaveBeenCalledOnce();
+    await expect(application.modelProviders?.listProviders()).resolves.toEqual([]);
+    expect(modelProviders.listProviders).toHaveBeenCalledOnce();
     await expect(
       application.modelProviders?.listProviderPresets(),
     ).resolves.toEqual([

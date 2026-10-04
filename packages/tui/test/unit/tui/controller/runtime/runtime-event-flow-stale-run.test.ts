@@ -136,6 +136,8 @@ function createFixture(options?: {
     refreshCurrentSessionHistory: vi.fn(async () => undefined),
     refreshSessionMetadata: vi.fn(async () => undefined),
     beginRuntimeTurn: vi.fn(),
+    beginBackgroundTurn: vi.fn(),
+    retainsTranscript: vi.fn(() => false),
     recordTurnStart: (turnId: string, timestampMs: number) =>
       turnStarts.record(turnId, timestampMs),
     turnStartedAtMs: (turnId: string) => turnStarts.get(turnId),
@@ -187,10 +189,10 @@ function createFixture(options?: {
 
   return {
     flow,
-    controller,
     runtime,
     runProjection,
     activeRunFlow,
+    controller,
     settleRuntimeTurnProjection,
     reconcileOwnerHistory,
   };
@@ -505,9 +507,36 @@ describe('TuiRuntimeEventFlow stale-run safety net', () => {
 
   it('records adopted and queue-started Runtime Turns', async () => {
     const { observability, recordRunLifecycle } = createObservability();
-    const fixture = createFixture({ observability });
+    // The Session must not look visible: the fork adopts visible Sessions through the
+    // visible-pane path only, so the adopted lifecycle record lives on the background
+    // (retained-transcript) adoption branch.
+    const fixture = createFixture({ observability, currentControllerTurnId: () => undefined });
+    // Fork semantics: the adopted lifecycle record fires only on the retained-transcript
+    // background adoption branch (a visible Session adopts through the visible-pane path).
+    // Snapshot flips per branch: 'session-ghost' makes the adopted turn non-visible,
+    // 'session-1' keeps the queue-started turn on the visible path.
+    const controllerObj = fixture.controller as {
+      snapshot: () => { session?: { sessionId: string }; activeTurnId?: string };
+      retainsTranscript?: (id: string) => boolean;
+      beginBackgroundTurn?: unknown;
+      applyBackgroundTurnEvent?: unknown;
+      settleBackgroundTurn?: unknown;
+    };
+    controllerObj.retainsTranscript = () => true;
+    controllerObj.snapshot = () => ({
+      session: { sessionId: 'session-ghost' },
+      activeTurnId: undefined,
+    });
+    // Fork background-turn pane hooks (session tabs) — the adopted turn is not on screen.
+    controllerObj.beginBackgroundTurn ??= () => undefined;
+    controllerObj.applyBackgroundTurnEvent ??= () => undefined;
+    controllerObj.settleBackgroundTurn ??= () => undefined;
 
     fixture.flow.adoptRuntimeTurn('session-1', 'turn-activated', 100);
+    controllerObj.snapshot = () => ({
+      session: { sessionId: 'session-1' },
+      activeTurnId: undefined,
+    });
     await handle(fixture.flow, {
       ...lifecycle('session.start', 'turn-queued'),
       runSource: 'queued-drain',

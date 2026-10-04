@@ -1,5 +1,5 @@
 export {
   createActiveTuiReference,
-  McodeInteractiveRenderer,
-  type McodeInteractiveRendererOptions,
+  KcodeInteractiveRenderer,
+  type KcodeInteractiveRendererOptions,
 } from './interactive-renderer.js';

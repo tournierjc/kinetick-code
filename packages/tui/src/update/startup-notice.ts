@@ -1,13 +1,13 @@
-import type { McodeUpdatePlan } from './application.js';
+import type { KcodeUpdatePlan } from './application.js';
 
-export interface McodeStartupUpdateNotice {
+export interface KcodeStartupUpdateNotice {
   readonly latestVersion: string;
 }
 
-export function resolveMcodeStartupUpdateNotice(
-  plan: McodeUpdatePlan,
-): McodeStartupUpdateNotice | undefined {
-  if (plan.kind !== 'available' && plan.kind !== 'package-manager') return undefined;
+export function resolveKcodeStartupUpdateNotice(
+  plan: KcodeUpdatePlan,
+): KcodeStartupUpdateNotice | undefined {
+  if (plan.kind !== 'available') return undefined;
   const latestVersion = plan.latestVersion.trim();
   return latestVersion ? { latestVersion } : undefined;
 }

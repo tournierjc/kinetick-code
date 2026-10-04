@@ -10,6 +10,7 @@ import {
 import type { TuiComposerDraft } from '../../features/composer/draft.js';
 import type { TuiWorkspaceRoots } from '../../features/composer/workspace-roots.js';
 import { TuiLoginRegionPicker } from '../../features/auth/login-region-picker.js';
+import { KCODE_LOGIN_PROVIDERS, isKcodeLoginProviderId } from '../../../provider/contract.js';
 import { TuiPermissionModePicker } from '../../features/interaction/permission-mode-picker.js';
 import { TuiSettingsPicker } from '../../features/settings/picker.js';
 import { TuiHotkeysPicker } from '../../features/settings/hotkeys-picker.js';
@@ -17,6 +18,7 @@ import { submittedEditorContent, submittedEditorTransport, type Editor } from '.
 import type { TuiInteractionSurface } from '../../shell/interaction-surface.js';
 import type { TuiSurfaceHost } from '../../shell/surface-host.js';
 import type { TuiRunProjection } from '../../state/run-projection.js';
+import { TUI_TAB_DIRECT_SLOT_COUNT } from '../../state/tabs.js';
 import type { TuiActiveRunFlow } from '../run/active-run-flow.js';
 import type { TuiChatController } from '../chat-controller.js';
 import type { TuiFeatureFlow } from './feature-flow.js';
@@ -31,7 +33,7 @@ import type { TuiGoalFlow } from './goal-flow.js';
 import type { TuiPlanModeFlow } from '../interaction/plan-mode-flow.js';
 import type { TuiPermissionModeFlow } from '../interaction/permission-mode-flow.js';
 import type { MavisRegion } from '@mavis/config';
-import type { McodeAuthPort } from '../../../auth/application.js';
+import type { KcodeAuthPort } from '../../../auth/application.js';
 import { markTuiAuthorizationUrl } from '../../../auth/authorization-url.js';
 import type { TuiMode } from '../../engine/public.js';
 import type { TuiKeybindingOverride, TuiKeybindingRegistry } from '../../shell/keybindings.js';
@@ -68,6 +70,7 @@ export interface TuiCommandFlowOptions {
     TuiSessionMutationFlow,
     | 'startHistory'
     | 'startFork'
+    | 'startClone'
     | 'startRewind'
     | 'startEdit'
     | 'isEditing'
@@ -78,7 +81,7 @@ export interface TuiCommandFlowOptions {
   readonly goalFlow?: Pick<TuiGoalFlow, 'execute' | 'resumeBlocked'>;
   readonly planModeFlow?: TuiPlanModeFlow;
   readonly permissionModeFlow?: TuiPermissionModeFlow;
-  readonly auth?: McodeAuthPort;
+  readonly auth?: KcodeAuthPort;
   readonly openExternalTarget?: TuiExternalTargetOpener;
   readonly interactionFlow: TuiInteractionFlow;
   readonly sessionFlow: TuiSessionFlow;
@@ -163,7 +166,6 @@ export class TuiCommandFlow {
   readonly catalog: TuiCommandCatalog;
   private preparationTail: Promise<void> = Promise.resolve();
   private loginRegionPicker: TuiLoginRegionPicker | undefined;
-  private pendingLoginContinuation: 'checkin' | undefined;
   private permissionModePicker: TuiPermissionModePicker | undefined;
   private settingsPicker: TuiSettingsPicker | undefined;
   private hotkeysPicker: TuiHotkeysPicker | undefined;
@@ -1059,7 +1061,14 @@ export class TuiCommandFlow {
       help: async () => this.options.activeRunFlow.showHelp(),
       update: async () => this.options.updateFlow.show(),
       changelog: async () => this.options.featureFlow.showChangelog(),
-      new: () => this.options.sessionFlow.startNew(),
+      new: ({ raw }) => {
+        const workspaceDir = this.options.workspaceDir;
+        // `/clear` starts the fresh conversation in the tab that is already there;
+        // `/new` opens it in a tab of its own. Both create the Session up front.
+        return /^\/clear(?:\s|$)/iu.test(raw)
+          ? this.options.sessionFlow.replaceSessionInTab({ workspaceDir })
+          : this.options.sessionFlow.openNewSessionTab({ workspaceDir });
+      },
       sessions: async ({ raw, args }) => {
         if (
           /^\/resume(?:\s|$)/iu.test(raw) &&
@@ -1070,6 +1079,66 @@ export class TuiCommandFlow {
           return;
         }
         await this.options.featureFlow.showSessionManager(args);
+      },
+      tabs: async ({ args }) => {
+        const [verb, ...rest] = args.trim().split(/\s+/);
+        const action = (verb ?? '').toLocaleLowerCase();
+        const argument = rest.join(' ').trim();
+        if (action === 'next') {
+          await this.options.sessionFlow.cycleTab(1);
+          return;
+        }
+        if (action === 'prev' || action === 'previous') {
+          await this.options.sessionFlow.cycleTab(-1);
+          return;
+        }
+        if (action === 'close') {
+          await this.options.sessionFlow.closeTab();
+          return;
+        }
+        if (action === 'move') {
+          const direction = argument.toLocaleLowerCase();
+          if (direction !== 'left' && direction !== 'right') {
+            this.options.append('Usage: /tabs move <left | right>.', 'warning');
+            return 'retained';
+          }
+          await this.options.sessionFlow.moveTab(direction === 'right' ? 1 : -1);
+          return;
+        }
+        if (action === 'rename') {
+          await this.options.sessionFlow.renameTab(argument || undefined);
+          return;
+        }
+        if (action === 'group') {
+          if (!argument) {
+            await this.options.sessionFlow.setTabGrouping(true);
+            return;
+          }
+          const wanted = argument.toLocaleLowerCase();
+          if (wanted !== 'on' && wanted !== 'off') {
+            this.options.append('Usage: /tabs group <on | off>.', 'warning');
+            return 'retained';
+          }
+          await this.options.sessionFlow.setTabGrouping(wanted === 'on');
+          return;
+        }
+        if (action === 'collapse') {
+          await this.options.sessionFlow.toggleTabGroupCollapse();
+          return;
+        }
+        const slot = Number(action);
+        if (Number.isInteger(slot) && slot >= 1 && slot <= TUI_TAB_DIRECT_SLOT_COUNT) {
+          await this.options.sessionFlow.activateTabSlot(slot);
+          return;
+        }
+        // Deliberately not "next" by default: an accidental bare `/tabs` must not
+        // move the user off the Session they are reading.
+        this.options.append(
+          'Usage: /tabs <next | prev | close | move <left|right> | rename [title] | ' +
+            'group [on|off] | collapse | 1-9>. The key hints are in /hotkeys.',
+          'warning',
+        );
+        return 'retained';
       },
       goal: async ({ args }) => {
         if (!this.options.goalFlow) {
@@ -1159,6 +1228,15 @@ export class TuiCommandFlow {
       fork: () => {
         this.options.sessionMutationFlow.startFork();
       },
+      clone: () => {
+        if (this.options.interactionFlow.hasPending()) {
+          this.options.setHint(sessionMutationText('sessionMutation.error.pendingInteraction'));
+          this.options.interactionFlow.showPending();
+          this.options.onChanged();
+          return 'retained';
+        }
+        this.options.sessionMutationFlow.startClone();
+      },
       rewind: () => {
         if (this.options.interactionFlow.hasPending()) {
           this.options.setHint(sessionMutationText('sessionMutation.error.pendingInteraction'));
@@ -1228,6 +1306,22 @@ export class TuiCommandFlow {
         await this.options.controller.archiveCurrentSession();
         await this.options.sessionFlow.archiveCurrentProjection(sessionId);
       },
+      pin: async ({ args }) => {
+        const sessionId = this.options.controller.snapshot().session?.sessionId;
+        if (!sessionId) throw new Error('No active session.');
+        const wanted = args.trim().toLocaleLowerCase();
+        if (wanted && wanted !== 'on' && wanted !== 'off') {
+          this.options.append('Usage: /pin [on | off].', 'warning');
+          return 'retained';
+        }
+        const current = this.options.controller
+          .snapshot()
+          .sessions?.find((item) => item.sessionId === sessionId);
+        const target = wanted ? wanted === 'on' : current?.pinned !== true;
+        const session = await this.options.controller.pinSession(sessionId, target);
+        this.options.setHint(session.pinned === true ? 'Session pinned.' : 'Session unpinned.');
+        this.options.onChanged();
+      },
       compact: async ({ args }) =>
         this.runLoginProtectedAction(() =>
           this.options.featureFlow.compactSession(args, this.hasLiveRun()),
@@ -1267,8 +1361,18 @@ export class TuiCommandFlow {
         }
         await this.options.permissionModeFlow.set(mode);
       },
-      login: () => {
-        this.pendingLoginContinuation = undefined;
+      login: ({ args }) => {
+        const requested = args.trim().toLowerCase();
+        if (requested && !isKcodeLoginProviderId(requested)) {
+          // Every other connection is configured in `/provider`, which is also
+          // where MiniMax's credential source is chosen. Naming it keeps a
+          // mistyped provider actionable instead of silently signing in to MiniMax.
+          this.options.append(
+            `/login signs in to ${KCODE_LOGIN_PROVIDERS.map((provider) => provider.providerId).join(', ')}. Run /provider to connect ${requested}.`,
+            'warning',
+          );
+          return 'retained';
+        }
         this.showLoginRegionPicker();
       },
       logout: () => this.runAuthCommand('logout'),
@@ -1289,7 +1393,6 @@ export class TuiCommandFlow {
         }
       },
       feedback: async ({ args }) => this.options.feedbackFlow.show(args),
-      checkin: async () => this.runDailyCheckinCommand(),
       settings: () => this.showSettingsPicker(),
       statusline: () => this.options.showStatusLine?.(),
       theme: () => this.options.showTheme?.(),
@@ -1360,7 +1463,9 @@ export class TuiCommandFlow {
         }
       },
       permissions: async () => this.options.featureFlow.showPermissions(),
+
       usage: async () => this.options.featureFlow.showSessionUsage(),
+      cost: async () => this.options.featureFlow.showSessionUsage(),
       export: async ({ args }) => this.options.featureFlow.exportCurrentTranscript(args),
       transcript: () => this.options.featureFlow.showTranscript(),
       copy: async () => this.options.featureFlow.copyLastAssistantReply(),
@@ -1519,13 +1624,11 @@ export class TuiCommandFlow {
    * auth command as `/login`.
    */
   startMiniMaxLogin(): void {
-    this.pendingLoginContinuation = undefined;
     this.showLoginRegionPicker();
   }
 
   private showLoginRegionPicker(): void {
     if (!this.options.auth) {
-      this.pendingLoginContinuation = undefined;
       this.options.append('MiniMax authentication is unavailable in this host.', 'warning');
       return;
     }
@@ -1540,28 +1643,10 @@ export class TuiCommandFlow {
       () => {
         this.options.surface.close(picker);
         if (this.loginRegionPicker === picker) this.loginRegionPicker = undefined;
-        this.pendingLoginContinuation = undefined;
       },
     );
     this.loginRegionPicker = picker;
     this.options.surface.show(picker);
-  }
-
-  private async runDailyCheckinCommand(): Promise<void> {
-    try {
-      if (await this.options.featureFlow.hasManagedAccountLogin()) {
-        await this.options.featureFlow.runDailyCheckin();
-        return;
-      }
-    } catch {
-      this.options.append(
-        "Couldn't verify MiniMax sign-in. Check the connection, then retry /checkin.",
-        'warning',
-      );
-      return;
-    }
-    this.pendingLoginContinuation = 'checkin';
-    this.showLoginRegionPicker();
   }
 
   private showPermissionModePicker(): void {
@@ -1619,7 +1704,7 @@ export class TuiCommandFlow {
           this.options.append(
             formatTuiActionFailure(error, {
               summary: "Couldn't save the TUI mode.",
-              nextStep: 'Check the MCode data directory permissions, then retry /settings.',
+              nextStep: 'Check the KCode data directory permissions, then retry /settings.',
               preservation: `The TUI remains in ${previousMode} mode.`,
             }),
             'warning',
@@ -1705,11 +1790,7 @@ export class TuiCommandFlow {
       this.options.append(result.message);
       if (operation === 'login') {
         if (result.restartRequired) {
-          const initialPrompt =
-            this.pendingLoginContinuation === 'checkin' ? '/checkin' : undefined;
-          this.pendingLoginContinuation = undefined;
-          if (initialPrompt) this.options.requestRestart?.(region, initialPrompt);
-          else this.options.requestRestart?.(region);
+          this.options.requestRestart?.(region);
           await this.options.leaveUi();
           return;
         }
@@ -1722,10 +1803,6 @@ export class TuiCommandFlow {
           if (!(error instanceof TuiLoginRequiredError)) throw error;
           this.options.controller.refreshAccountStatusNow();
         }
-        if (this.pendingLoginContinuation === 'checkin') {
-          this.pendingLoginContinuation = undefined;
-          await this.options.featureFlow.runDailyCheckin();
-        }
       } else {
         if (result.logoutUrl) void this.openLogoutPage(result.logoutUrl);
         if (result.state === 'signed-out' || result.state === 'already-signed-out') {
@@ -1734,7 +1811,6 @@ export class TuiCommandFlow {
         this.options.controller.refreshAccountStatusNow();
       }
     } catch (error) {
-      if (operation === 'login') this.pendingLoginContinuation = undefined;
       this.options.append(
         formatTuiActionFailure(error, {
           summary: operation === 'login' ? "Sign-in wasn't completed." : "Couldn't sign out.",

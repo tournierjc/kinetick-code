@@ -64,6 +64,10 @@ export function buildBuiltinProviderView(
     kind: providerKind,
     enabled: true,
     ...(provider.options?.baseURL ? { baseUrl: provider.options.baseURL } : {}),
+    // `/provider` prints the protocol for each row, so a builtin-tree connection
+    // reports the one it speaks instead of falling back to the panel's default,
+    // which is MiniMax's shape.
+    ...(provider.api ? { apiFormat: provider.api } : {}),
     hasApiKey: Boolean(apiKey),
     ...(apiKey ? { maskedApiKey: maskSecret(apiKey) } : {}),
     models: providerModelEntries(config, cache, {

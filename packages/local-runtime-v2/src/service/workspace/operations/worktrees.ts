@@ -87,7 +87,7 @@ async function toWorktreeInfo(
       resolve(worktreePath) === resolve(context.mainWorktreePath),
     isLocked: 'locked' in entry,
     isActive: canonicalWorktreePath === context.activeWorktreePath,
-    isMcodeManaged:
+    isKcodeManaged:
       context.managedParent !== undefined &&
       isPathInside(context.managedParent, canonicalWorktreePath),
     ...(lastModifiedMs === undefined ? {} : { lastModifiedMs }),

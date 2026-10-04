@@ -15,11 +15,6 @@ import {
   SAFETY_SCENE,
   type ContentSafetyChecker,
 } from "../content-safety/api.js";
-import {
-  createDesktopErrorReporter,
-  createLLMFailureReportHook,
-  type DesktopErrorReporter,
-} from "../error-reporting/index.js";
 import type { MetricsClient } from "../common/metrics.js";
 import type { LocalEvalReporterFactoryLike } from "../eval/types.js";
 import { createLocalTurnEventReporting } from "../turns/event-reporter.js";
@@ -80,22 +75,9 @@ export class LocalRuntimeHost {
   private readonly reviewContent: ContentSafetyChecker;
   private readonly metricsClient?: MetricsClient;
   private readonly evalReporterFactory?: LocalEvalReporterFactoryLike;
-  /** Compatibility failure-observer port; the default implementation neither retains nor sends raw errors. */
-  private readonly errorReporter: DesktopErrorReporter;
   readonly contextUsageRuntime: ContextUsageRuntime;
 
   constructor(options: LocalRuntimeHostOptions = {}) {
-    this.errorReporter =
-      options.errorReporter ??
-      createDesktopErrorReporter({
-        ...(options.authContextGetter
-          ? { authContextGetter: options.authContextGetter }
-          : {}),
-        ...(options.routingContextGetter
-          ? { routingContextGetter: options.routingContextGetter }
-          : {}),
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-      });
     this.piRunner =
       options.piRunner ??
       new PiTurnRunner({
@@ -104,11 +86,6 @@ export class LocalRuntimeHost {
           : {}),
         logger: PI_TURN_RUNNER_LOGGER,
         toolContextSizeEstimator: TOOL_CONTEXT_SIZE_ESTIMATOR,
-        // Report every confirmed physical LLM request failure, including retries; agent-core excludes
-        // user cancellations.
-        onLLMRequestFailure:
-          options.llmRequestFailureHook ??
-          createLLMFailureReportHook(this.errorReporter),
         ...(options.observeLLMRequest
           ? { observeLLMRequest: options.observeLLMRequest }
           : {}),

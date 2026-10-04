@@ -1,13 +1,13 @@
 import type {
-  McodeProviderTemplate,
-  McodeProviderView,
+  KcodeProviderTemplate,
+  KcodeProviderView,
 } from "../../src/provider/contract.js";
 import { stripAnsi, visibleWidth } from "../../src/tui/rendering/text.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { TuiProviderOnboarding } from "../../src/tui/features/provider/onboarding.js";
 
-const knownTemplate: McodeProviderTemplate = {
+const knownTemplate: KcodeProviderTemplate = {
   providerId: "deepseek",
   name: "DeepSeek",
   baseUrl: "https://api.deepseek.com/v1",
@@ -310,18 +310,17 @@ describe("TuiProviderOnboarding", () => {
     onboarding.handleInput("\r");
     onboarding.handleInput("https://gateway.example/v1");
     onboarding.handleInput("\r");
-    onboarding.handleInput("\r");
-    onboarding.handleInput("secret");
-    onboarding.handleInput("\r");
+    onboarding.handleInput("\r"); // OpenAI Compatible (default format).
     onboarding.handleInput("\r"); // Manual model entry without discovery.
     onboarding.handleInput("model-a");
     onboarding.handleInput("\r");
 
+    // Fork flow (fe24b27): the credential step only exists when models are
+    // imported; a manual model saves the endpoint without an API key.
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(onSave).toHaveBeenCalledWith({
       name: "Team Gateway",
       baseUrl: "https://gateway.example/v1",
-      apiKey: "secret",
       apiFormat: "openai-completions",
       models: [
         {
@@ -332,6 +331,62 @@ describe("TuiProviderOnboarding", () => {
         },
       ],
       modelId: "model-a",
+      saveAndUse: true,
+    });
+  });
+
+  it("connects a local model from the catalogue without a key", async () => {
+    const onSave = vi.fn(async () => ({
+      success: true,
+      provider: { providerId: "custom_provider:local-model" },
+    }));
+    const onComplete = vi.fn(async () => undefined);
+    const onboarding = new TuiProviderOnboarding({
+      templates: [],
+      onSave,
+      onComplete,
+      onCancel: vi.fn(),
+      requestRender: vi.fn(),
+    });
+
+    const catalogue = stripAnsi(onboarding.render(90).join("\n"));
+    expect(catalogue).toContain("Local model");
+    expect(catalogue).toContain("OpenAI-compatible server · API key optional");
+
+    // Down to the local entry, which pre-fills the endpoint it starts from.
+    onboarding.handleInput("\u001b[B");
+    onboarding.handleInput("\r");
+    onboarding.handleInput("\r");
+    const urlStep = stripAnsi(onboarding.render(90).join("\n"));
+    expect(urlStep).toContain("Base URL");
+    expect(urlStep).toContain("http://localhost:11434/v1");
+
+    onboarding.handleInput("\r");
+
+    // The fork's local endpoint is credential-free by design: the protocol and
+    // key steps are skipped, the model ID prompt follows the URL directly, and
+    // the save carries no credential.
+    const modelStep = stripAnsi(onboarding.render(90).join("\n"));
+    expect(modelStep).toContain("Model ID");
+    expect(modelStep).not.toContain("API Key");
+
+    onboarding.handleInput("qwen3-local");
+    onboarding.handleInput("\r");
+
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(onSave).toHaveBeenCalledWith({
+      name: "Local model",
+      baseUrl: "http://localhost:11434/v1",
+      apiFormat: "openai-completions",
+      models: [
+        {
+          modelId: "qwen3-local",
+          displayName: "qwen3-local",
+          configurationSource: "manual",
+          toolCall: true,
+        },
+      ],
+      modelId: "qwen3-local",
       saveAndUse: true,
     });
   });
@@ -370,7 +425,7 @@ describe("TuiProviderOnboarding", () => {
   });
 });
 
-const savedConnection: McodeProviderView = {
+const savedConnection: KcodeProviderView = {
   providerId: "custom_provider:work",
   name: "DeepSeek Work",
   kind: "custom",
@@ -483,7 +538,7 @@ describe("existing connection onboarding", () => {
 });
 
 describe("preset endpoint editing", () => {
-  const template: McodeProviderTemplate = {
+  const template: KcodeProviderTemplate = {
     providerId: "zai",
     name: "Z.AI API",
     baseUrl: "https://api.z.ai/api/paas/v4",
@@ -594,12 +649,18 @@ describe("preset endpoint editing", () => {
 });
 
 function enterCustomCredentials(onboarding: TuiProviderOnboarding): void {
+  // Fork flow (fe24b27): name -> URL -> protocol (OpenAI Compatible default)
+  // -> model source. The API key is captured on the model-source step: esc
+  // enters the key editor, enter stores the draft and re-opens the source list.
   for (const input of ["\r", "Gateway", "\r", "https://gateway.example/v1", "\r", "\r"])
     onboarding.handleInput(input);
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import models from /models");
+  onboarding.handleInput("\u001b");
   expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("API Key");
   onboarding.handleInput("synthetic-discovery-key");
   expect(stripAnsi(onboarding.render(100).join("\n"))).not.toContain("synthetic-discovery-key");
   onboarding.handleInput("\r");
+  expect(stripAnsi(onboarding.render(100).join("\n"))).toContain("Import models from /models");
 }
 
 describe("custom provider model import", () => {

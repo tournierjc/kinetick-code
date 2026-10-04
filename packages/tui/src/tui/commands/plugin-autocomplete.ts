@@ -1,4 +1,4 @@
-import type { McodePluginRuntimeAccess } from '../../plugin/contract.js';
+import type { KcodePluginRuntimeAccess } from '../../plugin/contract.js';
 import type { AutocompleteItem, AutocompleteProvider } from '../widgets/autocomplete.js';
 import { truncateToWidth } from '../engine/public.js';
 import { sanitizeTerminalText } from '../rendering/terminal-text.js';
@@ -14,7 +14,7 @@ export class TuiPluginAutocomplete implements AutocompleteProvider {
 
   constructor(
     private readonly base: AutocompleteProvider,
-    private readonly plugins?: Partial<Pick<McodePluginRuntimeAccess, 'listInstalledPlugins'>>,
+    private readonly plugins?: Partial<Pick<KcodePluginRuntimeAccess, 'listInstalledPlugins'>>,
   ) {}
 
   async getSuggestions(

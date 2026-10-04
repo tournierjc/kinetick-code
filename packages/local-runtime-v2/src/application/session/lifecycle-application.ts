@@ -253,6 +253,7 @@ export class SessionLifecycleApplication {
       this.options.lifecycle.mutateSession(req.id, {
         ...whenDefined("title", req.title),
         ...whenDefined("memoryPolicy", req.memoryPolicy),
+        ...whenDefined("skillPolicy", req.skillPolicy),
       }),
     );
     return { session: toSessionInfoView(updated) };

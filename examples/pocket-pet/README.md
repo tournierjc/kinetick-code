@@ -5,7 +5,7 @@ A small browser project for a real coding-agent workflow: add a timer, then chan
 ## Requirements
 
 - Node.js 22.19+ and a modern browser. The local server binds only to `127.0.0.1:4173`.
-- To have the agent edit the starter: install [MCode](../../README.md#quick-start) and configure a MiniMax account with available credits or your own compatible model API. Model calls may incur charges. Source availability does not make hosted inference free.
+- To have the agent edit the starter: install [Kinetick Code](../../README.md#quick-start) and configure `kcode` with your own model, or with a MiniMax account that has available credits. Model calls may incur charges. Source availability does not make hosted inference free.
 - Running the finished example and its tests needs no account or model call.
 
 ## Try the finished pet
@@ -30,7 +30,7 @@ cd ../my-pocket-pet
 node serve.mjs
 ```
 
-The setup command refuses an existing destination. Open the URL above. In a second terminal, change to the same `my-pocket-pet` directory and run `mcode`. Use the normal permission prompts to review file edits and test execution.
+The setup command refuses an existing destination. Open the URL above. In a second terminal, change to the same `my-pocket-pet` directory and run `kcode`. Use the normal permission prompts to review file edits and test execution.
 
 ### First request
 
@@ -54,6 +54,6 @@ Refresh again. Confirm a short tap leaves the timer running; a hold pauses it; a
 node --test examples/pocket-pet/finished/timer.test.mjs examples/pocket-pet/finished/hold.test.mjs
 ```
 
-The shipped `finished/` reference is based on a real MiniMax Code 0.5.8 BYOK session, followed by maintainer visual polish and browser verification. The shipped reference has a revised design, a session progress bar, short-tap feedback, and visible mode links; these are documented maintainer additions beyond the two prompts. The starter was designed beforehand. This demonstrates the agent modifying an existing project; it is not a claim that the CLI generated the entire design from an empty directory. See [recording details](../../docs/demo.md).
+The shipped `finished/` reference is based on a real upstream MiniMax Code 0.5.8 BYOK session, followed by maintainer visual polish and browser verification. The page chrome in this repository says Kinetick Code. The shipped reference has a revised design, a session progress bar, short-tap feedback, and visible mode links; these are documented maintainer additions beyond the two prompts. The starter was designed beforehand. This demonstrates the agent modifying an existing project; it is not a claim that the CLI generated the entire design from an empty directory. See [recording details](../../docs/demo.md).
 
 The example keeps state in memory. Reloading resets the timer. It is an educational example, not an alarm service guaranteed to run while a computer sleeps.

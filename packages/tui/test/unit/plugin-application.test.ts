@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { McodePluginApplication } from '../../src/plugin/application.js';
+import { KcodePluginApplication } from '../../src/plugin/application.js';
 
 const plugin = (name: string, marketplace: 'official' | 'local', installed: boolean) => ({
   pluginId: `${name}@${marketplace}`,
@@ -21,7 +21,7 @@ describe('McodePluginApplication', () => {
         .mockResolvedValueOnce([plugin('docs', 'official', false)])
         .mockResolvedValueOnce([plugin('notes', 'local', false)]),
     };
-    const application = new McodePluginApplication(port as never);
+    const application = new KcodePluginApplication(port as never);
 
     await expect(application.catalog({ includeAvailable: true })).resolves.toEqual({
       installed: [plugin('legacy', 'official', true)],
@@ -46,7 +46,7 @@ describe('McodePluginApplication', () => {
         .mockResolvedValueOnce({ installed: false, enabled: false }),
       refreshPlugins: vi.fn(async () => undefined),
     };
-    const application = new McodePluginApplication(port as never);
+    const application = new KcodePluginApplication(port as never);
 
     const installed = await application.install(selected);
     await expect(application.setEnabled(installed, false)).resolves.toMatchObject({

@@ -14,12 +14,13 @@
  *     hook would silently no-op. We also attach an error handler to the raw
  *     child stderr pipe because Node does not forward source stream errors
  *     through `.pipe()`.
- *   * `env` constructed as `{ ...process.env, ...config.env, ...injected.env }`
- *     — injected env wins so host-provided identity or policy data can
- *     override any stale value baked into config or leaking from the parent
- *     process env.
+ *   * `env` starts from the parent environment, then config and injected
+ *     values. Runtime boundary keys (access tokens, data-directory pointers,
+ *     parent session identity) are removed after that merge, so a project
+ *     config cannot copy them back in.
  */
 import { homedir } from 'node:os';
+import { stripRuntimeBoundaryKeysFrom } from '@mavis/shared/runtime-boundary-env';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { StdioTransportConfig } from '../types.js';
@@ -35,7 +36,7 @@ export function createStdioTransport(
   return new SafeStdioClientTransport({
     command: config.command,
     args: config.args,
-    env: buildProcessEnv(config.env, options?.env),
+    env: buildMcpStdioChildEnv(config.env, options?.env),
     cwd: config.cwd ?? homedir(),
     stderr: 'pipe',
   });
@@ -55,15 +56,21 @@ class SafeStdioClientTransport extends StdioClientTransport {
   }
 }
 
-function buildProcessEnv(
+export function buildMcpStdioChildEnv(
   configEnv?: Record<string, string>,
   injectedEnv?: Record<string, string>,
 ): Record<string, string> {
-  return {
+  const merged: NodeJS.ProcessEnv = {
     ...getProcessEnv(),
     ...(configEnv ?? {}),
     ...(injectedEnv ?? {}),
   };
+  stripRuntimeBoundaryKeysFrom(merged, 'agent-runtime');
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(merged)) {
+    if (typeof value === 'string') env[key] = value;
+  }
+  return env;
 }
 
 function getProcessEnv(): Record<string, string> {

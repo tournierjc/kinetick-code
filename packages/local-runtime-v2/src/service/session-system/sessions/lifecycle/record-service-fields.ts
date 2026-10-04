@@ -3,6 +3,10 @@ import type { ConversationModelThinkingSelection } from '@mavis/conversation-con
 import type { SessionKind, SessionRecord } from '../repo/contract.js';
 import { SessionServiceError } from '../errors.js';
 import { applySessionMemoryPolicyPatch, effectiveSessionMemoryPolicy } from '../memory-policy.js';
+import {
+  applySessionSkillPolicyPatch,
+  effectiveSessionSkillPolicy,
+} from '../skill-policy.js';
 import type { SessionMutationFields, SessionMetadataUpdateFields } from './lifecycle-contract.js';
 
 export type SessionAppMode = NonNullable<SessionRecord['appMode']>;
@@ -13,23 +17,32 @@ export function normalizeMemoryPolicyMutation(
   current: SessionRecord,
   fields: SessionMutationFields,
 ): SessionMetadataUpdateFields {
-  const { memoryPolicy, ...rest } = fields;
-  if (memoryPolicy === undefined) return rest;
-  const policy = effectiveSessionMemoryPolicy(current.memoryPolicy);
-  if (
-    policy.recallLocked &&
-    memoryPolicy.recallEnabled !== undefined &&
-    memoryPolicy.recallEnabled !== policy.recallEnabled
-  ) {
-    throw new SessionServiceError(
-      'memory-recall-locked',
-      'Memory recall cannot be changed after the conversation starts',
-    );
+  const { memoryPolicy, skillPolicy, ...rest } = fields;
+  let next: SessionMetadataUpdateFields = rest;
+  if (memoryPolicy !== undefined) {
+    const policy = effectiveSessionMemoryPolicy(current.memoryPolicy);
+    if (
+      policy.recallLocked &&
+      memoryPolicy.recallEnabled !== undefined &&
+      memoryPolicy.recallEnabled !== policy.recallEnabled
+    ) {
+      throw new SessionServiceError(
+        'memory-recall-locked',
+        'Memory recall cannot be changed after the conversation starts',
+      );
+    }
+    next = {
+      ...next,
+      memoryPolicy: applySessionMemoryPolicyPatch(current.memoryPolicy, memoryPolicy),
+    };
   }
-  return {
-    ...rest,
-    memoryPolicy: applySessionMemoryPolicyPatch(current.memoryPolicy, memoryPolicy),
-  };
+  if (skillPolicy !== undefined) {
+    next = {
+      ...next,
+      skillPolicy: applySessionSkillPolicyPatch(current.skillPolicy, skillPolicy),
+    };
+  }
+  return next;
 }
 
 export function assertTaskParent(

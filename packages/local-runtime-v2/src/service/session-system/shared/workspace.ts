@@ -1,6 +1,9 @@
 import path from 'node:path';
 
-import { LEGACY_DATA_DIR_BASENAME, NEW_DATA_DIR_BASENAME } from '@mavis/config/data-dir';
+import {
+  LEGACY_DATA_DIR_BASENAMES,
+  NEW_DATA_DIR_BASENAME,
+} from '@mavis/config/data-dir';
 
 import type { SessionRunLocation } from '../sessions/repo/contract.js';
 import { normalizeAbsolutePath, pathFlavor } from './path-normalization.js';
@@ -89,16 +92,13 @@ function hasLegacyAgentDataDirectoryAlias(
   active: AgentWorkspacePath,
   legacy: AgentWorkspacePath,
 ): boolean {
-  if (active.windows) {
-    return (
-      active.dataDirBase.toLowerCase() === NEW_DATA_DIR_BASENAME &&
-      legacy.dataDirBase.toLowerCase() === LEGACY_DATA_DIR_BASENAME
-    );
-  }
-  return (
-    active.dataDirBase === NEW_DATA_DIR_BASENAME &&
-    legacy.dataDirBase === LEGACY_DATA_DIR_BASENAME
+  const isPrimary = active.windows
+    ? active.dataDirBase.toLowerCase() === NEW_DATA_DIR_BASENAME
+    : active.dataDirBase === NEW_DATA_DIR_BASENAME;
+  const isLegacy = LEGACY_DATA_DIR_BASENAMES.some((base) =>
+    active.windows ? legacy.dataDirBase.toLowerCase() === base : legacy.dataDirBase === base,
   );
+  return isPrimary && isLegacy;
 }
 
 interface AgentWorkspacePath {
@@ -128,7 +128,7 @@ function parseAgentWorkspacePath(
     return undefined;
   }
   const dataDirPart = parts.at(-4);
-  const match = dataDirPart?.match(/^\.(minimax|mavis)(?:-(.+))?$/i);
+  const match = dataDirPart?.match(/^\.(kinetick|minimax|mavis)(?:-(.+))?$/i);
   if (!match?.[1]) return undefined;
   return {
     windows,

@@ -18,6 +18,7 @@ import { withOpenCodeGoHeaders, withOpenRouterAttributionHeaders } from '@mavis/
 
 import type {
   LocalModelCompatOverrides,
+  LocalModelConfig,
   LocalModelResolveInput,
   LocalModelResolverLike,
   LocalModelResolverLogger,
@@ -27,7 +28,7 @@ import type {
   LocalProviderOptions,
   LocalRuntimeAuthContext,
 } from '../contracts.js';
-import { normalizeProviderBaseUrl } from '../connectivity/provider-request.js';
+import { normalizeProviderBaseUrl, UNAUTHENTICATED_PROVIDER_API_KEY } from '../connectivity/provider-request.js';
 import {
   isModelProviderApi,
   MANAGED_MINIMAX_PROVIDER_ID,
@@ -106,7 +107,18 @@ interface FinishResolveInput extends ModelIdentity {
   readonly customProvider: boolean;
   readonly runtimeProvider?: string;
   readonly configHeaders?: Record<string, string>;
+  /**
+   * The endpoint declares no credential: no key is sent in the request, and
+   * none is required to reach it.
+   */
+  readonly unauthenticatedEndpoint?: true;
   readonly modelCompat?: LocalModelCompatOverrides;
+  /**
+   * Token rates the provider declares for this model, in USD per million tokens.
+   * The config subtree it comes from is persisted as opaque JSON, so the rate is
+   * validated where it is read rather than where it is written.
+   */
+  readonly modelCost?: LocalModelConfig['cost'];
   readonly catalogModel?: Model<Api>;
   readonly authContext?: LocalRuntimeAuthContext;
   readonly routingContext?: ManagedBackendRoutingContext;
@@ -188,6 +200,7 @@ export class LocalModelResolver implements LocalModelResolverLike {
       byokProvider: credentials.authMode === 'oauth',
       customProvider: false,
       configHeaders: credentials.headers,
+      ...(usable.unauthenticatedEndpoint ? { unauthenticatedEndpoint: true as const } : {}),
       catalogModel: lookupLocalCatalogModel(provider, modelId),
       ...(authContext ? { authContext } : {}),
       ...(routingContext ? { routingContext } : {}),
@@ -245,6 +258,7 @@ export class LocalModelResolver implements LocalModelResolverLike {
       ...(fetchImpl ? { fetch: fetchImpl } : {}),
       ...(thinking.exposedLevel ? { thinkingLevel: thinking.exposedLevel } : {}),
       ...(thinking.requestPatch ? { thinkingRequestPatch: thinking.requestPatch } : {}),
+      ...(input.unauthenticatedEndpoint ? { unauthenticatedEndpoint: true as const } : {}),
     };
   }
 
@@ -380,7 +394,18 @@ async function resolveByokResolutionPlan(
   plan: ByokResolutionPlan,
   options: LocalModelResolverOptions,
 ): Promise<ResolvedByokResolutionPlan> {
-  const { authProvider, apiKey: configuredApiKey, ...resolved } = plan;
+  const {
+    authProvider,
+    apiKey: configuredApiKey,
+    unauthenticatedEndpoint,
+    ...resolved
+  } = plan;
+  // An endpoint that declares no credential resolves to the placeholder key the
+  // transport requires; `unauthenticatedEndpoint` clears the credential header
+  // that key would otherwise be written into, so nothing is sent in its place.
+  if (unauthenticatedEndpoint) {
+    return { ...resolved, apiKey: UNAUTHENTICATED_PROVIDER_API_KEY, unauthenticatedEndpoint: true };
+  }
   const apiKey = (
     authProvider ? await options.providerAuthGetter?.(authProvider) : configuredApiKey
   )?.trim();
@@ -633,7 +658,7 @@ function buildResolvedModel(scope: {
     reasoning: thinking.enabled,
     ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
     input: deriveModelInput(input.modelRef),
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    cost: resolvedModelCost(input),
     contextWindow,
     maxTokens,
     ...(compat ? { compat } : {}),
@@ -643,6 +668,60 @@ function buildResolvedModel(scope: {
 function resolvedThinkingLevelMap(thinking: ResolvedThinking): ThinkingLevelMap | undefined {
   if (thinking.thinkingLevelMap) return thinking.thinkingLevelMap;
   return thinking.maxLevel ? { max: thinking.maxLevel } : undefined;
+}
+
+const ZERO_MODEL_COST: Model<Api>['cost'] = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
+/**
+ * Token rates for the resolved model, in USD per million tokens.
+ *
+ * Pi multiplies these rates by the turn's token counts and the Runtime persists
+ * the result with every assistant message; that persisted total is what the
+ * status line reports as the session cost. A zero rate therefore does not read
+ * as "free", it reads as "never priced": the total stays $0 and the item that
+ * shows it stays hidden. So a rate the provider declares wins, and a route the
+ * account already pays for by plan or by sign-in keeps the zero rate — the Pi
+ * catalog lists a per-token price for those models too, and reporting it would
+ * invent a charge the account is not billed.
+ */
+function resolvedModelCost(input: FinishResolveInput): Model<Api>['cost'] {
+  const declared = declaredModelCost(input.modelCost);
+  if (declared) return declared;
+  if (input.managedProvider || (input.byokProvider && !input.customProvider)) {
+    return ZERO_MODEL_COST;
+  }
+  return input.catalogModel?.cost ?? ZERO_MODEL_COST;
+}
+
+/**
+ * Reads the declared rate out of opaque provider config into Pi's rate shape.
+ *
+ * Both directions must be a real, finite, non-negative price: a half-declared or
+ * negative rate would price a turn at a number nobody published, so it is
+ * dropped and the model left unpriceable instead. An explicit zero is honoured
+ * as "this endpoint is not billed by the token", which also keeps the Pi
+ * catalog's list price for whatever model the endpoint fronts out of the total.
+ */
+function declaredModelCost(declared: LocalModelConfig['cost']): Model<Api>['cost'] | undefined {
+  if (!declared) return undefined;
+  const input = tokenRate(declared.input);
+  const output = tokenRate(declared.output);
+  if (input === undefined || output === undefined) return undefined;
+  return {
+    input,
+    output,
+    cacheRead: tokenRate(declared.cache_read) ?? 0,
+    cacheWrite: tokenRate(declared.cache_write) ?? 0,
+  };
+}
+
+function tokenRate(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function resolvedModelCompatibility(
@@ -783,8 +862,22 @@ function requireUsableCredentials(
   apiKey: string | undefined,
   baseUrl: string | undefined,
   credentials: ReturnType<typeof resolveLocalProviderCredentials>,
-): { readonly apiKey: string; readonly baseUrl: string } {
+): { readonly apiKey: string; readonly baseUrl: string; readonly unauthenticatedEndpoint?: true } {
   if (!apiKey) {
+    if (credentials.authMode === 'oauth') {
+      throw new Error(
+        `LocalModelResolver: ${provider} login required; no OAuth credentials found.`,
+      );
+    }
+    if (credentials.authMode !== 'managed-login') {
+      // No key on a route that is not a sign-in: the endpoint needs no
+      // authentication, so the transport gets the placeholder key and the
+      // credential headers are cleared for this request.
+      if (!baseUrl) {
+        throw new Error(`LocalModelResolver: base_url not configured for provider "${provider}".`);
+      }
+      return { apiKey: UNAUTHENTICATED_PROVIDER_API_KEY, baseUrl, unauthenticatedEndpoint: true };
+    }
     throw new Error(
       provider === OPENAI_CODEX_PROVIDER_ID
         ? 'LocalModelResolver: openai-codex login required; no OAuth credentials found.'

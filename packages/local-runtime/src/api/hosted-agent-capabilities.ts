@@ -305,6 +305,7 @@ export function createHostedAgentCapabilities(
             writeEnabled: input.session.memoryPolicy?.writeEnabled !== false,
           }),
           environmentInSystemPrompt: true,
+          ...(input.session.skillPolicy ? { skillPolicy: input.session.skillPolicy } : {}),
         };
         const reminderMessage = host.localDataCollector.toMessage(
           input.promptText,

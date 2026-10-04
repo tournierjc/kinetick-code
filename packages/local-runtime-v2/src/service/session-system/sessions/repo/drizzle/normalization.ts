@@ -182,6 +182,7 @@ const OWNED_UPDATE_FIELDS = [
   'appMode',
   'interactionMode',
   'memoryPolicy',
+  'skillPolicy',
   'errorMessage',
   'errorCode',
   'errorSource',

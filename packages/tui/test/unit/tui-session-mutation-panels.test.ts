@@ -17,6 +17,7 @@ import {
   sessionMutationText,
 } from '../../src/tui/features/session-mutation/copy.js';
 import { stripAnsi } from '../../src/tui/rendering/text.js';
+import { TuiSessionMutationForkConfirmation } from '../../src/tui/controller/product/session-mutation-flow.js';
 import type {
   TuiRewindPreview,
   TuiSessionInputSummary,
@@ -454,5 +455,53 @@ describe('TuiSessionMutationScopePicker', () => {
 
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('TuiSessionMutationForkConfirmation', () => {
+  const forkOptions = {
+    canFork: true,
+    suggestedTitle: '2 - History test',
+    sourceTitle: 'History test',
+    worktreeVisible: false,
+    worktreeEligible: false,
+  };
+
+  it('names the copied Session and hides the fork boundary line for a clone', () => {
+    const onConfirm = vi.fn();
+    const confirmation = new TuiSessionMutationForkConfirmation({
+      options: forkOptions,
+      mode: 'clone',
+      onConfirm,
+      onCancel: vi.fn(),
+      requestRender: vi.fn(),
+    });
+
+    const rendered = stripAnsi(confirmation.renderViewport(100, 12).join('\n'));
+
+    expect(rendered).toContain('Confirm copy');
+    expect(rendered).toContain('Includes the conversation up to the latest reply.');
+    expect(rendered).toContain('2 - History test');
+    expect(rendered).not.toContain(sessionMutationText('sessionMutation.confirm.fromLabel'));
+
+    confirmation.handleInput('\r');
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the boundary line and fork copy when a prompt is selected', () => {
+    const confirmation = new TuiSessionMutationForkConfirmation({
+      summary: makeSummary(),
+      options: forkOptions,
+      onConfirm: vi.fn(),
+      onCancel: vi.fn(),
+      requestRender: vi.fn(),
+    });
+
+    const rendered = stripAnsi(confirmation.renderViewport(100, 12).join('\n'));
+
+    expect(rendered).toContain(sessionMutationText('sessionMutation.confirm.fork.title'));
+    expect(rendered).toContain(sessionMutationText('sessionMutation.confirm.fromLabel'));
+    expect(rendered).toContain(makeSummary().contentHead);
+    expect(rendered).not.toContain(sessionMutationText('sessionMutation.confirm.clone.scope'));
   });
 });

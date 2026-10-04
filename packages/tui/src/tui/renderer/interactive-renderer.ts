@@ -12,7 +12,7 @@ import {
 } from '../engine/public.js';
 import { captureTuiIncidentBestEffort, type TuiIncidentSink } from '../../observability/index.js';
 
-export interface McodeInteractiveRendererOptions {
+export interface KcodeInteractiveRendererOptions {
   readonly terminal: Terminal;
   readonly initialMode?: TuiMode;
   readonly clearScrollbackOnStart?: boolean;
@@ -51,7 +51,7 @@ export function createActiveTuiReference(getTui: () => TUI): TUI {
   });
 }
 
-export class McodeInteractiveRenderer {
+export class KcodeInteractiveRenderer {
   readonly ui: TUI;
   readonly firstFrame: Promise<void>;
 
@@ -65,7 +65,7 @@ export class McodeInteractiveRenderer {
   private disposed = false;
   private initialRegularViewportCleared = false;
 
-  constructor(private readonly options: McodeInteractiveRendererOptions) {
+  constructor(private readonly options: KcodeInteractiveRendererOptions) {
     this.fullscreenLayoutRoot = options.fullscreenLayoutRoot;
     this.renderer = this.createRenderer(options.initialMode ?? 'regular');
     this.ui = createActiveTuiReference(() => this.renderer);
@@ -150,16 +150,9 @@ export class McodeInteractiveRenderer {
     const clearOnShrink = previous.getClearOnShrink();
     const onDebug = previous.onDebug;
     const wasStarted = this.started;
-    if (previous instanceof TuiMainScreen) {
-      this.mainScreenRenderState = previous.captureRenderState();
-    }
-
     const next = this.createRenderer(mode, showHardwareCursor);
     next.setClearOnShrink(clearOnShrink);
     next.onDebug = onDebug;
-    if (next instanceof TuiMainScreen && this.mainScreenRenderState) {
-      next.restoreRenderState(this.mainScreenRenderState);
-    }
     for (const component of components) next.addChild(component);
     this.mountFullscreenLayout(next);
 
@@ -171,6 +164,14 @@ export class McodeInteractiveRenderer {
       if (wasStarted) {
         previousStopAttempted = true;
         previous.stop({ preserveScreen: true });
+      }
+      // stop() can flush a pending resized frame. Capture the physical main
+      // buffer only after that flush, before the next renderer takes ownership.
+      if (previous instanceof TuiMainScreen) {
+        this.mainScreenRenderState = previous.captureRenderState();
+      }
+      if (next instanceof TuiMainScreen && this.mainScreenRenderState) {
+        next.restoreRenderState(this.mainScreenRenderState);
       }
       previous.setFocus(null);
       next.setFocus(focus);

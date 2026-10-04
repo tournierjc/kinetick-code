@@ -32,6 +32,7 @@ export const TUI_STATUS_LINE_ITEMS = [
   'context-window',
   'subagent',
   'token-quota',
+  'session-cost',
   'cache-read-ratio',
   'context-remaining',
   'context-meter',
@@ -66,6 +67,8 @@ const TUI_STATUS_LINE_ITEM_ALIASES: Readonly<Record<string, TuiStatusLineItem>> 
   quota: 'token-quota',
   'token-plan': 'token-quota',
   'cache-read': 'cache-read-ratio',
+  cost: 'session-cost',
+  '$': 'session-cost',
   context: 'context-remaining',
   'context-left': 'context-remaining',
   'context-bar': 'context-meter',
@@ -124,5 +127,6 @@ export const TUI_STATUS_LINE_DEFAULT_ITEMS: readonly TuiStatusLineItem[] = [
   'context-window',
   'subagent',
   'token-quota',
+  'session-cost',
   'context-remaining',
 ];

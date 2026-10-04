@@ -1,12 +1,13 @@
-import type {
-  McodeUpdateApplyOptions,
-  McodeUpdateOutcome,
-  McodeUpdatePlan,
+import {
+  kcodeUpdateChannelLabel,
+  type KcodeUpdateApplyOptions,
+  type KcodeUpdateOutcome,
+  type KcodeUpdatePlan,
 } from '../../../update/application.js';
 import { disposeComponents, type Component } from '../../rendering/component.js';
 import { TuiUpdatePanel } from '../../features/update/panel.js';
 import type { TuiInteractionSurface } from '../../shell/interaction-surface.js';
-import { McodeUpdateAdmissionError } from '../../../update/progress.js';
+import { KcodeUpdateAdmissionError } from '../../../update/progress.js';
 import { formatTuiActionFailure } from '../../../user-facing-failure.js';
 
 type AppendUpdateNotice = (content: string, kind?: 'warning' | 'error') => void;
@@ -14,19 +15,19 @@ type AppendUpdateNotice = (content: string, kind?: 'warning' | 'error') => void;
 export interface TuiUpdateOptions {
   readonly version: string;
   readonly checkForUpdate?: () => Promise<{ latestVersion: string } | undefined>;
-  readonly inspectUpdate?: () => Promise<McodeUpdatePlan>;
+  readonly inspectUpdate?: () => Promise<KcodeUpdatePlan>;
   readonly applyUpdate?: (
-    plan: McodeUpdatePlan,
-    options?: McodeUpdateApplyOptions,
-  ) => Promise<McodeUpdateOutcome>;
+    plan: KcodeUpdatePlan,
+    options?: KcodeUpdateApplyOptions,
+  ) => Promise<KcodeUpdateOutcome>;
 }
 
 export interface TuiUpdateFlowOptions {
-  readonly inspect: () => Promise<McodeUpdatePlan>;
+  readonly inspect: () => Promise<KcodeUpdatePlan>;
   readonly apply: (
-    plan: McodeUpdatePlan,
-    options?: McodeUpdateApplyOptions,
-  ) => Promise<McodeUpdateOutcome>;
+    plan: KcodeUpdatePlan,
+    options?: KcodeUpdateApplyOptions,
+  ) => Promise<KcodeUpdateOutcome>;
   readonly append: AppendUpdateNotice;
   readonly showPanel: (panel: Component) => void;
   readonly closePanel: (panel?: Component) => boolean;
@@ -52,7 +53,7 @@ export function createTuiUpdateFlow(
         kind: 'manual',
         source: 'unsupported',
         currentVersion: options.version,
-        command: 'mcode update',
+        command: 'kcode update',
       })),
     apply:
       options.applyUpdate ??
@@ -81,13 +82,13 @@ export class TuiUpdateFlow {
     if (this.stopped) return;
     if (this.updateTask) {
       this.options.append(
-        'An MCode update is already running. Please wait for it to finish.',
+        'An KCode update is already running. Please wait for it to finish.',
         'warning',
       );
       return;
     }
     const requestSequence = ++this.requestSequence;
-    let plan: McodeUpdatePlan;
+    let plan: KcodeUpdatePlan;
     try {
       plan = await this.options.inspect();
     } catch (error) {
@@ -105,23 +106,21 @@ export class TuiUpdateFlow {
 
     if (plan.kind === 'current') {
       this.options.append(
-        plan.source === 'managed-installer'
-          ? `MCode ${plan.currentVersion} is current on ${plan.channel}.`
-          : `MCode ${plan.currentVersion} is current on @${plan.packageTag}.`,
+        `KCode ${plan.currentVersion} is current on ${kcodeUpdateChannelLabel(plan)}.`,
       );
       return;
     }
     if (plan.kind === 'ahead') {
       this.options.append(
-        `MCode ${plan.currentVersion} is newer than ${
-          plan.source === 'managed-installer' ? plan.channel : `@${plan.packageTag}`
-        } ${plan.latestVersion}.`,
+        `KCode ${plan.currentVersion} is newer than ${kcodeUpdateChannelLabel(plan)} ` +
+          `${plan.latestVersion}.`,
       );
       return;
     }
     if (plan.kind === 'manual') {
       this.options.append(
-        `Automatic update is unavailable for this installation. Update manually with: ${plan.command}`,
+        `This installation is not managed by a package manager. ` +
+          `Update manually with: ${plan.command}`,
         'warning',
       );
       return;
@@ -151,19 +150,19 @@ export class TuiUpdateFlow {
   }
 
   private startBackgroundUpdate(
-    plan: Extract<McodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
+    plan: Extract<KcodeUpdatePlan, { kind: 'available' | 'package-manager' }>,
     panel: Component,
   ): void {
     if (this.updateTask) {
       this.options.append(
-        'An MCode update is already running. Please wait for it to finish.',
+        'An KCode update is already running. Please wait for it to finish.',
         'warning',
       );
       return;
     }
     this.close(panel);
     this.options.append(
-      `MCode update started in the background (${plan.currentVersion} → ${plan.latestVersion}).`,
+      `KCode update started in the background (${plan.currentVersion} → ${plan.latestVersion}).`,
     );
     const task = this.requireAdmission()
       .then(() =>
@@ -182,7 +181,7 @@ export class TuiUpdateFlow {
       .then(
         (outcome) => {
           if (!this.stopped) {
-            this.options.append(`MCode update completed: ${outcome.message}`);
+            this.options.append(`KCode update completed: ${outcome.message}`);
             if (outcome.restartRequired) {
               void this.options.restart();
             }
@@ -191,7 +190,7 @@ export class TuiUpdateFlow {
         (error: unknown) => {
           if (!this.stopped) {
             this.options.append(
-              `MCode update failed: ${error instanceof Error ? error.message : String(error)}`,
+              `KCode update failed: ${error instanceof Error ? error.message : String(error)}`,
               'error',
             );
           }
@@ -222,8 +221,8 @@ export class TuiUpdateFlow {
   private async requireAdmission(): Promise<void> {
     const admission = await this.options.admit?.();
     if (admission && !admission.allowed) {
-      throw new McodeUpdateAdmissionError(
-        admission.reason ?? 'Finish active MCode work before updating.',
+      throw new KcodeUpdateAdmissionError(
+        admission.reason ?? 'Finish active KCode work before updating.',
       );
     }
   }

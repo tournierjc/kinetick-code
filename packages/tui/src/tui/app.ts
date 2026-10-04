@@ -8,7 +8,6 @@ import {
   createTuiApplicationSessionActions,
   createTuiApplicationSurface,
   createTuiApplicationWidgets,
-  createTuiBusinessEventTracker,
   createTuiChatControllerComposition,
   createTuiRunIdentity,
   resolveTuiInteractionMaxRows,
@@ -54,7 +53,15 @@ import { parseTuiStatusLineItems as parseStatusItems } from './shell/status-line
 import { showTuiStatusLineSetup } from './controller/product/status-line-setup.js';
 import { showTuiThemeSetup } from './controller/product/theme-setup.js';
 import { TuiCodexHandoffFlow } from './controller/product/codex-handoff-flow.js';
-import { tuiTerminalSessionLabel } from './platform/terminal-title.js';
+import {
+  resolveTuiSessionTabGroupRefs,
+  resolveTuiSessionTabGroups,
+  resolveTuiSessionTabStatus,
+  resolveTuiSessionTabs,
+  TuiSessionTabs,
+} from './shell/session-tabs.js';
+import { selectSessionView } from './state/selectors.js';
+import { applyingTuiTabGroupCollapse } from './state/tabs.js';
 
 export type { CreateTuiAppOptions, TuiApp, TuiStopOptions };
 export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
@@ -65,7 +72,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     renderer,
     tui,
     terminalNotifications,
-    terminalTitle,
     themeController,
     openExternalTarget,
     writeClipboardText,
@@ -163,6 +169,32 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
   const hasLiveRun = () => Boolean(liveRunId() || controller.hasInProcessRun());
   const isTuiActive = (): boolean => started && !stopped && !suspended;
   let shouldResumeDraftAfterLogin = () => false;
+  const sessionTabs = new TuiSessionTabs({
+    tabs: () => {
+      const state = stateStore.snapshot();
+      const catalog = controller.snapshot().sessions;
+      const tabs = resolveTuiSessionTabs({
+        order: state.tabs.order,
+        activeSessionId: state.activeSessionId,
+        catalog,
+        statusOf: (sessionId) => resolveTuiSessionTabStatus(selectSessionView(state, sessionId)),
+      });
+      if (!state.tabs.grouped) return { tabs };
+      const refs = resolveTuiSessionTabGroupRefs(catalog);
+      const activeGroupKey = state.activeSessionId
+        ? refs.get(state.activeSessionId)?.key
+        : undefined;
+      const groups = resolveTuiSessionTabGroups({
+        tabs,
+        groupOf: (sessionId) => refs.get(sessionId),
+        collapsedGroups: applyingTuiTabGroupCollapse(
+          state.tabs.collapsedGroups,
+          activeGroupKey,
+        ),
+      });
+      return groups ? { tabs, groups } : { tabs };
+    },
+  });
   const { layout, surfaceHost, fullscreenLayout, themeRendering, interactionSurface } =
     createTuiApplicationSurface({
       terminal,
@@ -172,6 +204,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       transcript,
       transcriptView,
       widgets,
+      sessionTabs,
       themeController,
       liveRunId,
       shouldResumeDraftAfterLogin: () => shouldResumeDraftAfterLogin(),
@@ -256,7 +289,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     deliverPermissionFeedback: async (feedback) => {
       const disposition = await commandFlow.submit(feedback);
       if (disposition === 'retained')
-        throw new Error('MCode kept the guidance in the composer instead of sending it.');
+        throw new Error('KCode kept the guidance in the composer instead of sending it.');
     },
     onChanged: () => {
       updateChrome(controller.snapshot());
@@ -264,14 +297,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     },
     isStopped: () => stopped,
     notify: (kind, key) => {
-      terminalNotifications.notifyOnce(
-        kind,
-        key,
-        tuiTerminalSessionLabel({
-          ...controller.snapshot().session,
-          workspace: options.workspaceDir,
-        }),
-      );
+      terminalNotifications.notifyOnce(kind, key);
     },
     ...delegationFlow.permissionResolvers(liveRunId),
     agentStatusLineItems: options.statusLineItems,
@@ -305,26 +331,14 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       chromeFlow?.setHint(message);
     },
     onChanged: updateChromeAndRequestRender,
-    onNewSession: () => sessionFlow.startNew(),
+    onNewSession: () => sessionFlow.openNewSessionTab({ workspaceDir: options.workspaceDir }),
     onOpenSession: (sessionId) => sessionFlow.activateSessionById(sessionId),
-    onArchivedCurrentSession: (sessionId) => sessionFlow.archiveCurrentProjection(sessionId),
+    onCurrentSessionClosed: (sessionId) => sessionFlow.archiveCurrentProjection(sessionId),
     refreshAutocomplete: () => activeRunFlow?.refreshAutocomplete(),
     onStartMiniMaxLogin: () => commandFlow.startMiniMaxLogin(), // Wired below.
     isStopped: () => stopped,
     hasLiveRun,
   });
-  const businessEventTracker = createTuiBusinessEventTracker({
-    telemetry: options.businessTelemetry,
-    workspaceDir: options.workspaceDir,
-    controller,
-    featureFlow,
-    stateStore,
-    transcript,
-  });
-  editor.onAutocompleteView = (suggestions) =>
-    businessEventTracker?.trackAutocompleteView(suggestions);
-  editor.onAutocompleteSelect = (suggestions, item) =>
-    businessEventTracker?.trackAutocompleteSelection(suggestions, item);
   const feedbackFlow = new Feedback(
     options.runtime,
     controller,
@@ -589,7 +603,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       commandFlow.clearRetainedSubmissions();
       return draftLifecycle?.switchSession(sessionKey) ?? Promise.resolve();
     },
-    detachForegroundObserver: () => runtimeEventFlow?.detachForegroundObserver(),
     adoptForegroundRun: () =>
       sessionLifecycle.adoptForegroundRun(
         controller.snapshot().session?.sessionId,
@@ -602,8 +615,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     abortSessionRun: (sessionId) =>
       options.runtime.abortSession({ id: sessionId, reason: 'user_stop' }),
     currentRunId: liveRunId,
-    onSideSessionOpened: (input) => businessEventTracker?.trackBtwSessionOpened(input),
-    onSideSessionClosed: (input) => businessEventTracker?.trackBtwSessionClosed(input),
     onSideConversationChanged: () => {
       updateChrome(controller.snapshot());
       tui.requestRender();
@@ -680,8 +691,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
       tui.requestRender();
     },
     userMessageCount: () => transcript.snapshot().filter((cell) => cell.kind === 'user').length,
-    onMessageAdmitted: (input) => {
-      businessEventTracker?.trackChatSend(input);
+    onMessageAdmitted: () => {
       layout.forceFollowBottom();
     },
   });
@@ -720,14 +730,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     observability: options.observability,
     incidentReporter: options.incidentReporter,
     notify: (kind, key) => {
-      terminalNotifications.notifyOnce(
-        kind,
-        key,
-        tuiTerminalSessionLabel({
-          ...controller.snapshot().session,
-          workspace: options.workspaceDir,
-        }),
-      );
+      terminalNotifications.notifyOnce(kind, key);
     },
   });
   codexHandoffFlow = new TuiCodexHandoffFlow({
@@ -790,6 +793,15 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     leaveUi,
     isSideModeActive: () => sessionFlow.isSideModeActive(),
     toggleSideConversation: () => sessionFlow.toggleSideConversation(),
+    cycleSessionTab: (delta) => sessionFlow.cycleTab(delta),
+    moveSessionTab: (delta) => sessionFlow.moveTab(delta),
+    selectSessionTab: (slot) => sessionFlow.activateTabSlot(slot),
+    closeSessionTab: () => sessionFlow.closeTab(),
+    openNewSessionTab: () => sessionFlow.openNewSessionTab({ workspaceDir: options.workspaceDir }),
+    renameSessionTab: () => sessionFlow.renameTab(),
+    toggleSessionTabGrouping: () =>
+      sessionFlow.setTabGrouping(!stateStore.snapshot().tabs.grouped),
+    toggleSessionTabCollapse: () => sessionFlow.toggleTabGroupCollapse(),
     closeSideConversation: (exitReason) => sessionFlow.closeSideConversation(exitReason),
     requestProcessSuspend: options.requestProcessSuspend,
     keybindings: options.keybindings,
@@ -815,8 +827,7 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     queueEnabled: productFeatures.queue,
     isStarted: () => started,
     isStopped: () => stopped,
-    setTerminalTitle: (title) => terminalTitle.update(title),
-    terminalTitle: options.terminalTitle,
+    setTerminalTitle: (title) => terminal.setTitle(title),
     connection: () => stateStore.snapshot().connection,
     liveRunId,
     runProjection: () => runProjection.snapshot(),
@@ -871,8 +882,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     if (stopped) return stoppedPromise;
     stateStore.dispatch({ type: 'lifecycle/leaveUi' });
     stopped = true;
-    terminalNotifications.dispose();
-    terminalTitle.dispose();
     const bashStopped = bashFlow.stop();
     detachInputFlow();
     composerDraft.abortClipboardRead();
@@ -921,8 +930,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
   async function suspend(): Promise<void> {
     if (!started || stopped || suspended) return;
     suspended = true;
-    terminalNotifications.setActive(false);
-    terminalTitle.setActive(false);
     renderer.stop();
     await terminal.drainOutput?.();
     await draftLifecycle?.suspend();
@@ -931,9 +938,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     if (!started || stopped || !suspended) return;
     suspended = false;
     renderer.start();
-    terminalNotifications.setActive(true);
-    terminalTitle.setActive(true);
-    updateChrome(controller.snapshot());
     runtimeEventFlow.restart();
     tui.requestRender(true);
     draftLifecycle?.resume();
@@ -953,8 +957,6 @@ export function createTuiApp(options: CreateTuiAppOptions): TuiApp {
     start() {
       if (started || stopped) return;
       started = true;
-      terminalNotifications.setActive(true);
-      terminalTitle.setActive(true);
       updateChrome(controller.snapshot());
       surfaceHost.setChatFocus(editor);
       runtimeEventFlow.start();

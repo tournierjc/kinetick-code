@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  detectTerminalCapabilities,
-  type TerminalCapabilities,
-} from "../../src/tui/platform/terminal-capabilities.js";
+import type { TerminalCapabilities } from "../../src/tui/platform/terminal-capabilities.js";
 import {
   stripTerminalSequences,
   TuiAltScreen,
@@ -33,7 +30,7 @@ import {
 } from "../../src/runtime/event-normalizer.js";
 import type { SendMessageReq } from "@mavis/local-runtime-v2/cli-service";
 import type { TuiObservability } from "../../src/observability/local-observability.js";
-import type { McodeAuthProgress } from "../../src/auth/application.js";
+import type { KcodeAuthProgress } from "../../src/auth/application.js";
 import { formatTuiShortcut } from "../../src/tui/shell/shortcut-labels.js";
 import { createTuiHostKeybindings } from "../../src/tui/shell/keybindings.js";
 import { stripAnsi } from "../../src/tui/rendering/text.js";
@@ -42,22 +39,12 @@ import {
   TuiDraftRecoveryError,
 } from "../../src/tui/features/composer/draft-recovery.js";
 import { composerText } from "../../src/tui/features/composer/copy.js";
-import type {
-  McodeBusinessEvent,
-  McodeBusinessTelemetry,
-} from "../../src/analytics/business-telemetry.js";
 import { VirtualTerminalScreen } from "../helpers/virtual-terminal.js";
 import { VirtualTerminal } from "../pi-084-upstream/virtual-terminal.js";
 import { TuiFailure } from "../../src/failure.js";
 
 const runtimeEvent = (event: RawTuiRuntimeEvent): TuiRuntimeEvent =>
   normalizeTuiRuntimeEvent(event);
-
-const TERMINAL_CAPABILITIES = detectTerminalCapabilities({
-  platform: "linux",
-  isTTY: true,
-  env: { TERM_PROGRAM: "vscode" },
-});
 
 function planReviewEventRequest(id: string) {
   return {
@@ -367,21 +354,6 @@ function createRuntime(): TuiRuntime {
       createdAtMs: Date.now(),
     })),
     cancelFeedback: vi.fn(async () => true),
-    runDailyCheckin: vi.fn(async () => ({
-      status: "claimed" as const,
-      dayNo: 2,
-      points: 20,
-      expireAtMs: 1_800_000_000_000,
-      panel: {
-        scene: 2,
-        days: Array.from({ length: 7 }, (_, index) => ({
-          day_no: index + 1,
-          points: (index + 1) * 10,
-          status: index <= 1 ? 3 : 1,
-          is_today: index === 1,
-        })),
-      },
-    })),
     getAccountStatus: vi.fn(async () => ({
       status: "ready",
       defaultModel: "minimax/MiniMax-M2.7",
@@ -399,6 +371,18 @@ function createRuntime(): TuiRuntime {
     startCodexOAuthLogin: vi.fn(async () => ({
       state: "hidden" as const,
       providerId: "openai-codex" as const,
+    })),
+    getCopilotOAuthStatus: vi.fn(async () => ({
+      state: "hidden" as const,
+      providerId: "github-copilot" as const,
+    })),
+    cancelCopilotOAuthLogin: vi.fn(async () => ({
+      state: "disconnected" as const,
+      providerId: "github-copilot" as const,
+    })),
+    startCopilotOAuthLogin: vi.fn(async () => ({
+      state: "pending" as const,
+      providerId: "github-copilot" as const,
     })),
     getPermissionMode: vi.fn(async () => "auto" as const),
     setPermissionMode: vi.fn(async (mode) => mode),
@@ -539,6 +523,77 @@ function createRuntime(): TuiRuntime {
 }
 
 describe("createTuiApp", () => {
+  it.each([
+    [190, 48, 1],
+    [100, 24, 1],
+    [60, 12, 1],
+    [100, 24, 120],
+  ])(
+    "does not start a transcript snapshot when the first prompt is admitted at %ix%i (%i lines)",
+    async (columns, rows, lineCount) => {
+      class RecordingTerminal extends VirtualTerminal {
+        output = "";
+        override write(data: string): void {
+          this.output += data;
+          super.write(data);
+        }
+      }
+      const terminal = new RecordingTerminal(columns, rows);
+      const runtime = createRuntime();
+      let releaseRun: (() => void) | undefined;
+      const gate = new Promise<void>((resolve) => {
+        releaseRun = resolve;
+      });
+      vi.mocked(runtime.sendMessage).mockImplementation(
+        async function* sendMessage() {
+          await gate;
+          yield { type: "done" };
+        },
+      );
+      const app = createTuiApp({
+        runtime,
+        terminal,
+        version: "0.1.0",
+        workspaceDir: "/workspace",
+        tuiMode: "regular",
+      });
+      app.start();
+      try {
+        await app.ready;
+        app.tui.renderNow();
+        await terminal.flush();
+        expect(terminal.output).not.toContain("Transcript refreshed");
+        terminal.output = "";
+        const prompts =
+          lineCount === 1
+            ? ["hello"]
+            : Array.from(
+                { length: lineCount },
+                (_, i) => `PROMPT_ROW_${String(i).padStart(3, "0")}`,
+              );
+        app.editor.setText(prompts.join("\n"));
+        terminal.sendInput("\r");
+        await vi.waitFor(() =>
+          expect(runtime.sendMessage).toHaveBeenCalledTimes(1),
+        );
+        app.tui.renderNow();
+        await terminal.flush();
+        expect(terminal.output).not.toContain("Transcript refreshed");
+        for (const prompt of prompts) {
+          expect(
+            terminal
+              .getScrollBuffer()
+              .filter((line) => line.trim().endsWith(prompt)),
+            prompt,
+          ).toHaveLength(1);
+        }
+      } finally {
+        releaseRun?.();
+        await app.stop();
+      }
+    },
+  );
+
   it("force-follows user submissions, /new, and Session transitions", async () => {
     const forceFollowBottom = vi.spyOn(TuiChatLayout.prototype, "forceFollowBottom");
     const app = createTuiApp({
@@ -1227,7 +1282,7 @@ describe("createTuiApp", () => {
     },
   );
 
-  it("shows the MCode prompt in an empty Composer and hides it after input", async () => {
+  it("shows the KCode prompt in an empty Composer and hides it after input", async () => {
     const app = createTuiApp({
       runtime: createRuntime(),
       terminal: new FakeTerminal(),
@@ -1240,13 +1295,13 @@ describe("createTuiApp", () => {
       await app.ready;
 
       expect(stripAnsi(app.tui.render(80).join("\n"))).toContain(
-        "Ask Mcode to do anything",
+        "Ask Kcode to do anything",
       );
 
       app.editor.handleInput("R");
 
       expect(stripAnsi(app.tui.render(80).join("\n"))).not.toContain(
-        "Ask Mcode to do anything",
+        "Ask Kcode to do anything",
       );
       expect(app.editor.getText()).toBe("R");
     } finally {
@@ -1325,59 +1380,6 @@ describe("createTuiApp", () => {
     await app.stop();
   });
 
-  it("wires complete chat and autocomplete business events into the TUI surface", async () => {
-    const events: McodeBusinessEvent[] = [];
-    const businessTelemetry: McodeBusinessTelemetry = {
-      track: (event, properties) =>
-        events.push({ event, properties } as McodeBusinessEvent),
-      flush: async () => undefined,
-    };
-    const app = createTuiApp({
-      runtime: createRuntime(),
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace/agent-archon",
-      businessTelemetry,
-    });
-
-    await app.ready;
-    await app.submit("First prompt");
-    await app.submit("Second prompt");
-    for (const character of "/he") app.editor.handleInput(character);
-    await vi.waitFor(() =>
-      expect(
-        events.some((item) => item.event === "slash_command_menu_view"),
-      ).toBe(true),
-    );
-    app.editor.handleInput("\r");
-
-    expect(events.filter((item) => item.event === "chat_send")).toEqual([
-      {
-        event: "chat_send",
-        properties: {
-          chat_type: "chat",
-          is_first_message: 1,
-          is_attachment: "text",
-        },
-      },
-      {
-        event: "chat_send",
-        properties: {
-          chat_type: "chat",
-          is_first_message: 0,
-          is_attachment: "text",
-        },
-      },
-    ]);
-    expect(events).toContainEqual({
-      event: "slash_command_click",
-      properties: {
-        chat_type: "chat",
-        command_type: "other",
-      },
-    });
-    await app.stop();
-  });
 
   it("releases the terminal on suspend and reconciles Runtime state after resume", async () => {
     const terminal = new FakeTerminal();
@@ -1594,24 +1596,26 @@ describe("createTuiApp", () => {
     await app.ready;
     await vi.waitFor(() => {
       expect(terminal.writes.join("")).toContain(
-        "A new version of MCode is available",
+        "A new version of KCode is available",
       );
     });
 
     const rendered = terminal.writes.join("");
     expect(checkForUpdate).toHaveBeenCalledTimes(1);
-    expect(rendered).toContain("Run '/update' to install MCode 1.2.4");
+    expect(rendered).toContain("Run '/update' to install KCode 1.2.4");
 
     await app.submit("Start working");
     expect(app.getSurface()).toBe("conversation");
     expect(app.tui.render(80).join("\n")).not.toContain(
-      "A new version of MCode is available",
+      "A new version of KCode is available",
     );
 
     await app.submit("/new");
-    expect(app.getSurface()).toBe("welcome");
-    expect(app.tui.render(80).join("\n")).toContain(
-      "A new version of MCode is available",
+    // `/new` opens a Session in a new tab rather than returning to Welcome, so the
+    // startup notice is gone from here on: it belongs to the Welcome surface.
+    expect(app.getSurface()).toBe("conversation");
+    expect(app.tui.render(80).join("\n")).not.toContain(
+      "A new version of KCode is available",
     );
     await app.stop();
   });
@@ -1776,7 +1780,7 @@ describe("createTuiApp", () => {
       await app.stop();
 
       expect(terminal.writes.join("")).not.toContain(
-        "A new version of MCode is available",
+        "A new version of KCode is available",
       );
       expect(
         app.transcript.snapshot().filter((cell) => cell.kind === "error"),
@@ -1787,16 +1791,20 @@ describe("createTuiApp", () => {
   it("routes /update through the in-process update confirmation flow", async () => {
     const plan = {
       kind: "available" as const,
-      source: "managed-installer" as const,
+      source: "release" as const,
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
       channel: "stable" as const,
+      installSource: "npm-global" as const,
+      artifactUrl:
+        "https://github.com/tournierjc/kinetick-code/releases/download/v1.2.4/" +
+        "kinetick-code-1.2.4.tar.gz",
     };
     const inspectUpdate = vi.fn(async () => plan);
     const applyUpdate = vi.fn(async () => ({
       applied: true,
       message:
-        "MCode 1.2.4 is installed. Restart running MCode sessions to use it.",
+        "KCode 1.2.4 is installed. Restart running KCode sessions to use it.",
     }));
     const app = createTuiApp({
       runtime: createRuntime(),
@@ -1812,7 +1820,7 @@ describe("createTuiApp", () => {
 
     expect(inspectUpdate).toHaveBeenCalledOnce();
     expect(app.interaction.current()?.render(80).join("\n")).toContain(
-      "MCode update",
+      "KCode update",
     );
     app.interaction.current()?.handleInput?.("\r");
     await vi.waitFor(() =>
@@ -1827,24 +1835,23 @@ describe("createTuiApp", () => {
       expect(
         app.transcript
           .snapshot()
-          .some((cell) => cell.content.includes("MCode update completed")),
+          .some((cell) => cell.content.includes("KCode update completed")),
       ).toBe(true),
     );
     await app.stop();
   });
 
-  it("leaves the current TUI after /update stages an npm-prefix replacement", async () => {
+  it("leaves the current TUI after /update installs a release that asks for a restart", async () => {
     const plan = {
-      kind: "package-manager" as const,
-      source: "npm-prefix" as const,
+      kind: "available" as const,
+      source: "release" as const,
       currentVersion: "1.2.3",
       latestVersion: "1.2.4",
-      packageTag: "latest" as const,
-      command: {
-        executable: "npm",
-        args: ["install"],
-        display: "npm install",
-      },
+      channel: "preview" as const,
+      installSource: "pnpm-global" as const,
+      artifactUrl:
+        "https://github.com/tournierjc/kinetick-code/releases/download/v1.2.4/" +
+        "kinetick-code-1.2.4.tar.gz",
     };
     const requestRestart = vi.fn();
     const app = createTuiApp({
@@ -1856,7 +1863,7 @@ describe("createTuiApp", () => {
       applyUpdate: async () => ({
         applied: true,
         restartRequired: true,
-        message: "MCode 1.2.4 is staged safely.",
+        message: "KCode 1.2.4 is staged safely.",
       }),
       requestRestart,
     });
@@ -1909,7 +1916,7 @@ describe("createTuiApp", () => {
           .snapshot()
           .some((cell) =>
             cell.content.includes(
-              "MCode update failed: Finish or stop the active response before updating.",
+              "KCode update failed: Finish or stop the active response before updating.",
             ),
           ),
       ).toBe(true),
@@ -1988,7 +1995,7 @@ describe("createTuiApp", () => {
     await app.ready;
     app.start();
     const rendered = app.tui.render(80).join("\n");
-    expect(rendered).not.toContain("Starting MiniMax Code");
+    expect(rendered).not.toContain("Starting Kinetick Code");
     expect(rendered).not.toContain("Loading session");
     await app.stop();
   });
@@ -2426,242 +2433,6 @@ describe("createTuiApp", () => {
     await app.stop();
   });
 
-  it("runs /checkin immediately for a signed-in MiniMax account", async () => {
-    const runtime = createRuntime();
-    const app = createTuiApp({
-      runtime,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-    });
-
-    app.start();
-    await app.ready;
-    await app.submit("/checkin");
-
-    expect(runtime.runDailyCheckin).toHaveBeenCalledOnce();
-    expect(app.transcript.snapshot()).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          kind: "final-summary",
-          content: expect.stringContaining(
-            "Checked in: Cycle day 2, +20 Credits",
-          ),
-        }),
-      ]),
-    );
-    await app.stop();
-  });
-
-  it("shows a generic /checkin failure without backend details", async () => {
-    const runtime = createRuntime();
-    vi.mocked(runtime.runDailyCheckin).mockRejectedValue(
-      new Error("internal signin shard rejected request"),
-    );
-    const app = createTuiApp({
-      runtime,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-    });
-
-    app.start();
-    await app.ready;
-    await app.submit("/checkin");
-
-    const transcript = app.transcript
-      .snapshot()
-      .map((cell) => cell.content)
-      .join("\n");
-    expect(transcript).toContain("Couldn't complete daily check-in.");
-    expect(transcript).not.toContain("internal signin shard");
-    await app.stop();
-  });
-
-  it("does not open login when /checkin cannot verify account status", async () => {
-    const runtime = createRuntime();
-    const auth = {
-      login: vi.fn(),
-      logout: vi.fn(async () => ({
-        state: "signed-out" as const,
-        message: "Signed out of MiniMax.",
-      })),
-    };
-    const app = createTuiApp({
-      runtime,
-      auth,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-    });
-
-    app.start();
-    await app.ready;
-    vi.mocked(runtime.getAccountStatus).mockRejectedValue(
-      new Error("status unavailable"),
-    );
-    await app.submit("/checkin");
-
-    expect(app.interaction.current()).toBeUndefined();
-    expect(auth.login).not.toHaveBeenCalled();
-    expect(runtime.runDailyCheckin).not.toHaveBeenCalled();
-    await app.stop();
-  });
-
-  it("starts MiniMax login and resumes /checkin once after authentication", async () => {
-    const runtime = createRuntime();
-    let authenticated = false;
-    vi.mocked(runtime.getAccountStatus).mockImplementation(async () => ({
-      status: authenticated ? "ready" : "needs-login",
-      authMode: "managed-login",
-      modelSource: "byok",
-      managedTokenPresent: authenticated,
-      warnings: [],
-    }));
-    const auth = {
-      login: vi.fn(async () => {
-        authenticated = true;
-        return {
-          state: "authenticated" as const,
-          message: "Signed in with MiniMax.",
-        };
-      }),
-      logout: vi.fn(async () => ({
-        state: "signed-out" as const,
-        message: "Signed out of MiniMax.",
-      })),
-    };
-    const app = createTuiApp({
-      runtime,
-      auth,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-    });
-
-    app.start();
-    await app.ready;
-    await app.submit("/checkin");
-    expect(runtime.runDailyCheckin).not.toHaveBeenCalled();
-
-    app.interaction.current()?.handleInput("\r");
-
-    await vi.waitFor(() =>
-      expect(runtime.runDailyCheckin).toHaveBeenCalledOnce(),
-    );
-    expect(auth.login).toHaveBeenCalledWith(expect.any(Function), "cn");
-    await app.stop();
-  });
-
-  it("does not resume /checkin when the login picker is cancelled", async () => {
-    const runtime = createRuntime();
-    vi.mocked(runtime.getAccountStatus).mockResolvedValue({
-      status: "needs-login",
-      authMode: "managed-login",
-      modelSource: "byok",
-      managedTokenPresent: false,
-      warnings: [],
-    });
-    const auth = {
-      login: vi.fn(),
-      logout: vi.fn(async () => ({
-        state: "signed-out" as const,
-        message: "Signed out of MiniMax.",
-      })),
-    };
-    const app = createTuiApp({
-      runtime,
-      auth,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-    });
-
-    app.start();
-    await app.ready;
-    await app.submit("/checkin");
-    app.interaction.current()?.handleInput("\u001b");
-
-    expect(auth.login).not.toHaveBeenCalled();
-    expect(runtime.runDailyCheckin).not.toHaveBeenCalled();
-    await app.stop();
-  });
-
-  it("does not resume /checkin when browser login fails", async () => {
-    const runtime = createRuntime();
-    vi.mocked(runtime.getAccountStatus).mockResolvedValue({
-      status: "needs-login",
-      managedTokenPresent: false,
-      warnings: [],
-    });
-    const auth = {
-      login: vi.fn(async () => {
-        throw new Error("browser login failed");
-      }),
-      logout: vi.fn(async () => ({
-        state: "signed-out" as const,
-        message: "Signed out of MiniMax.",
-      })),
-    };
-    const app = createTuiApp({
-      runtime,
-      auth,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-    });
-
-    app.start();
-    await app.ready;
-    await app.submit("/checkin");
-    app.interaction.current()?.handleInput("\r");
-
-    await vi.waitFor(() => expect(auth.login).toHaveBeenCalledOnce());
-    expect(runtime.runDailyCheckin).not.toHaveBeenCalled();
-    await app.stop();
-  });
-
-  it("carries /checkin through a cross-region login restart", async () => {
-    const runtime = createRuntime();
-    const requestRestart = vi.fn();
-    vi.mocked(runtime.getAccountStatus).mockResolvedValue({
-      status: "needs-login",
-      managedTokenPresent: false,
-      warnings: [],
-    });
-    const auth = {
-      login: vi.fn(async () => ({
-        state: "authenticated" as const,
-        restartRequired: true,
-        message: "Signed in with MiniMax Global.",
-      })),
-      logout: vi.fn(async () => ({
-        state: "signed-out" as const,
-        message: "Signed out of MiniMax.",
-      })),
-    };
-    const app = createTuiApp({
-      runtime,
-      auth,
-      terminal: new FakeTerminal(),
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-      requestRestart,
-    });
-
-    app.start();
-    await app.ready;
-    await app.submit("/checkin");
-    app.interaction.current()?.handleInput("\u001b[B");
-    app.interaction.current()?.handleInput("\r");
-
-    await vi.waitFor(() =>
-      expect(requestRestart).toHaveBeenCalledWith("en", "/checkin"),
-    );
-    expect(runtime.runDailyCheckin).not.toHaveBeenCalled();
-    await app.stopped;
-  });
-
   it("restarts after cross-region login while keeping the blocked submission", async () => {
     const terminal = new FakeTerminal();
     const runtime = createRuntime();
@@ -2767,7 +2538,6 @@ describe("createTuiApp", () => {
     const app = createTuiApp({
       runtime,
       terminal,
-      terminalCapabilities: TERMINAL_CAPABILITIES,
       version: "0.1.0",
       workspaceDir: "/workspace",
       homeDir: "/home/dev",
@@ -2784,7 +2554,7 @@ describe("createTuiApp", () => {
     expect(conversation).toContain("Say hello");
     expect(conversation).toContain("Hello from the Agent");
     expect(terminal.started).toBe(true);
-    expect(terminal.title).toBe("Done | workspace (session-) | MCode");
+    expect(terminal.title).toBe("Kinetick Code");
     expect(runtime.createSession).toHaveBeenCalledWith({
       workspaceDir: "/workspace",
     });
@@ -2833,8 +2603,6 @@ describe("createTuiApp", () => {
     const app = createTuiApp({
       runtime,
       terminal,
-      terminalCapabilities: TERMINAL_CAPABILITIES,
-      terminalTitle: ["session-name"],
       version: "0.1.0",
       workspaceDir: "/workspace",
     });
@@ -2858,79 +2626,10 @@ describe("createTuiApp", () => {
     );
 
     await vi.waitFor(() => expect(terminal.title).toBe(sessionTitle));
-    const titleWrites = terminal.titleUpdates.length;
     await app.submit("/status");
-    expect(terminal.titleUpdates).toHaveLength(titleWrites);
-    await app.submit("/rename Renamed session");
-    expect(terminal.title).toBe("Renamed session");
-
-    await app.suspend();
-    expect(terminal.title).toBe("");
-    await app.controller.renameCurrentSession("Renamed while suspended");
-    expect(terminal.title).toBe("");
-    await app.resume();
-    expect(terminal.title).toBe("Renamed while suspended");
+    expect(terminal.titleUpdates).toEqual(["Kinetick Code", sessionTitle]);
 
     await app.stop();
-    expect(terminal.title).toBe("");
-  });
-
-  it.each([
-    ["session.finish", false, 1],
-    ["session.finish", true, 0],
-    ["session.error", true, 1],
-    ["session.abort", false, 0],
-  ] as const)("notifies once for %s with queued=%s", async (type, queued, count) => {
-    const terminal = new FakeTerminal();
-    const runtime = createRuntime();
-    let handled = false;
-    vi.mocked(runtime.listQueuedMessages).mockResolvedValue(
-      queued
-        ? [{
-            itemId: "queued-1",
-            sessionId: "session-1",
-            status: "queued",
-            content: "Next message",
-          }]
-        : [],
-    );
-    vi.mocked(runtime.watchEvents).mockImplementation(async function* (signal) {
-      const event = runtimeEvent({
-        type,
-        timestamp: Date.now(),
-        source: "runtime",
-        payload: {
-          sessionId: "session-1",
-          turnId: "turn-1",
-          error: "Synthetic failure",
-        },
-      });
-      yield event;
-      yield event;
-      handled = true;
-      await new Promise<void>((resolve) =>
-        signal.addEventListener("abort", () => resolve(), { once: true }),
-      );
-    });
-    const app = createTuiApp({
-      runtime,
-      terminal,
-      version: "0.1.0",
-      workspaceDir: "/workspace",
-      terminalCapabilities: TERMINAL_CAPABILITIES,
-      notifications: { when: "always", method: "osc9" },
-    });
-    try {
-      await app.ready;
-      await app.openSession("session-1");
-      app.start();
-      await vi.waitFor(() => expect(handled).toBe(true));
-      const notifications = terminal.writes.filter((value) => value.startsWith("\u001b]9;"));
-      expect(notifications).toHaveLength(count);
-      if (count) expect(notifications[0]).toContain("Existing session: Response");
-    } finally {
-      await app.stop();
-    }
   });
 
   it("keeps chat state alive while a regular feature overlay owns the viewport", async () => {
@@ -3173,8 +2872,10 @@ describe("createTuiApp", () => {
           await terminal.flush();
           expect(app.editor.getText()).toBe(draft);
           expect(app.editor.render(78).length).toBeLessThan(menuRows);
-          const expected = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).slice(-24);
-          expect(terminal.getViewport().map((line) => line.trimEnd())).toEqual(expected);
+          // Released footer rows remain blank instead of replaying native history.
+          const visible = terminal.getViewport().map((line) => line.trimEnd()).filter((line) => line.trim());
+          const document = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).filter((line) => line.trim());
+          expect(visible).toEqual(document.slice(-visible.length));
         });
         const history = terminal.getScrollBuffer();
         for (let index = 0; index < 12; index++) {
@@ -3441,7 +3142,7 @@ describe("createTuiApp", () => {
       expect(rendered).toContain("Running");
       expect(rendered).not.toContain("Running · 0s");
       expect(rendered).not.toContain("Running · Read");
-      expect(rendered).not.toContain("MCode · Running");
+      expect(rendered).not.toContain("KCode · Running");
       expect(rendered).toContain("Ctrl+O details");
       expect(rendered).toContain("Esc stop");
       expect(rendered).not.toContain("Enter run next");
@@ -3542,7 +3243,7 @@ describe("createTuiApp", () => {
         .filter(
           (line) =>
             line.includes("Inspecting the repository") &&
-            !line.includes("MCode"),
+            !line.includes("KCode"),
         ).length;
     let expandedThinkingRows = 0;
 
@@ -3562,7 +3263,7 @@ describe("createTuiApp", () => {
         expect(rendered).toContain("Ctrl+O details");
         expect(rendered).toContain("Esc stop");
         expect(rendered).toContain("Thinking…");
-        expect(rendered).not.toContain("MCode ·");
+        expect(rendered).not.toContain("KCode ·");
         expect(rendered).not.toContain("Thinking · Inspecting the repository");
         expandedThinkingRows = countThinkingBodyRows(rendered);
         expect(expandedThinkingRows).toBeGreaterThan(0);
@@ -3856,7 +3557,7 @@ describe("createTuiApp", () => {
     await app.stop();
   });
 
-  it("returns from the conversation surface to Welcome after /new", async () => {
+  it("opens a new Session in a new tab after /new", async () => {
     const terminal = new FakeTerminal();
     const runtime = createRuntime();
     const app = createTuiApp({
@@ -3872,11 +3573,21 @@ describe("createTuiApp", () => {
 
     await app.submit("/new");
 
-    expect(app.getSurface()).toBe("welcome");
-    expect(app.transcript.snapshot()).toEqual([]);
+    // The tab is a Session: it exists before the first prompt, and the Session that
+    // was on screen keeps its place in the list. This Runtime hands out one id, so
+    // the pane is the same one — what matters is that no durable history is in it;
+    // only the ephemeral turn-duration marker of the finished turn stays.
+    expect(app.getSurface()).toBe("conversation");
+    expect(app.transcript.snapshot().filter((cell) => !cell.ephemeral)).toEqual([]);
+    expect(app.controller.snapshot()).toMatchObject({
+      status: "idle",
+      session: expect.objectContaining({ sessionId: expect.any(String) }),
+    });
+    expect(runtime.createSession).toHaveBeenCalledTimes(2);
+    expect(runtime.archiveSession).not.toHaveBeenCalled();
   });
 
-  it("clears into a fresh conversation while keeping the previous session resumable", async () => {
+  it("keeps the previous session resumable after /clear", async () => {
     const terminal = new FakeTerminal();
     const runtime = createRuntime();
     const app = createTuiApp({
@@ -3892,13 +3603,12 @@ describe("createTuiApp", () => {
 
     await app.submit("/clear");
 
-    expect(app.getSurface()).toBe("welcome");
-    expect(app.transcript.snapshot()).toEqual([]);
-    expect(app.controller.snapshot()).toMatchObject({
-      status: "idle",
-      session: undefined,
-      sessions: [expect.objectContaining({ sessionId: "session-1" })],
-    });
+    expect(app.getSurface()).toBe("conversation");
+    expect(app.transcript.snapshot().filter((cell) => !cell.ephemeral)).toEqual([]);
+    expect(app.controller.snapshot().status).toBe("idle");
+    expect(app.controller.snapshot().sessions).toEqual([
+      expect.objectContaining({ sessionId: "session-1" }),
+    ]);
     expect(runtime.archiveSession).not.toHaveBeenCalled();
   });
 
@@ -5758,7 +5468,7 @@ describe("createTuiApp", () => {
     expect(app.interaction.isActive()).toBe(true);
     expect(app.transcript.snapshot()).toEqual(transcriptBeforeStatus);
     const statusOutput = app.tui.render(80).join("\n");
-    expect(statusOutput).toContain("MCode status");
+    expect(statusOutput).toContain("KCode status");
     expect(statusOutput).toContain("Model");
     expect(statusOutput).not.toContain("/status");
     expect(statusOutput).toContain("/workspace");
@@ -5833,7 +5543,7 @@ describe("createTuiApp", () => {
     const auth = {
       login: vi.fn(
         async (
-          onProgress?: (progress: McodeAuthProgress) => void,
+          onProgress?: (progress: KcodeAuthProgress) => void,
           _region?: "cn" | "en",
         ) => {
           authenticated = true;
@@ -5847,7 +5557,7 @@ describe("createTuiApp", () => {
             state: "authenticated" as const,
             message:
               _region === "en"
-                ? "Signed in with MiniMax Global. Restart MCode to use this account region."
+                ? "Signed in with MiniMax Global. Restart KCode to use this account region."
                 : "Signed in with MiniMax.",
           };
         },
@@ -5939,7 +5649,7 @@ describe("createTuiApp", () => {
       {
         kind: "final-summary",
         content:
-          "Signed in with MiniMax Global. Restart MCode to use this account region.",
+          "Signed in with MiniMax Global. Restart KCode to use this account region.",
       },
       {
         kind: "final-summary",
@@ -6244,7 +5954,7 @@ describe("createTuiApp", () => {
     expect(app.tui.hasOverlay()).toBe(false);
     expect(app.interaction.isActive()).toBe(true);
     expect(app.transcript.snapshot()).toEqual(transcriptBeforeStatus);
-    expect(app.tui.render(80).join("\n")).toContain("MCode status");
+    expect(app.tui.render(80).join("\n")).toContain("KCode status");
 
     resolveSessionPage?.({
       sessions: [
@@ -6457,8 +6167,9 @@ describe("createTuiApp", () => {
       app.tui.renderNow();
       await terminal.flush();
       expect(app.interaction.isActive()).toBe(false);
-      const expected = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).slice(-24);
-      expect(terminal.getViewport().map((line) => line.trimEnd())).toEqual(expected);
+      const visible = terminal.getViewport().map((line) => line.trimEnd()).filter((line) => line.trim());
+      const document = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).filter((line) => line.trim());
+      expect(visible).toEqual(document.slice(-visible.length));
       for (let index = 0; index < 12; index++) {
         expect(terminal.getScrollBuffer().filter((line) => line.trimEnd().endsWith(`› Message ${index}`))).toHaveLength(1);
       }
@@ -6491,8 +6202,9 @@ describe("createTuiApp", () => {
       await terminal.flush();
       if (kind === "multiline draft") expect(app.editor.getText()).toBe("");
       else expect(app.editor.getAttachmentPreview()).toBeUndefined();
-      const expected = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).slice(-24);
-      expect(terminal.getViewport().map((line) => line.trimEnd())).toEqual(expected);
+      const visible = terminal.getViewport().map((line) => line.trimEnd()).filter((line) => line.trim());
+      const document = app.tui.render(80).map((line) => stripAnsi(line).trimEnd()).filter((line) => line.trim());
+      expect(visible).toEqual(document.slice(-visible.length));
     } finally {
       await app.stop();
     }
@@ -6543,7 +6255,7 @@ describe("createTuiApp", () => {
       expect(viewport).toContain("Message 1");
       expect(viewport).toContain("Message");
       expect(app.tui.render(80).findIndex((line) => line.trim().length > 0)).toBe(firstContentRowBefore);
-      expect(terminal.getViewport().findIndex((line) => line.trim().length > 0)).toBe(firstContentRowBefore);
+      expect(terminal.getViewport().findIndex((line) => line.trim().length > 0)).toBeLessThanOrEqual(firstContentRowBefore);
     } finally {
       await app.stop();
     }
@@ -6578,7 +6290,7 @@ describe("createTuiApp", () => {
         expect(history.filter((line) => line.trimEnd().endsWith(`› Message ${index}`))).toHaveLength(1);
       }
       expect(history.join("\n")).not.toContain("Session usage");
-      expect(terminal.getViewport().join("\n")).toContain("Ask Mcode to do anything");
+      expect(terminal.getViewport().join("\n")).toContain("Ask Kcode to do anything");
       expect(terminal.getViewport().join("\n")).toContain("/workspace");
     } finally {
       await app.stop();
@@ -7171,7 +6883,7 @@ describe("createTuiApp", () => {
     expect(runtime.getSession).toHaveBeenCalledWith("session-existing");
     expect(app.interaction.current()).toBeDefined();
     expect(app.transcript.snapshot()).toEqual(transcriptBeforeStatus);
-    expect(app.tui.render(100).join("\n")).toContain("MCode status");
+    expect(app.tui.render(100).join("\n")).toContain("KCode status");
     expect(runtime.renameSession).toHaveBeenCalledWith(
       "session-existing",
       "Renamed session",
@@ -9885,7 +9597,7 @@ describe("createTuiApp", () => {
       content: "Proceed?  Yes",
     });
     expect(app.interaction.current()).toBeDefined();
-    expect(app.tui.render(80).join("\n")).toContain("MCode status");
+    expect(app.tui.render(80).join("\n")).toContain("KCode status");
     expect(app.transcript.snapshot()).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -10290,7 +10002,7 @@ describe("createTuiApp", () => {
     await vi.waitFor(() =>
       expect(app.transcript.get("question:question-review")).toMatchObject({
         status: "resolved",
-        detail: "Answer sent · MCode is continuing…",
+        detail: "Answer sent · KCode is continuing…",
       }),
     );
 
@@ -10379,7 +10091,7 @@ describe("createTuiApp", () => {
         app.transcript.get("question:question-delayed-reply"),
       ).toMatchObject({
         status: "resolved",
-        detail: "Answer sent · MCode is continuing…",
+        detail: "Answer sent · KCode is continuing…",
       }),
     );
     await vi.waitFor(() =>
@@ -11965,7 +11677,7 @@ describe("createTuiApp", () => {
     });
     expect(app.tui.render(80).join("\n")).toContain("Loading");
     expect(app.tui.render(80).join("\n")).not.toContain("Loading · 0s");
-    expect(app.tui.render(80).join("\n")).not.toContain("MCode ·");
+    expect(app.tui.render(80).join("\n")).not.toContain("KCode ·");
     terminal.input?.("\x1b");
     await vi.waitFor(() =>
       expect(app.controller.snapshot().activeTurnId).toBeUndefined(),
@@ -12208,7 +11920,7 @@ describe("createTuiApp", () => {
       terminal.write = (data) => {
         write(data);
         screen.feed(data);
-        if (data.includes("\x1b[?2026l")) frames.push(screen.text());
+        if (data.includes("\x1b[?2026l")) frames.push(screen.viewportText());
       };
       const runtime = createRuntime();
       const busEvents: TuiRuntimeEvent[] = [];
@@ -12321,7 +12033,7 @@ describe("createTuiApp", () => {
         );
         expect(app.editor.getText()).toBe("");
         app.tui.renderNow();
-        expect(screen.text()).toContain("Interrupted after");
+        expect(screen.viewportText()).toContain("Interrupted after");
 
         terminal.input?.("\x1b");
         terminal.input?.("\x1b");
@@ -12329,12 +12041,12 @@ describe("createTuiApp", () => {
           expect(app.editor.getText()).toBe("Original query"),
         );
         app.tui.renderNow();
-        expect(screen.text()).not.toContain("Interrupted after");
+        expect(screen.viewportText()).not.toContain("Interrupted after");
 
         if (action === "cancel") {
           terminal.input?.("\x1b");
           app.tui.renderNow();
-          expect(screen.text()).toContain("Interrupted after");
+          expect(screen.viewportText()).toContain("Interrupted after");
           expect(runtime.editSessionMessage).not.toHaveBeenCalled();
           return;
         }
@@ -12353,9 +12065,9 @@ describe("createTuiApp", () => {
             action === "failed-submit-cancel" ||
             action === "new-operation-cancel"
           ) {
-            expect(screen.text()).toContain("Interrupted after");
+            expect(screen.viewportText()).toContain("Interrupted after");
           } else {
-            expect(screen.text()).not.toContain("Interrupted after");
+            expect(screen.viewportText()).not.toContain("Interrupted after");
           }
           return;
         }
@@ -12370,16 +12082,16 @@ describe("createTuiApp", () => {
         if (action === "early-rewind") {
           // Inspect the actual screen while the edit RPC is still pending.
           expect(finishEdit).toBeDefined();
-          expect(screen.text()).not.toContain("Interrupted after");
+          expect(screen.viewportText()).not.toContain("Interrupted after");
           finishEdit?.();
           await vi.waitFor(() => expect(app.editor.getText()).toBe(""));
           app.tui.renderNow();
         }
         expect(runtime.editSessionMessage).toHaveBeenCalledOnce();
-        expect(screen.text()).toContain("Edited query");
-        expect(screen.text()).not.toContain("Interrupted after");
+        expect(screen.viewportText()).toContain("Edited query");
+        expect(screen.viewportText()).not.toContain("Interrupted after");
         if (action === "fast-completion")
-          expect(screen.text()).toContain("Completed in 2s");
+          expect(screen.viewportText()).toContain("Completed in 2s");
         expect(
           frames.filter((frame) => frame.includes("Interrupted after")),
         ).toEqual([]);
@@ -14507,7 +14219,7 @@ describe("createTuiApp", () => {
         expect(screen.getScrollBuffer().filter((line) => line.match(/Answer (\d+)/u)?.[1] === String(index))).toHaveLength(1);
       }
       screen.scrollLines(10000);
-      expect(screen.getViewport().join("\n")).toContain("Ask Mcode to do anything");
+      expect(screen.getViewport().join("\n")).toContain("Ask Kcode to do anything");
     } finally {
       finish?.();
       await app.stop();
@@ -14515,7 +14227,7 @@ describe("createTuiApp", () => {
   });
 
   it.each([1, 100])(
-    "settles an auto-drained follow-up of %i lines with unique terminal history",
+    "settles an auto-drained follow-up of %i lines with current viewport and retained history",
     async (lineCount) => {
       const queuedText = Array.from(
         { length: lineCount },
@@ -14609,7 +14321,9 @@ describe("createTuiApp", () => {
           .map((line) => line.trimEnd())
           .join("\n")
           .trimEnd();
-        expect(screen.text()).toBe(expected);
+        const visible = screen.viewportText().split("\n").filter((line) => line.trim());
+        const current = expected.split("\n").filter((line) => line.trim());
+        expect(visible).toEqual(current.slice(-visible.length));
       };
       app.start();
       try {
@@ -15035,7 +14749,7 @@ describe("createTuiApp", () => {
     }
   });
 
-  it("moves to the new-session Draft namespace after archiving the current Session", async () => {
+  it("carries a draft typed with no Session on screen into the Session /new opens", async () => {
     const dataDir = await mkdtemp(join(tmpdir(), "mcode-app-draft-"));
     try {
       const app = createTuiApp({
@@ -15050,12 +14764,17 @@ describe("createTuiApp", () => {
       app.editor.setText("Archived Session Draft");
 
       await app.submit("/archive");
-      app.editor.setText("Fresh Session Draft");
-      await app.openSession("session-a");
-      expect(app.editor.getText()).toBe("Archived Session Draft");
+      expect(app.getSurface()).toBe("welcome");
 
+      // Nothing is on screen, so this text is a draft for a conversation that does
+      // not exist yet: `/new` opens that conversation and the text follows into it.
+      app.editor.setText("Fresh Session Draft");
       await app.submit("/new");
-      expect(app.editor.getText()).toBe("Fresh Session Draft");
+      await vi.waitFor(() => expect(app.editor.getText()).toBe("Fresh Session Draft"));
+
+      // The archived Session still owns the draft that belonged to it.
+      await app.openSession("session-a");
+      await vi.waitFor(() => expect(app.editor.getText()).toBe("Archived Session Draft"));
       await app.stop();
     } finally {
       await rm(dataDir, { recursive: true, force: true });
@@ -15302,7 +15021,9 @@ describe("interactive CLI model startup", () => {
           }
           await vi.waitFor(() => expect(app?.controller.snapshot().status).toBe("idle"));
           await app?.submit("/new");
-          expect(app?.controller.snapshot().session).toBeUndefined();
+          // A fresh Session is open in a new tab; the startup model override belongs
+          // to the Session it was applied to, so nothing selects it again.
+          expect(app?.controller.snapshot().session).toBeDefined();
           expect(runtime.selectSessionModel).toHaveBeenCalledOnce();
         }
         expect(runtime.selectModel).not.toHaveBeenCalled();

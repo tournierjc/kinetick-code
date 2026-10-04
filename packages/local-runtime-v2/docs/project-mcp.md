@@ -1,6 +1,6 @@
 # 项目级 MCP 配置
 
-本地 Runtime 按当前 session 的主工作目录读取 `.mcp.json`，Desktop、MCode 交互式 TUI、`mcode exec`、`mcode acp` 和使用同一 Runtime 的 CLI 共用这一能力。无需导入，也不设置 MCP 专属批准或配置摘要授权。
+本地 Runtime 按当前 session 的主工作目录读取 `.mcp.json`，Desktop、MCode 交互式 TUI、`mcode exec`、`mcode acp` 和使用同一 Runtime 的 CLI 共用这一能力。HTTP 服务器无需导入即可连接。stdio 会在本机执行命令，必须先在数据目录记下当前 `.mcp.json` 的摘要后才会启动：在工作区运行 `kcode mcp trust`。摘要存在数据目录，不在仓库里；文件一改就要重新信任。
 
 ```json
 {
@@ -23,10 +23,11 @@
 
 - Runtime 从 session 的 canonical `workspaceDir` 读取配置。不会因为客户端类型不同而跳过项目文件；项目路径不依赖启动 Runtime 进程时的 cwd。
 - 读取配置或展示列表不会启动 MCP。实际 turn 工具发现或调用时，Runtime 自动连接有效且未禁用的 server。
-- stdio 连接会执行项目配置里的命令，远程连接会访问配置的 URL；这是项目配置自动加载的产品约定。工具调用仍走原有权限策略，但工具权限确认发生在连接之后，不替代进程启动控制。
+- 已信任的 stdio 连接会执行项目配置里的命令，远程连接会访问配置的 URL。未信任的 stdio 不会启动，检查状态为 error。工具调用仍走原有权限策略，但工具权限确认发生在连接之后，不替代进程启动控制。
+- stdio 子进程不会继承运行时访问令牌、数据目录选择变量和父会话身份。项目配置不能用 `${MAVIS_ACCESS_TOKEN}` 这类运行时变量把它们抄进去。
 - 工具发现和调用前重新读取配置。文件内容或展开后的环境变量变化时，中止旧 project 调用、关闭旧连接，后续请求自动使用新配置，不再弹出批准窗口。
 - 可以在 `.mcp.json` 中设置 `enabled: false` 停用条目。删除文件或整份文件无效时，移除项目层并恢复同名 profile 配置。
-- 文件始终只读，不会导入或写回 profile 的 `mcp.json`，不持久化项目配置授权。
+- 文件始终只读，不会导入或写回 profile 的 `mcp.json`。stdio 信任摘要写在数据目录的 `mcp-project-trust.json`，不写回仓库。
 
 ## 项目边界与格式
 

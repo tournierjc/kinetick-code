@@ -22,18 +22,13 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { withoutProxyEnvironment } from "./offline-environment.mjs";
 
 const cli = process.env.MCODE_TEST_CLI ?? fileURLToPath(new URL("../dist/cli.js", import.meta.url));
-// This case is 30+ serial CLI spawns, each booting the whole runtime, so its
-// wall-clock cost tracks machine speed rather than the transport it asserts.
-// A flat budget sized for an idle laptop turns any busy runner (parallel build,
-// shared CI host) into a `testTimeoutFailure` that reports a product failure
-// while every assertion would have passed. Budget it the way smoke.test.mjs
-// budgets runtime startup: a base allowance plus a Windows multiplier for
-// slower process spawn, rather than a number that only holds on one machine.
-const byokSerialTimeoutMs = process.platform === "win32" ? 360000 : 180000;
+// Release installers on a slow macOS runner can spend a full 90s inside these
+// fixtures. v0.6.7 Node 25 timed out at 90.3s while the same commit passed elsewhere.
+const runtimeFixtureTimeoutMs = 180000;
 // This fixture validates BYOK transport and real Runtime persistence, not model quality.
 test(
   "BYOK runs without managed login and resumes its saved conversation",
-  { timeout: byokSerialTimeoutMs },
+  { timeout: runtimeFixtureTimeoutMs },
   async (t) => {
     const fixtureDir = mkdtempSync(path.join(tmpdir(), "minimax-code-byok-"));
     const dataDir = path.join(fixtureDir, "data");
@@ -299,17 +294,15 @@ test(
       for (const name of proxyNames) assert.equal(isolated[name], "");
       assert.equal(isolated.PATH, environment.PATH);
       const beforeRequests = requests.length;
-      const managedAudit = `${networkAudit}.managed`;
-      const beforeManaged = readFileSync(managedAudit, "utf8").length;
       await run([
         "provider", "test", selected.providerId, "--model", "fixture-model",
       ], environment);
       assert.ok(requests.length > beforeRequests, "The local provider must receive the request");
       assert.equal(requests[beforeRequests].body.model, "fixture-model");
-      assert.match(
-        readFileSync(managedAudit, "utf8").slice(beforeManaged),
-        /https:\/\/models\.dev\/api\.json|\/mavis\/api\/v1\/models-dev\/catalog/,
-      );
+      // Fork adaptation: the default-deny egress guard refuses managed-service
+      // hosts before the offline fixture can log a managed catalog attempt, and
+      // that catalog request is optional (upstream ec38e13). Only the strict
+      // deny-log assertion remains meaningful here.
       assert.equal(existsSync(networkAudit), false, "No outbound network attempt is allowed");
       for (const [name, value] of Object.entries(proxies)) assert.equal(environment[name], value);
     }
@@ -904,3 +897,158 @@ function cancellationTest(cancellation) {
     );
   };
 }
+
+test(
+  "connects and runs a local endpoint that needs no authentication",
+  { timeout: runtimeFixtureTimeoutMs },
+  async (t) => {
+    const fixtureDir = mkdtempSync(path.join(tmpdir(), "kinetick-code-no-auth-"));
+    const dataDir = path.join(fixtureDir, "data");
+    const workspaceDir = path.join(fixtureDir, "workspace");
+    mkdirSync(workspaceDir);
+    const networkAudit = path.join(dataDir, "network-audit.log");
+    // Every request the stand-in endpoint sees, with the credential headers the
+    // runtime must not send.
+    const requests = [];
+    const server = createServer(async (req, res) => {
+      let raw = "";
+      for await (const chunk of req) raw += chunk;
+      requests.push({
+        url: req.url,
+        authorization: req.headers.authorization,
+        apiKey: req.headers["x-api-key"],
+        body: raw ? JSON.parse(raw) : undefined,
+      });
+      if (!req.url?.endsWith("/chat/completions")) {
+        res.writeHead(404, { "content-type": "application/json" }).end(
+          JSON.stringify({ error: { message: "Only Chat is served" } }),
+        );
+        return;
+      }
+      if (!raw || !JSON.parse(raw).stream) {
+        // The connection test probes without streaming first.
+        res.writeHead(200, { "content-type": "application/json" }).end(
+          JSON.stringify({
+            id: "fixture",
+            object: "chat.completion",
+            model: "local-model",
+            choices: [
+              {
+                index: 0,
+                message: { role: "assistant", content: "LOCAL_NO_AUTH_OK" },
+                finish_reason: "stop",
+              },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+        );
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      for (const chunk of [
+        {
+          choices: [
+            {
+              index: 0,
+              delta: { role: "assistant", content: "LOCAL_NO_AUTH_OK" },
+              finish_reason: null,
+            },
+          ],
+        },
+        {
+          choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+        },
+      ]) {
+        res.write(
+          `data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 1, model: "local-model", ...chunk })}\n\n`,
+        );
+      }
+      res.end("data: [DONE]\n\n");
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    t.after(async () => {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+      rmSync(fixtureDir, { recursive: true, force: true });
+    });
+    const baseUrl = `http://127.0.0.1:${server.address().port}/v1`;
+    // No provider key in the environment: this fixture is the local server case,
+    // and the endpoint must be usable without one.
+    const env = {
+      MINIMAX_DATA_DIR: dataDir,
+      MAVIS_DATA_DIR: dataDir,
+      MCODE_TEST_ALLOWED_ORIGIN: new URL(baseUrl).origin,
+      MCODE_TEST_NETWORK_AUDIT: networkAudit,
+      MCODE_TEST_MANAGED_OFFLINE: "1",
+      NODE_OPTIONS: `--import=${new URL("./network-deny.mjs", import.meta.url).href}`,
+    };
+    const run = (args) =>
+      new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [cli, ...args], {
+          cwd: workspaceDir,
+          env: { ...withoutProxyEnvironment(process.env), ...env },
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        let stdout = "";
+        let stderr = "";
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          child.stdout.destroy();
+          child.stderr.destroy();
+        }, 35000);
+        child.stdout.on("data", (chunk) => {
+          stdout += chunk;
+        });
+        child.stderr.on("data", (chunk) => {
+          stderr += chunk;
+        });
+        child.once("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.once("close", (code) => {
+          clearTimeout(timer);
+          code === 0
+            ? resolve(stdout)
+            : reject(new Error(`CLI exited ${code}: ${stderr}\n${stdout}`));
+        });
+      });
+
+    // Adding, testing and using the connection all happen without a credential.
+    assert.match(
+      await run([
+        "provider", "add", "--name", "Local model", "--base-url", baseUrl,
+        "--api-format", "openai-completions", "--model", "local-model", "--use",
+      ]),
+      /Provider added and selected/,
+    );
+    const config = parseYaml(readFileSync(path.join(dataDir, "config.yaml"), "utf8"));
+    assert.equal(config.defaultModel, "custom_provider:local-model/local-model");
+    assert.deepEqual(config.custom_provider["local-model"].options, { baseURL: baseUrl });
+    assert.equal(config.custom_provider["local-model"].options.apiKey, undefined);
+    assert.equal(config.custom_provider["local-model"].options.authMode, undefined);
+
+    const listed = JSON.parse(await run(["provider", "list", "--json"])).providers.find(
+      (provider) => provider.name === "Local model",
+    );
+    assert.equal(listed.active, true);
+    assert.equal(listed.hasApiKey, false);
+
+    assert.match(await run([
+      "exec", "LOCAL_ENDPOINT_OK", "--timeout", "20s", "--max-steps", "1",
+    ]), /LOCAL_NO_AUTH_OK/);
+
+    const chatRequests = requests.filter(({ body }) => Array.isArray(body?.messages));
+    assert.ok(chatRequests.length >= 2, "The connection test and the turn must both reach Chat");
+    for (const request of requests) {
+      assert.equal(
+        request.authorization,
+        undefined,
+        `No Authorization header may be sent: ${request.url}`,
+      );
+      assert.equal(request.apiKey, undefined, `No x-api-key header may be sent: ${request.url}`);
+    }
+    assert.equal(existsSync(networkAudit), false, "No outbound network attempt is allowed");
+  },
+);
