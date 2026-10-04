@@ -237,7 +237,9 @@
       "packages/local-runtime/test/unit/local-task-append.test.ts",
       "packages/tui/test/unit/tui/controller/runtime/runtime-event-flow-stale-run.test.ts",
       "packages/tui/test/unit/tui/transcript/panel-literal-user-text.test.ts",
-      "packages/tui/test/unit/tui/transcript/presentation/literal-text.test.ts"
+      "packages/tui/test/unit/tui/transcript/presentation/literal-text.test.ts",
+      "packages/agent-core/test/unit/pi-turn-runner/llm-stream-timeout.test.ts",
+      "packages/tui/test/unit/tui/controller/product/goal-flow-live-run.test.ts"
     ],
     "status-contract": [
       "packages/tui/test/unit/tui-build-mode-contract.test.ts"
