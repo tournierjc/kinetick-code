@@ -18,11 +18,45 @@ import { requireTaskConversation } from './local-task-host.js';
 import { normalizeLocalTaskInput, taskModelSelectionFor } from './local-task-input.js';
 import { resolveLocalTaskAgentTarget } from './local-task-subagents.js';
 import { resolveV2SessionArtifactPathsSync } from '../persistence/layout/v2-session-artifacts.js';
+import {
+  evaluateLocalAgentSpawnGate,
+  resolveLocalSpawnGateFacts,
+  type LocalSpawnGateDecision,
+} from '../agent/spawn-gate.js';
 
 export type {
   LocalTaskRunnerHost,
   LocalTaskRunnerHostWithSessionLookup,
 } from './local-task-host.js';
+
+/**
+ * Declarative spawn gate shared by the foreground and background runners:
+ * evaluated after name resolution, before any task row exists, so a denied
+ * spawn reads exactly like an unknown agent (no task handle, clear message).
+ */
+export async function evaluateLocalTaskSpawnGate(input: {
+  host: LocalTaskRunnerHostWithSessionLookup;
+  parentSession: LocalSessionRecord;
+  targetAgentName: string;
+}): Promise<LocalSpawnGateDecision> {
+  const port = input.host.agentSpawnPolicyPort;
+  if (!port) return { allowed: true };
+  let targetPolicy;
+  try {
+    targetPolicy = await port.getAgentSpawnPolicy(input.targetAgentName);
+  } catch {
+    return { allowed: true };
+  }
+  if (targetPolicy.spawnMode === undefined && targetPolicy.canSpawn === undefined) {
+    return { allowed: true };
+  }
+  const parent = await resolveLocalSpawnGateFacts(input.host, input.parentSession);
+  return evaluateLocalAgentSpawnGate({
+    targetAgentName: input.targetAgentName,
+    targetPolicy,
+    parent,
+  });
+}
 
 export function buildLocalTaskAdapter(
   host: LocalTaskRunnerHostWithSessionLookup,
@@ -58,6 +92,19 @@ export async function runForegroundLocalTask(input: {
       status: 'failed',
       requestedAgentName: taskInput.agent_name,
       errorMessage: `Unknown agent: ${taskInput.agent_name}`,
+    };
+  }
+  const gate = await evaluateLocalTaskSpawnGate({
+    host: input.host,
+    parentSession: input.parentSession,
+    targetAgentName: target.resolvedAgentName,
+  });
+  if (!gate.allowed) {
+    return {
+      status: 'failed',
+      requestedAgentName: target.requestedName,
+      resolvedAgentName: target.resolvedAgentName,
+      errorMessage: gate.reason ?? 'Spawn denied by the target Agent policy.',
     };
   }
   const agentName = target.resolvedAgentName;

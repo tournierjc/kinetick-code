@@ -1396,6 +1396,9 @@ export interface AgentDetail {
   name?: string;
   displayName?: string;
   agentRole?: string;
+  /** Declarative spawn policy from the Agent's canonical file (`x-mavis`). */
+  spawnMode?: 'subagent-only' | 'master-only' | 'both';
+  canSpawn?: string[];
   rootSessionId?: string;
   agentConfigDir?: string;
   createdAt?: number;

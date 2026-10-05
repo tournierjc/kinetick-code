@@ -21,6 +21,7 @@ import {
 } from '../api/local-task-host.js';
 import { normalizeLocalTaskInput, taskModelSelectionFor } from '../api/local-task-input.js';
 import { resolveLocalTaskAgentTarget } from '../api/local-task-subagents.js';
+import { evaluateLocalTaskSpawnGate } from '../api/local-task-runner.js';
 import { admitBackgroundTask, drainBackgroundTasks } from './lifecycle.js';
 
 export async function startBackgroundLocalTask(input: {
@@ -51,6 +52,17 @@ async function startAdmittedBackgroundLocalTask(
     return {
       status: 'failed',
       errorMessage: `Unknown agent: ${taskInput.agent_name}`,
+    };
+  }
+  const gate = await evaluateLocalTaskSpawnGate({
+    host: input.host,
+    parentSession: input.parentSession,
+    targetAgentName: target.resolvedAgentName,
+  });
+  if (!gate.allowed) {
+    return {
+      status: 'failed',
+      errorMessage: gate.reason ?? 'Spawn denied by the target Agent policy.',
     };
   }
   const agentName = target.resolvedAgentName;

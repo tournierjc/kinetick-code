@@ -82,7 +82,21 @@ export interface LocalAgentRuntimePort extends AgentReferenceResolver {
   ): Promise<LocalSessionProjectIdentity | undefined>;
 }
 
-export interface LocalAgentRuntimeManagementPort {
+export interface LocalAgentMavisSpawnPolicy {
+  readonly spawnMode?: "subagent-only" | "master-only" | "both";
+  readonly canSpawn?: readonly string[];
+}
+
+export interface LocalAgentSpawnPolicyPort {
+  /**
+   * Declarative spawn policy (`x-mavis.spawnMode` / `x-mavis.canSpawn`) for
+   * the task-spawn gate. A port without a bound management plane reports no
+   * policy, which allows every spawn (today's behavior).
+   */
+  getAgentSpawnPolicy(agentName: string): Promise<LocalAgentMavisSpawnPolicy>;
+}
+
+export interface LocalAgentRuntimeManagementPort extends LocalAgentSpawnPolicyPort {
   listAgents: LocalAgentRuntimePort["listAgents"];
   createAgent: LocalAgentRuntimePort["createAgent"];
   getAgent: LocalAgentRuntimePort["getAgent"];
@@ -92,6 +106,7 @@ export interface LocalAgentRuntimeManagementPort {
   setMainSession: LocalAgentRuntimePort["setMainSession"];
   agentExists: LocalAgentRuntimePort["agentExists"];
   canDelegate: LocalAgentRuntimePort["canDelegate"];
+  getAgentSpawnPolicy: LocalAgentSpawnPolicyPort["getAgentSpawnPolicy"];
   listLegacyPinnedAgentRefs: LocalAgentRuntimePort["listLegacyPinnedAgentRefs"];
   ensureBuiltinAgents: LocalAgentRuntimePort["ensureBuiltinAgents"];
   retryBuiltinGreetings: LocalAgentRuntimePort["retryBuiltinGreetings"];
@@ -100,7 +115,9 @@ export interface LocalAgentRuntimeManagementPort {
   getSessionProjectIdentity: LocalAgentRuntimePort["getSessionProjectIdentity"];
 }
 
-export interface DeferredLocalAgentRuntimePort extends LocalAgentRuntimePort {
+export interface DeferredLocalAgentRuntimePort
+  extends LocalAgentRuntimePort,
+    LocalAgentSpawnPolicyPort {
   bindResolver(resolver: AgentReferenceResolver): void;
   bindManagement(management: LocalAgentRuntimeManagementPort): void;
 }
@@ -116,7 +133,7 @@ export class LocalAgentRuntimeUnavailableError extends Error {
 }
 
 /** A direct-usage V1 host gets a deterministic 503 instead of a hidden writer. */
-export function createFailClosedAgentRuntimePort(): LocalAgentRuntimePort {
+export function createFailClosedAgentRuntimePort(): LocalAgentRuntimePort & LocalAgentSpawnPolicyPort {
   const unavailable = (operation: string): LocalAgentRuntimeUnavailableError =>
     new LocalAgentRuntimeUnavailableError(operation);
   return {
@@ -159,6 +176,7 @@ export function createFailClosedAgentRuntimePort(): LocalAgentRuntimePort {
     canDelegate: async () => {
       throw unavailable("canDelegate");
     },
+    getAgentSpawnPolicy: async () => ({}),
     listLegacyPinnedAgentRefs: async () => {
       throw unavailable("listLegacyPinnedAgentRefs");
     },
@@ -188,6 +206,8 @@ export function createFailClosedAgentRuntimePort(): LocalAgentRuntimePort {
 export function createDeferredLocalAgentRuntimePort(
   resolver?: AgentReferenceResolver,
 ): DeferredLocalAgentRuntimePort {
+  // Management methods delegate to the bound management plane; the
+  // spawn-policy read is one of them (see getAgentSpawnPolicy below).
   const failClosed = createFailClosedAgentRuntimePort();
   let currentResolver = resolver;
   let currentManagement: LocalAgentRuntimeManagementPort | undefined;
@@ -215,6 +235,7 @@ export function createDeferredLocalAgentRuntimePort(
       management().setMainSession(agentName, sessionId),
     agentExists: (agentName) => management().agentExists(agentName),
     canDelegate: (agentName) => management().canDelegate(agentName),
+    getAgentSpawnPolicy: (agentName) => management().getAgentSpawnPolicy(agentName),
     listLegacyPinnedAgentRefs: () => management().listLegacyPinnedAgentRefs(),
     ensureBuiltinAgents: () => management().ensureBuiltinAgents(),
     retryBuiltinGreetings: () => management().retryBuiltinGreetings(),

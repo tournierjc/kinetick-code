@@ -235,6 +235,8 @@
       "packages/local-runtime-v2/test/integration/session-stop-cascade.integration.test.ts",
       "packages/local-runtime/test/unit/local-background-task-user-stop-cascade.test.ts",
       "packages/local-runtime/test/unit/local-task-append.test.ts",
+      "packages/local-runtime/test/unit/agent-spawn-gate.test.ts",
+      "packages/local-runtime-v2/test/unit/agent/domain/spawn-policy.test.ts",
       "packages/tui/test/unit/tui/controller/runtime/runtime-event-flow-stale-run.test.ts",
       "packages/tui/test/unit/tui/transcript/panel-literal-user-text.test.ts",
       "packages/tui/test/unit/tui/transcript/presentation/literal-text.test.ts",

@@ -34,6 +34,9 @@ export interface AgentSessionPorts {
   readonly roots: RootAgentPort;
   readonly resolveWriteTarget: (requestRef: string) => Promise<string>;
   readonly requireExactAgentKey: (requestRef: string) => Promise<string>;
+  readonly getSpawnPolicy: (
+    requestRef: string,
+  ) => Promise<{ readonly spawnMode?: "subagent-only" | "master-only" | "both" }>;
 }
 
 /** Existing Root application API; AgentApplication never reimplements root promotion. */
@@ -557,6 +560,7 @@ export function createAgentSessionPorts(service: LocalAgentService): AgentSessio
     roots,
     resolveWriteTarget: (requestRef) => service.resolveAgentWriteTarget(requestRef),
     requireExactAgentKey: (requestRef) => service.requireExactAgentKey(requestRef),
+    getSpawnPolicy: (requestRef) => service.getSpawnPolicy(requestRef),
     directory: {
       get: async (agentName) => {
         const view = await service.getPersistedOwner(agentName);

@@ -88,6 +88,7 @@ import {
   toPrimaryFamilyMembers,
   type PrimaryExecutionIdentity,
 } from '../domain/primary-identity.js';
+import type { AgentMavisSpawnPolicy } from '../domain/spawn-policy.js';
 import type {
   AgentConfigDocument,
   AgentConfigPutInput,
@@ -269,6 +270,31 @@ export class LocalAgentService extends AgentConfigDocuments {
     const meta = await this.requireMeta(scope.exactOwnerName);
     if (this.isBuiltin(meta)) return undefined;
     return readCanonicalCustomAvatar(this.options.repository, meta.name);
+  }
+
+  /**
+   * Declarative spawn policy for one Agent, read from its canonical file.
+   * Builtin Agents carry no Custom-file policy: the runtime-owned feature
+   * policy remains the only gate for them, so this returns no policy.
+   */
+  async getSpawnPolicy(requestRef: string): Promise<AgentMavisSpawnPolicy> {
+    const scope = await this.resolveAgentReadScope(requestRef);
+    const meta = await this.requireMeta(scope.exactOwnerName);
+    if (this.isBuiltin(meta)) return {};
+    try {
+      const canonical = await readCanonicalAgentConfig(this.options.repository, meta.name);
+      return canonical.xMavis ?? {};
+    } catch (error) {
+      // A missing canonical file leaves the Agent runnable through its legacy
+      // profile surface; it must not become unspawnable.
+      if (
+        error instanceof AgentServiceError &&
+        error.code === 'AGENT_CONFIG_NOT_FOUND'
+      ) {
+        return {};
+      }
+      throw error;
+    }
   }
 
   async create(input: AgentCreateInput): Promise<AgentView> {

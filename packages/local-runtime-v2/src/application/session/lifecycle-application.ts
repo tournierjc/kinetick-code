@@ -66,6 +66,14 @@ export interface SessionLifecycleApplicationOptions
     }): Promise<SessionRecord>;
   };
   readonly resolveAgentWriteTarget: (requestRef: string) => Promise<string>;
+  /**
+   * Declarative spawn policy of one Agent, read at user-facing Session create
+   * to reject `subagent-only` targets. Absent = gate disabled (tests, hosts
+   * without an Agent service).
+   */
+  readonly getAgentSpawnPolicy?: (
+    requestRef: string,
+  ) => Promise<{ readonly spawnMode?: 'subagent-only' | 'master-only' | 'both' }>
   readonly runPluginHookSessionEndFence?: <T>(
     sessionId: string,
     operation: () => Promise<T>,
@@ -228,6 +236,7 @@ export class SessionLifecycleApplication {
             });
           }
           const input = toCreateInput(req);
+          await this.assertUserCreatableAgent(req);
           return this.options.lifecycle.createSession({
             ...input,
             ...whenDefined("isDefaultWorkspace", isDefaultWorkspace),
@@ -243,6 +252,29 @@ export class SessionLifecycleApplication {
         };
       }),
     );
+  }
+
+  /**
+   * A user-initiated Session (no parent) may not target a `subagent-only`
+   * Agent. Task children never reach this path (they create through the V1
+   * agentRoutes); the task-spawn gate owns them.
+   */
+  private async assertUserCreatableAgent(req: CreateSessionReq): Promise<void> {
+    const getPolicy = this.options.getAgentSpawnPolicy;
+    if (!getPolicy || req.parentSessionId) return;
+    let policy;
+    try {
+      policy = await getPolicy(req.name);
+    } catch {
+      return; // fail open: unreadable policy keeps the Agent user-creatable
+    }
+    if (policy.spawnMode === "subagent-only") {
+      throw new AppError(
+        403,
+        "AGENT_SPAWN_MODE_FORBIDDEN",
+        `Agent "${req.name}" is subagent-only and cannot start a user session.`,
+      );
+    }
   }
 
   async updateSession(
