@@ -184,14 +184,14 @@ For simple conversation or general knowledge questions, start a new Session with
 `--mode lightweight`:
 
 ```bash
-mcode --mode lightweight "Explain how DNS caching works."
-mcode exec --mode lightweight "Summarize the CAP theorem."
+kcode --mode lightweight "Explain how DNS caching works."
+kcode exec --mode lightweight "Summarize the CAP theorem."
 ```
 
 Lightweight mode sends a small conversational system prompt and no tool schemas. It omits workspace
 instructions, Skills, memory blocks, MCP schemas, and the full environment block from provider
 context, so it cannot inspect or change local files. Start a new standard Session for coding or tool use with
-`mcode --mode standard` or `mcode exec --mode standard`; omitting `--mode` is identical to standard
+`kcode --mode standard` or `kcode exec --mode standard`; omitting `--mode` is identical to standard
 mode.
 
 The mode is fixed when a root Session is created. `--mode lightweight` therefore cannot be combined
