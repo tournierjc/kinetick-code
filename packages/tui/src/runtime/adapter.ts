@@ -75,6 +75,10 @@ import type { TuiPermissionMode } from "../application/permission-mode.js";
 import { resolveTuiEffortChoice } from "../application/model-effort.js";
 import type { TuiObservability } from "../observability/index.js";
 import type { TuiTokenPlanAccountStatus } from "../account/matrix-account-client.js";
+import {
+  LIGHTWEIGHT_SESSION_PURPOSE,
+  type McodeContextMode,
+} from "@mavis/protocol/local";
 
 export * from "./port.js";
 
@@ -86,6 +90,7 @@ export interface TuiRuntimeAdapterOptions {
   synchronizeAuth?: () => Promise<void>;
   accountIdentityGetter?: () => TuiAccountStatus["identity"];
   observability?: TuiObservability;
+  contextMode?: McodeContextMode;
   tokenPlanAccountStatusGetter?: (options?: {
     readonly forceRefresh?: boolean;
   }) => Promise<TuiTokenPlanAccountStatus>;
@@ -122,6 +127,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   private readonly synchronizeAuth: TuiRuntimeAdapterOptions["synchronizeAuth"];
   private readonly accountIdentityGetter: TuiRuntimeAdapterOptions["accountIdentityGetter"];
   private readonly feedback: TuiRuntimeAdapterOptions["feedback"];
+  private readonly contextMode: McodeContextMode;
 
   constructor(cliService: CliService, options: TuiRuntimeAdapterOptions = {}) {
     this.cliService = cliService;
@@ -131,6 +137,7 @@ export class TuiRuntimeAdapter implements TuiRuntime {
     this.synchronizeAuth = options.synchronizeAuth;
     this.accountIdentityGetter = options.accountIdentityGetter;
     this.feedback = options.feedback;
+    this.contextMode = options.contextMode ?? "standard";
     this.conversationAccess = new TuiConversationAccess(cliService);
     this.pluginAccess = new TuiPluginAccess(cliService);
     this.context = new TuiRuntimeAccessContext({
@@ -180,15 +187,19 @@ export class TuiRuntimeAdapter implements TuiRuntime {
   }
 
   async createSession(input: CreateTuiSessionInput): Promise<TuiSession> {
+    const sessionInput =
+      this.contextMode === "lightweight" && !input.parentSessionId && !input.purpose
+        ? { ...input, purpose: LIGHTWEIGHT_SESSION_PURPOSE }
+        : input;
     const defaultModel = await this.productAccess
       .listModels()
       .then((models) => models.find((model) => model.selected === true))
       .catch(() => undefined);
-    if (!defaultModel) return this.sessionAccess.createSession(input);
+    if (!defaultModel) return this.sessionAccess.createSession(sessionInput);
     // Inherit Runtime's saved global selection before catalog defaults, using
     // the same rule as the status line and without changing existing Sessions.
     const effort = resolveTuiEffortChoice(defaultModel)?.trim();
-    return this.sessionAccess.createSession(input, {
+    return this.sessionAccess.createSession(sessionInput, {
       providerId: defaultModel.providerId,
       modelId: defaultModel.modelId,
       ...(defaultModel.variant !== undefined
