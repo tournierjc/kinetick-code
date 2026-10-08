@@ -21,6 +21,15 @@ import {
 } from '../provider/contract.js';
 import type { KcodePluginCliRequest, KcodePluginMarketplace } from '../plugin/contract.js';
 import { resolveTuiManagedBackendLane } from './environment.js';
+import {
+  applySystemPromptCliOptions,
+  inheritSystemPromptOptions,
+  rejectUnsupportedSystemPromptOptions,
+  resolveSystemPromptOverrides,
+  SYSTEM_PROMPT_OPTION_NAMES,
+  type RawSystemPromptOptions,
+  type SystemPromptOverrides,
+} from './system-prompt-options.js';
 
 export type { TuiInteractiveLaunchRequest } from './contract.js';
 
@@ -39,7 +48,7 @@ export interface CreateTuiProgramOptions {
     commandOptions: RawTuiExecOptions,
     lane?: string,
   ) => Promise<void>;
-  runAcp?: (lane?: string) => Promise<void>;
+  runAcp?: (lane?: string, systemPromptOverrides?: SystemPromptOverrides) => Promise<void>;
   runServer?: (request: TuiServerLaunchRequest, lane?: string) => Promise<void>;
   runLogin: (region?: MavisRegion, openBrowser?: boolean, lane?: string) => Promise<void>;
   runLogout: (region?: MavisRegion) => Promise<void>;
@@ -83,7 +92,8 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
     return options.launchTui(withLane(resolveInteractiveLaunchRequest(prompt, commandOptions)));
   });
 
-  program.hook('preAction', () => {
+  program.hook('preAction', (_program, actionCommand) => {
+    rejectUnsupportedSystemPromptOptions(actionCommand);
     activeLane = (options.resolveLane ?? resolveTuiManagedBackendLane)(
       program.opts<{ lane?: string }>().lane,
     );
@@ -110,27 +120,39 @@ export function createTuiProgram(options: CreateTuiProgramOptions): Command {
 
   const exec = program.command('exec').description('Run one prompt without starting the TUI');
   applyExecCliContract(exec).action(
-    (prompt: string | undefined, commandOptions: RawTuiExecOptions) =>
-      activeLane
-        ? options.runExec(prompt, commandOptions, activeLane)
-        : options.runExec(prompt, commandOptions),
+    (prompt: string | undefined, commandOptions: RawTuiExecOptions) => {
+      const resolved = inheritSystemPromptOptions(exec, commandOptions);
+      return activeLane
+        ? options.runExec(prompt, resolved, activeLane)
+        : options.runExec(prompt, resolved);
+    },
   );
   applyExecReviewCliContract(
     exec.command('review').description('Review staged, unstaged, and untracked local changes'),
   ).action((_commandOptions: RawTuiExecOptions, command: Command) => {
-    const reviewOptions = resolveExecReviewOptions(exec, command);
+    const reviewOptions = inheritSystemPromptOptions(
+      command,
+      resolveExecReviewOptions(exec, command),
+    );
     return activeLane
       ? options.runExec(undefined, reviewOptions, activeLane)
       : options.runExec(undefined, reviewOptions);
   });
 
-  const acp = program
-    .command('acp')
-    .description('Run Kinetick Code as an Agent Client Protocol server over stdio')
+  const acp = applySystemPromptCliOptions(
+    program
+      .command('acp')
+      .description('Run Kinetick Code as an Agent Client Protocol server over stdio'),
+  )
     .allowExcessArguments(false)
-    .action(() =>
-      activeLane ? requireAcpRunner(options)(activeLane) : requireAcpRunner(options)(),
-    );
+    .action((commandOptions: RawSystemPromptOptions, command: Command) => {
+      const runAcp = requireAcpRunner(options);
+      const systemPromptOverrides = resolveSystemPromptOverrides(
+        inheritSystemPromptOptions(command, commandOptions),
+      );
+      if (systemPromptOverrides) return runAcp(activeLane, systemPromptOverrides);
+      return activeLane ? runAcp(activeLane) : runAcp();
+    });
 
   acp
     .command('login')
@@ -369,6 +391,8 @@ function resolveExecReviewOptions(exec: Command, review: Command): RawTuiExecOpt
         code: 'commander.unknownOption',
       });
     }
+    // Prompt flags are resolved per slot by inheritSystemPromptOptions.
+    if (SYSTEM_PROMPT_OPTION_NAMES.has(name)) continue;
     // Child defaults must not mask explicit parent options, especially permissions.
     if (review.getOptionValueSource(name) !== 'cli') {
       Object.assign(options, { [name]: exec.getOptionValue(name) });

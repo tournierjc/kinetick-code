@@ -373,6 +373,10 @@ export class TranscriptStore
       ];
     });
 
+    const previousTurns = new Set(
+      current.flatMap((cell) => (!cell.ephemeral && cell.turnId ? [cell.turnId] : [])),
+    );
+
     this.clear(sessionId);
     try {
       projectDurable();
@@ -381,18 +385,49 @@ export class TranscriptStore
         const cell = state.cells.get(id);
         return cell !== undefined && !retainsAcrossReconcile(cell);
       });
+      const projectedTurns = new Set(
+        projectedDurableIds.flatMap((id) => {
+          const turnId = state.cells.get(id)?.turnId;
+          return turnId ? [turnId] : [];
+        }),
+      );
+      // Turn ids are comparable when at least one earlier turn is still projected.
+      const comparableTurns = [...previousTurns].some((turnId) => projectedTurns.has(turnId));
+      // An edit removes later turns from history. One-time feedback of a removed turn
+      // (its run duration, terminal error or shell block) has nowhere to go and is
+      // dropped instead of being placed by position in an unrelated spot (#426).
+      const removedTurn = (cell: TranscriptCell): boolean =>
+        comparableTurns &&
+        isTurnFeedback(cell) &&
+        previousTurns.has(cell.turnId ?? '') &&
+        !projectedTurns.has(cell.turnId ?? '');
+      let turnEnds: Map<string, number> | undefined;
+      const lastIndexOfTurn = (): Map<string, number> => {
+        if (turnEnds) return turnEnds;
+        turnEnds = new Map();
+        state.orderedIds.forEach((id, index) => {
+          const turnId = state.cells.get(id)?.turnId;
+          if (turnId) turnEnds?.set(turnId, index);
+        });
+        return turnEnds;
+      };
       const anchors = retained.map(
-        ({ previousDurableId, nextDurableId, durableBefore: durableCountBefore }) => {
+        ({ cell, previousDurableId, nextDurableId, durableBefore: durableCountBefore }) => {
           if (nextDurableId && state.cells.has(nextDurableId)) return nextDurableId;
           if (previousDurableId) {
             const previousIndex = state.indexById.get(previousDurableId);
             if (previousIndex !== undefined) return state.orderedIds[previousIndex + 1];
           }
+          // Live and history projections use different cell ids. A turn-scoped
+          // cell (a run-duration note, a terminal error) stays after its turn,
+          // so notes kept in history do not drift or stack up (#426).
+          const turnEnd = cell.turnId ? lastIndexOfTurn().get(cell.turnId) : undefined;
+          if (turnEnd !== undefined) return state.orderedIds[turnEnd + 1];
           return projectedDurableIds[durableCountBefore];
         },
       );
       retained.forEach(({ cell }, index) => {
-        if (state.cells.has(cell.id)) return;
+        if (state.cells.has(cell.id) || removedTurn(cell)) return;
         this.upsert(cell, sessionId);
         const anchor = anchors[index];
         if (anchor) this.moveBefore(cell.id, anchor, sessionId);
@@ -439,6 +474,13 @@ function findDurableId(
 function retainsAcrossReconcile(cell: TranscriptCell): boolean {
   if (cell.ephemeral) return true;
   return cell.status === 'pending' || cell.status === 'running';
+}
+
+function isTurnFeedback(cell: TranscriptCell): boolean {
+  return (
+    cell.kind === 'turn-duration' ||
+    (cell.ephemeral === true && (cell.kind === 'error' || cell.kind === 'shell'))
+  );
 }
 
 function turnKey(cell: TranscriptCell): string {

@@ -77,6 +77,7 @@ export interface CreateTuiRuntimeOptions {
   version: string;
   configPath?: string;
   promptMode?: CreateLocalRuntimeHostOptions['promptMode'];
+  systemPromptOverrides?: CreateLocalRuntimeHostOptions['systemPromptOverrides'];
   surface?: TuiObservabilitySurface;
   observability?: TuiObservability;
   permissionMode?: NonNullable<LocalRuntimeConfig['permissionMode']>;
@@ -378,6 +379,9 @@ export async function createTuiRuntime(
     defaultWorkspaceDir: options.workspaceDir,
     appVersion: options.version,
     ...(options.promptMode ? { promptMode: options.promptMode } : {}),
+    ...(options.systemPromptOverrides
+      ? { systemPromptOverrides: options.systemPromptOverrides }
+      : {}),
     configGetter: () => {
       const config = getConfig();
       return {

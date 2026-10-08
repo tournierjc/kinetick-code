@@ -9,6 +9,12 @@ import type { TuiMode } from '../tui/engine/public.js';
 import { parseTuiStartupEnvironment } from './environment.js';
 import type { TuiBuildEnvironment } from '../auth/environment.js';
 import type { McodeContextMode } from '@mavis/protocol/local';
+import {
+  applySystemPromptCliOptions,
+  resolveSystemPromptOverrides,
+  type RawSystemPromptOptions,
+  type SystemPromptOverrides,
+} from './system-prompt-options.js';
 
 const RETIRED_TOP_LEVEL_COMMAND_NAMES = new Set(['git', 'changes', 'projects']);
 
@@ -23,9 +29,10 @@ export interface TuiInteractiveLaunchRequest {
   readonly tuiMode?: TuiMode;
   readonly contextMode?: McodeContextMode;
   readonly lane?: string;
+  readonly systemPromptOverrides?: SystemPromptOverrides;
 }
 
-export interface RawTuiInteractiveOptions {
+export interface RawTuiInteractiveOptions extends RawSystemPromptOptions {
   readonly model?: string;
   readonly session?: string | boolean;
   readonly continue?: boolean;
@@ -92,9 +99,8 @@ export function applyInteractiveCliContract(
         '--server-token <token>',
         'bearer token for --server; generated and written to the data directory when omitted',
       ),
-    )
-    .allowExcessArguments(false)
-    .showHelpAfterError();
+    );
+  applySystemPromptCliOptions(configured).allowExcessArguments(false).showHelpAfterError();
   if (options.allowStartupEnvironmentSelection) {
     configured.addOption(
       new Option(
@@ -141,6 +147,7 @@ export function resolveInteractiveLaunchRequest(
       );
     }
   }
+  const systemPromptOverrides = resolveSystemPromptOverrides(commandOptions);
   return {
     ...(prompt ? { initialPrompt: prompt } : {}),
     ...(model ? { model } : {}),
@@ -150,6 +157,7 @@ export function resolveInteractiveLaunchRequest(
     ...(commandOptions.tuiMode ? { tuiMode: commandOptions.tuiMode } : {}),
     ...(commandOptions.mode === 'lightweight' ? { contextMode: 'lightweight' as const } : {}),
     ...(commandOptions.lane ? { lane: commandOptions.lane } : {}),
+    ...(systemPromptOverrides ? { systemPromptOverrides } : {}),
   };
 }
 
@@ -179,7 +187,7 @@ export function resolveServerLaunchRequest(
 }
 
 export function applyExecCliContract(command: Command): Command {
-  return command
+  const configured = command
     .argument('[prompt]', 'task to execute')
     .addOption(new Option('--input <source>', 'read explicit input; only "-" is supported'))
     .addOption(new Option('--input-format <format>', 'input format: text or json').default('text'))
@@ -230,10 +238,11 @@ export function applyExecCliContract(command: Command): Command {
     .addOption(
       new Option('-o, --output-last-message <path>', 'write the final agent message to a file'),
     );
+  return applySystemPromptCliOptions(configured);
 }
 
 export function applyExecReviewCliContract(command: Command): Command {
-  return command
+  const configured = command
     .addOption(new Option('--cwd <path>', 'workspace directory'))
     .addOption(new Option('--model <provider/model>', 'override the model for this Run only'))
     .addOption(new Option('--effort <level>', 'override the reasoning effort for this Run only'))
@@ -251,9 +260,8 @@ export function applyExecReviewCliContract(command: Command): Command {
     .addOption(new Option('--output-format <format>', 'output format: text, json, or stream-json'))
     .addOption(
       new Option('-o, --output-last-message <path>', 'write the final review result to a file'),
-    )
-    .allowExcessArguments(false)
-    .showHelpAfterError();
+    );
+  return applySystemPromptCliOptions(configured).allowExcessArguments(false).showHelpAfterError();
 }
 
 function parseTuiMode(value: string): TuiMode {
