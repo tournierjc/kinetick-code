@@ -90,7 +90,7 @@ function render(now = Date.now()) {
   document.title =
     state.status === "running"
       ? `${timerEl.textContent} · Pocket Pet`
-      : "Pocket Pet · Kinetick Code";
+      : "Pocket Pet · MiniMax Code";
 }
 
 function loop() {

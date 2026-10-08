@@ -117,6 +117,15 @@ export interface LocalPromptSkill {
   readonly selectionScope?: 'capability-owned';
 }
 
+/**
+ * Launch-scoped main-Agent prompt overrides held only in process memory.
+ * `customPrompt` replaces the identity prompt; `appendSystemPrompt` follows it.
+ */
+export interface SystemPromptOverrides {
+  readonly customPrompt?: string;
+  readonly appendSystemPrompt?: string;
+}
+
 export interface LocalAgentConfigBuilderOptions {
   readonly config: () => LocalConversationRuntimeConfig;
   readonly environment?: () => LocalPromptEnvironment;
@@ -132,6 +141,8 @@ export interface LocalAgentConfigBuilderOptions {
     readonly dataDir: string;
     readonly logger?: LocalAgentCustomConfigLogger;
   }) => Promise<LocalAgentCustomConfigResult>;
+  /** Applied to every surface except hidden task children; never persisted. */
+  readonly systemPromptOverrides?: SystemPromptOverrides;
   readonly logger?: LocalAgentCustomConfigLogger;
   /** Narrow Session persistence for stale-model repair; bound after SessionSystem ready. */
   readonly sessionModelRepair?: SessionModelRepairCapability;
@@ -259,6 +270,7 @@ export class LocalAgentConfigBuilder {
       sessionType: turnInput.session.sessionType,
       layers,
       customConfig,
+      overrides: this.options.systemPromptOverrides,
       profile,
     });
     return createAgentConfig({
@@ -758,9 +770,10 @@ function buildSystemPrompt(scope: {
   readonly sessionType: SessionRecord['sessionType'];
   readonly layers: LoadedPromptLayers;
   readonly customConfig: LocalAgentCustomConfigResult | undefined;
+  readonly overrides: SystemPromptOverrides | undefined;
   readonly profile: LocalAgentExecutionProfile | undefined;
 }): ComposedPrompt {
-  const { agent, sessionType, layers, customConfig, profile } = scope;
+  const { agent, sessionType, layers, customConfig, overrides, profile } = scope;
   const interactiveSurface =
     profile?.surface === undefined
       ? (sessionType ?? 'root') === 'root'
@@ -769,7 +782,13 @@ function buildSystemPrompt(scope: {
   const contentPrompt =
     customPrompt !== undefined
       ? { text: addRuntimeRules(customPrompt, false) }
-      : buildIdentityPrompt({ agent, layers, profile, interactiveSurface });
+      : buildIdentityPrompt({
+          agent,
+          layers,
+          profile,
+          interactiveSurface,
+          overrides: interactiveSurface ? overrides : undefined,
+        });
   return composePromptParts([
     contentPrompt,
     { text: environmentContextBlock(scope) },
@@ -790,8 +809,11 @@ function buildIdentityPrompt(scope: {
   readonly layers: LoadedPromptLayers;
   readonly profile: LocalAgentExecutionProfile | undefined;
   readonly interactiveSurface: boolean;
+  readonly overrides: SystemPromptOverrides | undefined;
 }): ComposedPrompt {
-  const { agent, layers, profile, interactiveSurface } = scope;
+  const { agent, layers, profile, interactiveSurface, overrides } = scope;
+  const customPrompt = overrides?.customPrompt?.trim();
+  const appendPrompt = overrides?.appendSystemPrompt?.trim() ?? '';
   const persona = (profile?.persona ?? agent.persona)?.trim();
   const globalInstructions = layers.globalInstructions.trim();
   const projectInstructions = buildUntrustedProjectInstructionsBlock(layers.projectInstructions);
@@ -813,18 +835,27 @@ function buildIdentityPrompt(scope: {
     globalInstructions,
     projectInstructions,
   ].some((part) => part?.trim());
+  const rootSessionPrompt = [profile?.surfacePrompt, layers.sessionPrompt]
+    .filter(Boolean)
+    .join('\n\n');
+  const identity: readonly PromptPart[] = customPrompt
+    ? [{ text: addRuntimeRules(customPrompt, interactiveSurface, rootSessionPrompt) }]
+    : [
+        { text: persona ?? '' },
+        {
+          text: addRuntimeRules(
+            hasIdentity
+              ? corePrompt
+              : "You are a local coding assistant running in the user's workspace.",
+            interactiveSurface,
+            rootSessionPrompt,
+          ),
+        },
+        { text: layers.basePrompt.trim() },
+      ];
   return composePromptParts([
-    { text: persona ?? '' },
-    {
-      text: addRuntimeRules(
-        hasIdentity
-          ? corePrompt
-          : "You are a local coding assistant running in the user's workspace.",
-        interactiveSurface,
-        [profile?.surfacePrompt, layers.sessionPrompt].filter(Boolean).join('\n\n'),
-      ),
-    },
-    { text: layers.basePrompt.trim() },
+    ...identity,
+    { text: appendPrompt },
     { text: instructionsPreamble },
     { text: globalInstructions, kind: 'OTHER' },
     { text: projectInstructions, kind: 'OTHER' },

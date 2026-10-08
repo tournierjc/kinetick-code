@@ -6,6 +6,7 @@ import type {
   TuiSession,
   TuiSessionPort,
   TuiSessionTurnPort,
+  TuiInteractionPort,
 } from '../../runtime/port.js';
 import type { TuiMessage } from '../../runtime/stream-events.js';
 
@@ -25,7 +26,8 @@ export type TuiChatRuntimeLike = Pick<TuiSessionPort, 'createSession'> &
   > &
   Partial<Pick<TuiConfigurationPort, 'getAccountStatus'>> &
   Partial<Pick<TuiInspectionPort, 'getContextSnapshot' | 'getSessionUsageSummary'>> &
-  Partial<TuiSessionTurnPort>;
+  Partial<TuiSessionTurnPort> &
+  Partial<Pick<TuiInteractionPort, 'getPendingQuestionnaire'>>;
 
 export interface TuiActiveTurn {
   id: string;

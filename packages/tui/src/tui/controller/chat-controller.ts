@@ -141,6 +141,8 @@ export class TuiChatController {
       currentSessionId: () => this.state.session?.sessionId,
       updateState: (patch) => this.updateState(patch),
       writeAutomationResult: this.writeAutomationResult,
+      runtime: this.runtime,
+      currentAgentName: () => this.state.session?.agentName ?? this.defaultAgentName,
     });
     this.statusMetrics = new TuiStatusMetricsFlow({
       runtime: this.runtime,
@@ -705,6 +707,8 @@ export class TuiChatController {
               onResult: async (execResult) => {
                 if (
                   activeTurn.retracted ||
+                  (execResult.status === 'blocked' &&
+                    execResult.error?.code === 'QUESTIONNAIRE_REQUIRED') ||
                   execResult.error?.code === 'PAUSED_QUEUE_SEND_CANCELLED' ||
                   (!recoveringPausedQueue && requiresQueueFallback(execResult.error?.code))
                 ) {
@@ -765,7 +769,15 @@ export class TuiChatController {
         if (this.activeTurn !== activeTurn) return 'blocked';
         this.turnProjection.markTurn(turnId, 'blocked');
         if (this.activeTurn === activeTurn) {
-          this.settleTurnState(turnId, 'blocked');
+          // Waiting is not a canonical terminal. Keep automation in run/ask/plan
+          // until the user's answer starts the continuation Turn.
+          this.updateState({
+            status: 'idle',
+            activeTurnId: undefined,
+            cancelling: false,
+            error: undefined,
+            lastSettledTurn: undefined,
+          });
         }
         return 'blocked';
       }
@@ -884,7 +896,13 @@ export class TuiChatController {
   }
 
   getTerminalDurationId(): string | undefined {
-    return this.transcript.snapshot().find((cell) => cell.kind === 'turn-duration')?.id;
+    // Older notes can stay in history once settled output follows them (#426);
+    // the terminal duration is the most recent one.
+    const cells = this.transcript.snapshot();
+    for (let index = cells.length - 1; index >= 0; index -= 1) {
+      if (cells[index]?.kind === 'turn-duration') return cells[index]?.id;
+    }
+    return undefined;
   }
 
   dismissTerminalDuration(id: string | undefined): void {
